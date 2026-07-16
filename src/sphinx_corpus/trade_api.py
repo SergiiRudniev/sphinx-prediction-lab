@@ -4,10 +4,12 @@ import contextlib
 import hashlib
 import json
 import re
+import threading
 import time
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,49 @@ _CONDITION_ID = re.compile(r"^0x[a-fA-F0-9]{64}$")
 
 class RequestBudgetReached(RuntimeError):
     pass
+
+
+class RequestGate:
+    def __init__(self, requests_per_second: float, burst: int) -> None:
+        if requests_per_second <= 0:
+            raise ValueError("requests_per_second must be positive")
+        if burst <= 0:
+            raise ValueError("request burst must be positive")
+        self.rate = requests_per_second
+        self.capacity = float(burst)
+        self.tokens = float(burst)
+        self.updated_at = time.monotonic()
+        self.lock = threading.Lock()
+
+    def acquire(self) -> None:
+        while True:
+            with self.lock:
+                now = time.monotonic()
+                elapsed = now - self.updated_at
+                self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+                self.updated_at = now
+                if self.tokens >= 1:
+                    self.tokens -= 1
+                    return
+                wait_seconds = (1 - self.tokens) / self.rate
+            time.sleep(wait_seconds)
+
+
+class RequestCounter:
+    def __init__(self, maximum: int | None) -> None:
+        self.maximum = maximum
+        self.value = 0
+        self.lock = threading.Lock()
+
+    def reserve(self) -> None:
+        with self.lock:
+            if self.maximum is not None and self.value >= self.maximum:
+                raise RequestBudgetReached
+            self.value += 1
+
+    def current(self) -> int:
+        with self.lock:
+            return self.value
 
 
 def _optional_time(value: Any) -> datetime | None:
@@ -63,7 +108,14 @@ def _trade_key(trade: dict[str, Any]) -> str:
 
 
 class TradeAPIBackfill:
-    def __init__(self, config: CorpusConfig, *, max_requests: int | None = None) -> None:
+    def __init__(
+        self,
+        config: CorpusConfig,
+        *,
+        max_requests: int | None = None,
+        workers: int | None = None,
+        requests_per_second: float | None = None,
+    ) -> None:
         self.config = config
         source = config.payload["sources"]["ledger"]["primary"]
         self.base_url = str(source["base_url"]).rstrip("/")
@@ -71,18 +123,49 @@ class TradeAPIBackfill:
         self.page_size = int(source["page_size"])
         self.maximum_offset = int(source["maximum_offset"])
         self.markets_per_request = int(source["markets_per_request"])
+        self.target_group_volume = _number(source.get("target_group_volume_usd"))
         self.taker_only = bool(source["taker_only"])
         self.minimum_window_seconds = int(source["minimum_window_seconds"])
         self.selection = source["selection"]
-        self.max_requests = max_requests
-        self.requests = 0
-        self.client = httpx.Client(
+        self.trade_filter = source.get("trade_filter")
+        self.storage_namespace = str(source.get("storage_namespace", "ledger-api"))
+        execution = source.get("execution", {})
+        configured_workers = workers if workers is not None else execution.get("workers", 1)
+        self.workers = int(configured_workers)
+        if self.workers <= 0:
+            raise ValueError("workers must be positive")
+        configured_rate = (
+            requests_per_second
+            if requests_per_second is not None
+            else execution.get("requests_per_second", 1)
+        )
+        rate = float(configured_rate)
+        burst = int(execution.get("request_burst", max(1, int(rate))))
+        self.request_gate = RequestGate(rate, burst)
+        self.request_counter = RequestCounter(max_requests)
+        self._thread_clients = threading.local()
+        self._clients: list[httpx.Client] = []
+        self._clients_lock = threading.Lock()
+
+    def _client(self) -> httpx.Client:
+        client = getattr(self._thread_clients, "client", None)
+        if isinstance(client, httpx.Client):
+            return client
+        client = httpx.Client(
             timeout=httpx.Timeout(90.0, connect=15.0),
             headers={"User-Agent": "sphinx-prediction-lab/0.1"},
         )
+        self._thread_clients.client = client
+        with self._clients_lock:
+            self._clients.append(client)
+        return client
 
     def close(self) -> None:
-        self.client.close()
+        with self._clients_lock:
+            clients = list(self._clients)
+            self._clients.clear()
+        for client in clients:
+            client.close()
 
     def __enter__(self) -> TradeAPIBackfill:
         return self
@@ -91,12 +174,14 @@ class TradeAPIBackfill:
         self.close()
 
     def _fetch(self, params: dict[str, Any]) -> list[dict[str, Any]]:
-        if self.max_requests is not None and self.requests >= self.max_requests:
-            raise RequestBudgetReached
         last_error: Exception | None = None
         for attempt in range(6):
             try:
-                response = self.client.get(f"{self.base_url}{self.endpoint}", params=params)
+                self.request_gate.acquire()
+                self.request_counter.reserve()
+                response = self._client().get(
+                    f"{self.base_url}{self.endpoint}", params=params
+                )
                 if response.status_code == 429 or response.status_code >= 500:
                     raise RuntimeError(f"Data API HTTP {response.status_code}")
                 response.raise_for_status()
@@ -105,8 +190,9 @@ class TradeAPIBackfill:
                     isinstance(item, dict) for item in payload
                 ):
                     raise TypeError("Data API trades response must be a list of objects")
-                self.requests += 1
                 return payload
+            except RequestBudgetReached:
+                raise
             except (httpx.HTTPError, RuntimeError, TypeError, ValueError) as exc:
                 last_error = exc
                 if attempt == 5:
@@ -156,81 +242,187 @@ class TradeAPIBackfill:
     ) -> dict[str, Any]:
         explicit = {value.lower() for value in market_ids} if market_ids else None
         markets = self._markets(explicit, max_markets)
+        groups = self._groups(markets)
         completed = 0
         skipped = 0
+        incomplete = 0
         rows = 0
         gaps = 0
         budget_reached = False
-        groups = [
-            markets[offset : offset + self.markets_per_request]
-            for offset in range(0, len(markets), self.markets_per_request)
-        ]
-        for group in groups:
-            condition_ids = tuple(str(row["condition_id"]).lower() for row in group)
-            scope_id = self._scope_id(condition_ids)
-            market_receipt_path = (
-                self.config.data_dir / "receipts" / "ledger-api" / f"{scope_id}.json"
-            )
-            existing = load_json(market_receipt_path)
-            if existing.get("complete") is True:
-                skipped += 1
-                rows += int(existing.get("rows", 0))
-                gaps += int(existing.get("gaps", 0))
-                continue
-            bounds = [value for row in group if (value := self._market_bounds(row))]
-            if not bounds:
-                atomic_json(
-                    market_receipt_path,
-                    {
-                        "schema_version": SCHEMA_VERSION,
-                        "scope_id": scope_id,
-                        "condition_ids": condition_ids,
-                        "complete": True,
-                        "rows": 0,
-                        "gaps": 0,
-                        "reason": "empty_market_window",
-                        "updated_at": now_utc(),
-                    },
-                )
-                completed += 1
-                continue
-            start = min(value[0] for value in bounds)
-            end = max(value[1] for value in bounds)
+        futures: dict[Future[dict[str, Any]], int] = {}
+        with ThreadPoolExecutor(
+            max_workers=self.workers,
+            thread_name_prefix="sphinx-ledger",
+        ) as executor:
+            for index, group in enumerate(groups):
+                futures[executor.submit(self._collect_group, group)] = index
             try:
-                result = self._window(scope_id, condition_ids, start, end)
+                for future in as_completed(futures):
+                    result = future.result()
+                    status = str(result["status"])
+                    completed += int(status == "completed")
+                    skipped += int(status == "skipped")
+                    incomplete += int(status == "incomplete")
+                    rows += int(result["rows"])
+                    gaps += int(result["gaps"])
             except RequestBudgetReached:
                 budget_reached = True
-                break
-            market_receipt = {
-                "schema_version": SCHEMA_VERSION,
-                "scope_id": scope_id,
-                "condition_ids": condition_ids,
-                "window_start": start,
-                "window_end_inclusive": end,
-                "complete": result["complete"],
-                "rows": result["rows"],
-                "gaps": result["gaps"],
-                "updated_at": now_utc(),
-            }
-            atomic_json(market_receipt_path, market_receipt)
-            completed += int(bool(result["complete"]))
-            rows += int(result["rows"])
-            gaps += int(result["gaps"])
+                for future in futures:
+                    future.cancel()
+            except Exception:
+                for future in futures:
+                    future.cancel()
+                raise
         receipt = {
             "schema_version": SCHEMA_VERSION,
             "generated_at": now_utc(),
+            "storage_namespace": self.storage_namespace,
+            "trade_filter": self.trade_filter,
+            "workers": self.workers,
+            "requests_per_second": self.request_gate.rate,
             "markets_selected": len(markets),
             "groups_selected": len(groups),
             "groups_completed_this_run": completed,
             "groups_skipped": skipped,
+            "groups_incomplete": incomplete,
             "rows": rows,
             "gaps": gaps,
-            "requests_this_run": self.requests,
+            "requests_this_run": self.request_counter.current(),
             "request_budget_reached": budget_reached,
-            "complete": not budget_reached and completed + skipped == len(groups),
+            "complete": (
+                not budget_reached
+                and incomplete == 0
+                and completed + skipped == len(groups)
+            ),
         }
-        atomic_json(self.config.data_dir / "receipts" / "ledger-api.json", receipt)
+        atomic_json(
+            self.config.data_dir / "receipts" / f"{self.storage_namespace}.json",
+            receipt,
+        )
         return receipt
+
+    def _groups(self, markets: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+        if self.target_group_volume <= 0:
+            return [
+                markets[offset : offset + self.markets_per_request]
+                for offset in range(0, len(markets), self.markets_per_request)
+            ]
+        groups: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        current_volume = Decimal(0)
+        for market in markets:
+            volume = _number(market.get("_volume"))
+            if volume >= self.target_group_volume:
+                if current:
+                    groups.append(current)
+                    current = []
+                    current_volume = Decimal(0)
+                groups.append([market])
+                continue
+            would_exceed_volume = (
+                current and current_volume + volume > self.target_group_volume
+            )
+            if len(current) >= self.markets_per_request or would_exceed_volume:
+                groups.append(current)
+                current = []
+                current_volume = Decimal(0)
+            current.append(market)
+            current_volume += volume
+        if current:
+            groups.append(current)
+        return groups
+
+    def _collect_group(self, group: list[dict[str, Any]]) -> dict[str, Any]:
+        condition_ids = tuple(str(row["condition_id"]).lower() for row in group)
+        scope_id = self._scope_id(condition_ids)
+        market_receipt_path = (
+            self.config.data_dir
+            / "receipts"
+            / self.storage_namespace
+            / f"{scope_id}.json"
+        )
+        existing = load_json(market_receipt_path)
+        if existing.get("complete") is True:
+            return {
+                "status": "skipped",
+                "rows": int(existing.get("rows", 0)),
+                "gaps": int(existing.get("gaps", 0)),
+            }
+        bounds = [value for row in group if (value := self._market_bounds(row))]
+        if not bounds:
+            market_receipt = {
+                "schema_version": SCHEMA_VERSION,
+                "scope_id": scope_id,
+                "condition_ids": condition_ids,
+                "complete": True,
+                "rows": 0,
+                "gaps": 0,
+                "reason": "empty_market_window",
+                "updated_at": now_utc(),
+            }
+            atomic_json(market_receipt_path, market_receipt)
+            return {"status": "completed", "rows": 0, "gaps": 0}
+        start = min(value[0] for value in bounds)
+        end = max(value[1] for value in bounds)
+        windows = self._initial_windows(group, start, end)
+        results = [
+            self._window(scope_id, condition_ids, window_start, window_end)
+            for window_start, window_end in windows
+        ]
+        result = {
+            "complete": all(bool(item["complete"]) for item in results),
+            "rows": sum(int(item["rows"]) for item in results),
+            "gaps": sum(int(item["gaps"]) for item in results),
+        }
+        market_receipt = {
+            "schema_version": SCHEMA_VERSION,
+            "scope_id": scope_id,
+            "condition_ids": condition_ids,
+            "window_start": start,
+            "window_end_inclusive": end,
+            "initial_windows": len(windows),
+            "complete": result["complete"],
+            "rows": result["rows"],
+            "gaps": result["gaps"],
+            "updated_at": now_utc(),
+        }
+        atomic_json(market_receipt_path, market_receipt)
+        return {
+            "status": "completed" if result["complete"] else "incomplete",
+            "rows": int(result["rows"]),
+            "gaps": int(result["gaps"]),
+        }
+
+    def _initial_windows(
+        self,
+        group: list[dict[str, Any]],
+        start: int,
+        end: int,
+    ) -> list[tuple[int, int]]:
+        duration = end - start + 1
+        if self.target_group_volume <= 0:
+            partitions = 1
+        else:
+            total_volume = sum(
+                (_number(market.get("_volume")) for market in group),
+                start=Decimal(0),
+            )
+            partitions = max(
+                1,
+                int(
+                    (total_volume / self.target_group_volume).to_integral_value(
+                        rounding=ROUND_CEILING
+                    )
+                ),
+            )
+        partitions = min(partitions, duration)
+        return [
+            (
+                start + (duration * index) // partitions,
+                start + (duration * (index + 1)) // partitions - 1,
+            )
+            for index in range(partitions)
+        ]
 
     @staticmethod
     def _scope_id(condition_ids: tuple[str, ...]) -> str:
@@ -259,11 +451,44 @@ class TradeAPIBackfill:
     def _paths(self, scope_id: str, start: int, end: int, offset: int) -> tuple[Path, Path]:
         directory = f"scope={scope_id}"
         stem = f"start={start}-end={end}-offset={offset:05d}"
-        raw = self.config.data_dir / "raw" / "ledger-api" / directory / f"{stem}.json.zst"
+        raw = (
+            self.config.data_dir
+            / "raw"
+            / self.storage_namespace
+            / directory
+            / f"{stem}.json.zst"
+        )
         receipt = (
-            self.config.data_dir / "receipts" / "ledger-api-windows" / directory / f"{stem}.json"
+            self.config.data_dir
+            / "receipts"
+            / f"{self.storage_namespace}-windows"
+            / directory
+            / f"{stem}.json"
         )
         return raw, receipt
+
+    def _request_params(
+        self,
+        condition_ids: tuple[str, ...],
+        start: int,
+        end: int,
+        offset: int,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "market": ",".join(condition_ids),
+            "limit": self.page_size,
+            "offset": offset,
+            "takerOnly": str(self.taker_only).lower(),
+            "start": start,
+            "end": end,
+        }
+        if isinstance(self.trade_filter, dict):
+            filter_type = self.trade_filter.get("type")
+            minimum_amount = self.trade_filter.get("minimum_amount")
+            if filter_type is not None and minimum_amount is not None:
+                params["filterType"] = str(filter_type)
+                params["filterAmount"] = minimum_amount
+        return params
 
     def _page(
         self,
@@ -283,14 +508,7 @@ class TradeAPIBackfill:
             self.config.data_dir,
             float(self.config.payload["storage"]["minimum_free_gib"]),
         )
-        params = {
-            "market": ",".join(condition_ids),
-            "limit": self.page_size,
-            "offset": offset,
-            "takerOnly": str(self.taker_only).lower(),
-            "start": start,
-            "end": end,
-        }
+        params = self._request_params(condition_ids, start, end, offset)
         observed_at = now_utc()
         payload = self._fetch(params)
         write_json_zst(
@@ -317,7 +535,7 @@ class TradeAPIBackfill:
         return (
             self.config.data_dir
             / "receipts"
-            / "ledger-api-windows"
+            / f"{self.storage_namespace}-windows"
             / f"scope={scope_id}"
             / f"start={start}-end={end}.json"
         )
@@ -326,7 +544,7 @@ class TradeAPIBackfill:
         return (
             self.config.data_dir
             / "normalized"
-            / "ledger-api"
+            / self.storage_namespace
             / f"scope={scope_id}"
             / f"start={start}-end={end}.jsonl.zst"
         )

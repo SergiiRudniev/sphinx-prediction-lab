@@ -117,7 +117,7 @@ Sphinx research must preserve:
 | Lab and naming | Locked |
 | Sphinx Corpus taxonomy | Locked |
 | Sphinx Trace S0 contract | Design registered as `SPH-T-H000` |
-| Historical backfill | Corpus v1 collector in development (`SPH-T-H001`) |
+| Historical backfill | Full `SPH-T-H001` and fast S0 `SPH-T-H002` collectors in development |
 | Sphinx Pulse collector | Implemented; passive collection only |
 | Trained checkpoint | None |
 | Accepted backtest | None |

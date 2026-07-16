@@ -27,6 +27,7 @@ shared funders or relayers do not prove common ownership.
 - Use bounded time windows instead of relying on offset-only pagination.
 - Split a Data API trade window whenever the maximum offset remains full; a
   short first page is the only accepted completion signal for that leaf window.
+- Keep concurrent Data API `/trades` traffic below 200 requests per ten seconds.
 - Store event time and publication/observation time separately.
 - Version protocol and contract migrations explicitly.
 - Never log private keys, API secrets or signed order payloads.

@@ -32,6 +32,8 @@ def _parser() -> argparse.ArgumentParser:
     ledger.add_argument("--market", action="append", dest="markets")
     ledger.add_argument("--max-markets", type=int)
     ledger.add_argument("--max-requests", type=int)
+    ledger.add_argument("--workers", type=int)
+    ledger.add_argument("--requests-per-second", type=float)
 
     chain_ledger = subparsers.add_parser("chain-ledger")
     chain_ledger.add_argument("--rpc-url")
@@ -53,6 +55,8 @@ def _parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--max-pages", type=int)
     all_parser.add_argument("--max-markets", type=int)
     all_parser.add_argument("--max-requests", type=int)
+    all_parser.add_argument("--workers", type=int)
+    all_parser.add_argument("--requests-per-second", type=float)
     all_parser.add_argument("--max-tokens", type=int)
     all_parser.add_argument("--max-windows", type=int)
 
@@ -96,6 +100,8 @@ def _trade_ledger(config: CorpusConfig, args: argparse.Namespace) -> dict[str, A
     with TradeAPIBackfill(
         config,
         max_requests=getattr(args, "max_requests", None),
+        workers=getattr(args, "workers", None),
+        requests_per_second=getattr(args, "requests_per_second", None),
     ) as collector:
         return collector.collect(
             market_ids=markets,

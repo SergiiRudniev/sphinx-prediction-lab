@@ -1,9 +1,9 @@
 {
-  "id": "sphinx-corpus-v1",
+  "id": "sphinx-corpus-s0-fast-v1",
   "version": "1.0.0-registered",
   "status": "registered",
-  "research_id": "SPH-T-H001",
-  "registered_at": "2026-07-16T00:00:00Z",
+  "research_id": "SPH-T-H002",
+  "registered_at": "2026-07-16T16:20:00Z",
   "window": {
     "start": "2025-07-16T00:00:00Z",
     "end_exclusive": "2026-07-16T00:00:00Z"
@@ -28,17 +28,22 @@
         "event_unit": "public_trade",
         "page_size": 1000,
         "maximum_offset": 3000,
-        "markets_per_request": 20,
-        "storage_namespace": "ledger-api",
+        "markets_per_request": 50,
+        "target_group_volume_usd": 1000000,
+        "storage_namespace": "ledger-api-cash-min-25",
         "execution": {
           "workers": 24,
           "requests_per_second": 18,
           "request_burst": 18
         },
         "taker_only": false,
+        "trade_filter": {
+          "type": "CASH",
+          "minimum_amount": 25
+        },
         "minimum_window_seconds": 1,
         "selection": {
-          "minimum_market_volume_usd": 1,
+          "minimum_market_volume_usd": 25,
           "maximum_markets": null,
           "order": "volume_desc"
         }
@@ -106,13 +111,14 @@
     "raw_format": "zstd-json",
     "normalized_format": "zstd-jsonl",
     "manifest_hash": "sha256",
-    "default_data_dir": "/srv/sphinx-corpus/data",
+    "default_data_dir": "/srv/sphinx-corpus-s0-fast/data",
     "minimum_free_gib": 8,
     "ignored_prefixes": [
       "raw/atlas/closed=true/"
     ]
   },
   "known_gaps": [
+    "Public trades below 25 USD cash notional are excluded from the fast Ledger tier.",
     "Historical off-chain order placement, cancellation and full L2 depth are not reconstructable from fills.",
     "Data API public trades are the primary Ledger unit; technical on-chain order fills are sampled for verification rather than duplicated in full.",
     "The documented CLOB v2 cutover time is approximate; boundary validation against observed chain activity is required.",
