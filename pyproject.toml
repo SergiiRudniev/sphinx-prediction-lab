@@ -35,16 +35,25 @@ research = [
   "pydantic>=2.10",
   "torch>=2.4",
 ]
+pulse = [
+  "httpx>=0.28,<1",
+  "PyYAML>=6,<7",
+  "websockets>=15,<16",
+  "zstandard>=0.23,<1",
+]
 dev = [
   "mypy>=1.14",
   "pre-commit>=4.0",
   "pytest>=8.3",
   "pytest-cov>=6.0",
   "ruff>=0.9",
+  "types-PyYAML>=6.0.12",
 ]
 
 [project.scripts]
 sphinx-trace = "sphinx_trace.__main__:main"
+sphinx-pulse = "sphinx_pulse.collector:main"
+sphinx-pulse-publish = "sphinx_pulse.publisher:main"
 
 [project.urls]
 Homepage = "https://github.com/SergiiRudniev/sphinx-prediction-lab"
@@ -52,7 +61,7 @@ Repository = "https://github.com/SergiiRudniev/sphinx-prediction-lab"
 Issues = "https://github.com/SergiiRudniev/sphinx-prediction-lab/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sphinx_trace"]
+packages = ["src/sphinx_trace", "src/sphinx_pulse"]
 
 [tool.ruff]
 target-version = "py311"

@@ -1,0 +1,18 @@
+schema_version: sphinx_pulse_v1
+gamma_url: https://gamma-api.polymarket.com
+websocket_url: wss://ws-subscriptions-clob.polymarket.com/ws/market
+output_dir: /data
+discovery_interval_seconds: 300
+catalog_snapshot_seconds: 3600
+status_interval_seconds: 30
+selection:
+  max_markets: 1000
+websocket:
+  heartbeat_seconds: 10
+  subscription_batch_size: 500
+  queue_size: 200000
+  writer_batch_size: 5000
+  writer_flush_seconds: 2
+storage:
+  max_part_bytes: 536870912
+  min_free_disk_gb: 5
