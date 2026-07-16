@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/market_snapshot.schema.json",
+  "title": "Sphinx Atlas market snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "condition_id",
+    "token_id",
+    "outcome",
+    "observed_at",
+    "published_at",
+    "bid",
+    "ask",
+    "available_depth_usd",
+    "seconds_to_resolution",
+    "source"
+  ],
+  "properties": {
+    "condition_id": { "type": "string", "minLength": 1 },
+    "token_id": { "type": "string", "minLength": 1 },
+    "outcome": { "type": "string", "minLength": 1 },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "published_at": { "type": "string", "format": "date-time" },
+    "bid": { "type": "number", "minimum": 0, "maximum": 1 },
+    "ask": { "type": "number", "minimum": 0, "maximum": 1 },
+    "available_depth_usd": { "type": "number", "minimum": 0 },
+    "seconds_to_resolution": { "type": "integer", "minimum": 0 },
+    "source": { "type": "string", "minLength": 1 },
+    "source_cursor": { "type": ["string", "null"] },
+    "protocol_version": { "type": ["string", "null"] }
+  }
+}

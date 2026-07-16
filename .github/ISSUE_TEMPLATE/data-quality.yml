@@ -1,0 +1,34 @@
+name: Data quality
+description: Report a Sphinx Corpus integrity, provenance or causality problem.
+title: "[DATA] "
+labels: [data]
+body:
+  - type: dropdown
+    id: dataset
+    attributes:
+      label: Dataset
+      options:
+        - Sphinx Atlas
+        - Sphinx Ledger
+        - Sphinx Depth
+        - Sphinx Web
+        - Sphinx Chronicle
+        - Sphinx Replay
+        - Sphinx Pulse
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: Problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and affected range
+      description: Include snapshot ID, source cursor or block range without credentials.
+    validations:
+      required: true

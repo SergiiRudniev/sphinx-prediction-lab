@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/wallet_activity.schema.json",
+  "title": "Sphinx Ledger wallet activity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "wallet_address",
+    "condition_id",
+    "token_id",
+    "activity_type",
+    "side",
+    "price",
+    "size",
+    "event_time",
+    "published_at",
+    "transaction_hash",
+    "source"
+  ],
+  "properties": {
+    "wallet_address": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "condition_id": { "type": "string", "minLength": 1 },
+    "token_id": { "type": "string", "minLength": 1 },
+    "activity_type": {
+      "type": "string",
+      "enum": ["TRADE", "SPLIT", "MERGE", "REDEEM", "TRANSFER"]
+    },
+    "side": { "type": ["string", "null"], "enum": ["BUY", "SELL", null] },
+    "price": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "size": { "type": "number", "minimum": 0 },
+    "event_time": { "type": "string", "format": "date-time" },
+    "published_at": { "type": "string", "format": "date-time" },
+    "transaction_hash": { "type": ["string", "null"] },
+    "source": { "type": "string", "minLength": 1 },
+    "protocol_version": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/model_signal.schema.json",
+  "title": "Sphinx Trace model signal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "model_id",
+    "condition_id",
+    "generated_at",
+    "fair_yes_probability",
+    "informed_flow_yes",
+    "expected_yes_edge",
+    "expected_no_edge",
+    "downside_edge_q10",
+    "confidence"
+  ],
+  "properties": {
+    "model_id": { "const": "sphinx-trace-s0" },
+    "condition_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "fair_yes_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "informed_flow_yes": { "type": "number", "minimum": 0, "maximum": 1 },
+    "expected_yes_edge": { "type": "number" },
+    "expected_no_edge": { "type": "number" },
+    "downside_edge_q10": { "type": "number" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

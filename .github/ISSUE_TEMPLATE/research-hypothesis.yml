@@ -1,0 +1,43 @@
+name: Research hypothesis
+description: Register a Sphinx Trace experiment before running it.
+title: "[SPH-T-H###] "
+labels: [research]
+body:
+  - type: input
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+
+  - type: textarea
+    id: change
+    attributes:
+      label: Controlled change
+    validations:
+      required: true
+
+  - type: textarea
+    id: data
+    attributes:
+      label: Dataset and split
+      description: Snapshot, hashes, chronological boundaries and embargo.
+    validations:
+      required: true
+
+  - type: textarea
+    id: gate
+    attributes:
+      label: Acceptance and falsification
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: discipline
+    attributes:
+      label: Registration
+      options:
+        - label: No test or forward label has been opened for this hypothesis.
+          required: true
+        - label: Thresholds and comparison rules are fixed before execution.
+          required: true

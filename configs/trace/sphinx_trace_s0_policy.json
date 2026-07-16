@@ -1,0 +1,71 @@
+{
+  "id": "sphinx-trace-s0",
+  "family": "Sphinx Trace",
+  "model": "Sphinx Trace S0",
+  "research_id": "SPH-T-H000",
+  "objective": "Estimate fair outcome probabilities and executable net edge from causal market, wallet and graph state.",
+  "parameter_target": {
+    "minimum": 5000000,
+    "maximum": 10000000,
+    "unit": "trainable_parameters"
+  },
+  "inputs": {
+    "market_events": 128,
+    "wallet_history_events": 128,
+    "maximum_wallet_tokens": 128,
+    "maximum_graph_neighbors": 64,
+    "point_in_time_only": true
+  },
+  "architecture": {
+    "market_encoder": {
+      "type": "causal_temporal_encoder",
+      "hidden_size": 192,
+      "layers": 2
+    },
+    "wallet_encoder": {
+      "type": "behavioral_event_encoder",
+      "hidden_size": 192,
+      "layers": 2,
+      "raw_wallet_id_embedding": false
+    },
+    "graph_encoder": {
+      "type": "heterogeneous_temporal_graph_attention",
+      "hidden_size": 192,
+      "layers": 3
+    },
+    "fusion": {
+      "type": "market_query_cross_attention",
+      "hidden_size": 256,
+      "layers": 4,
+      "attention_heads": 8
+    },
+    "heads": [
+      "fair_probability",
+      "future_markout",
+      "informed_flow",
+      "net_edge",
+      "uncertainty"
+    ]
+  },
+  "execution": {
+    "owner": "deterministic_position_manager",
+    "allowed_actions": [
+      "SKIP",
+      "BUY_YES",
+      "BUY_NO",
+      "HOLD",
+      "REDUCE",
+      "CLOSE",
+      "HOLD_TO_RESOLUTION"
+    ],
+    "live_trading_enabled": false,
+    "paper_trading_required": true,
+    "hard_risk_controls_outside_ml": true
+  },
+  "evidence": {
+    "status": "design",
+    "trained_checkpoint": false,
+    "accepted_backtest": false,
+    "accepted_forward_result": false
+  }
+}

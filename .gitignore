@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Environments
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Research data and outputs
+data/**
+!data/.gitkeep
+runs/**
+!runs/.gitkeep
+models/**
+!models/.gitkeep
+artifacts/private/**
+*.parquet
+*.arrow
+*.feather
+*.pt
+*.pth
+*.ckpt
+
+# Secrets and trading material
+*.pem
+*.key
+credentials.json
+secrets.json

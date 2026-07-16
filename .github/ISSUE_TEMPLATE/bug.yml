@@ -1,0 +1,25 @@
+name: Bug
+description: Report a reproducible code or contract problem.
+title: "[BUG] "
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: Commit or version
+    validations:
+      required: true

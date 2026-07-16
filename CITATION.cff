@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use Sphinx Prediction Lab, cite this repository."
+title: "Sphinx Prediction Lab"
+type: software
+authors:
+  - family-names: Rudniev
+    given-names: Sergii
+repository-code: "https://github.com/SergiiRudniev/sphinx-prediction-lab"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-07-16

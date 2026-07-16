@@ -1,0 +1,46 @@
+{
+  "id": "sphinx-chronicle-v1",
+  "corpus": "Sphinx Corpus",
+  "dataset": "Sphinx Chronicle",
+  "version": "1.0.0-design",
+  "status": "design",
+  "sources": [
+    "sphinx-atlas",
+    "sphinx-ledger",
+    "sphinx-depth",
+    "sphinx-web"
+  ],
+  "primary_key": [
+    "condition_id",
+    "decision_time",
+    "wallet_address"
+  ],
+  "point_in_time": {
+    "decision_time_utc": true,
+    "features_published_at_or_before_decision": true,
+    "future_features_allowed": false,
+    "future_wallet_performance_allowed": false,
+    "resolution_labels_joined_after_feature_freeze": true
+  },
+  "targets": [
+    "markout_5m",
+    "markout_1h",
+    "markout_1d",
+    "resolved_outcome",
+    "net_edge_after_costs"
+  ],
+  "split": {
+    "type": "chronological_event_grouped",
+    "random_row_split": false,
+    "purge_overlapping_targets": true,
+    "untouched_test_required": true
+  },
+  "storage": {
+    "format": "parquet",
+    "partition_by": [
+      "event_date",
+      "market_category"
+    ],
+    "raw_data_committed_to_git": false
+  }
+}

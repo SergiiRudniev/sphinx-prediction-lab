@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sphinx-prediction-lab"
+version = "0.1.0"
+description = "Causal wallet-flow intelligence for prediction markets."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Sergii Rudniev" }]
+keywords = [
+  "prediction-markets",
+  "temporal-graphs",
+  "wallet-intelligence",
+  "machine-learning",
+  "polymarket",
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+research = [
+  "numpy>=2.1",
+  "polars>=1.19",
+  "pyarrow>=18.1",
+  "pydantic>=2.10",
+  "torch>=2.4",
+]
+dev = [
+  "mypy>=1.14",
+  "pre-commit>=4.0",
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "ruff>=0.9",
+]
+
+[project.scripts]
+sphinx-trace = "sphinx_trace.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/SergiiRudniev/sphinx-prediction-lab"
+Repository = "https://github.com/SergiiRudniev/sphinx-prediction-lab"
+Issues = "https://github.com/SergiiRudniev/sphinx-prediction-lab/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sphinx_trace"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests", "scripts"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers --strict-config"
+testpaths = ["tests"]
