@@ -1,13 +1,20 @@
 param(
     [string]$DataDir = "E:\Sphinx Corpus",
     [ValidateSet("atlas", "ledger", "depth", "manifest", "atlas-ledger")]
-    [string]$Phase = "atlas-ledger"
+    [string]$Phase = "atlas-ledger",
+    [ValidateSet("fast", "full")]
+    [string]$Profile = "fast"
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
-$Config = Join-Path $Root "configs\corpus\sphinx_corpus_v1.json"
+$ConfigName = if ($Profile -eq "fast") {
+    "sphinx_corpus_s0_fast_v1.json"
+} else {
+    "sphinx_corpus_v1.json"
+}
+$Config = Join-Path $Root "configs\corpus\$ConfigName"
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw "Project virtual environment is missing: $Python"

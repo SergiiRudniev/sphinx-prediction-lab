@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def _config(tmp_path: Path) -> CorpusConfig:
     return CorpusConfig.load(
         ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json",
+        tmp_path,
+    )
+
+
+def _fast_config(tmp_path: Path) -> CorpusConfig:
+    return CorpusConfig.load(
+        ROOT / "configs" / "corpus" / "sphinx_corpus_s0_fast_v1.json",
         tmp_path,
     )
 
@@ -194,6 +203,31 @@ class FakeTradeBackfill(TradeAPIBackfill):
         ]
 
 
+class ParallelTradeBackfill(TradeAPIBackfill):
+    def __init__(self, config: CorpusConfig) -> None:
+        super().__init__(config, workers=4, requests_per_second=1000)
+        self.target_group_volume = Decimal(1)
+        self.barrier = threading.Barrier(4)
+
+    def _markets(
+        self,
+        explicit: set[str] | None,
+        max_markets: int | None,
+    ) -> list[dict[str, Any]]:
+        del explicit, max_markets
+        return [
+            {
+                "condition_id": "0x" + (f"{index:02x}" * 32),
+                "_volume": Decimal(2),
+            }
+            for index in range(1, 5)
+        ]
+
+    def _collect_group(self, group: list[dict[str, Any]]) -> dict[str, Any]:
+        self.barrier.wait(timeout=5)
+        return {"status": "completed", "rows": len(group), "gaps": 0}
+
+
 def test_trade_api_splits_saturated_time_windows(tmp_path: Path) -> None:
     condition_id = "0x" + ("ab" * 32)
     with FakeTradeBackfill(_config(tmp_path)) as collector:
@@ -224,6 +258,49 @@ def test_trade_api_preserves_indistinguishable_repeated_rows(tmp_path: Path) -> 
     assert len(rows) == 2
     assert rows[0]["trade_id"] != rows[1]["trade_id"]
     assert rows[0]["notional_usd"] == "0.50"
+
+
+def test_fast_trade_api_profile_freezes_filter_and_rate_limit(tmp_path: Path) -> None:
+    condition_id = "0x" + ("ef" * 32)
+    with TradeAPIBackfill(_fast_config(tmp_path)) as collector:
+        params = collector._request_params((condition_id,), 100, 200, 0)
+
+        assert collector.storage_namespace == "ledger-api-cash-min-25"
+        assert collector.workers == 24
+        assert collector.request_gate.rate == 18
+        assert params["filterType"] == "CASH"
+        assert params["filterAmount"] == 25
+
+
+def test_trade_api_groups_large_markets_separately(tmp_path: Path) -> None:
+    markets = [
+        {"condition_id": "large", "_volume": "1500000"},
+        {"condition_id": "medium-a", "_volume": "600000"},
+        {"condition_id": "medium-b", "_volume": "300000"},
+        {"condition_id": "medium-c", "_volume": "200000"},
+    ]
+    with TradeAPIBackfill(_fast_config(tmp_path)) as collector:
+        groups = collector._groups(markets)
+
+    assert [[row["condition_id"] for row in group] for group in groups] == [
+        ["large"],
+        ["medium-a", "medium-b"],
+        ["medium-c"],
+    ]
+    assert collector._initial_windows(groups[0], 100, 199) == [
+        (100, 149),
+        (150, 199),
+    ]
+    assert collector._initial_windows(groups[1], 100, 199) == [(100, 199)]
+
+
+def test_trade_api_collects_independent_groups_concurrently(tmp_path: Path) -> None:
+    with ParallelTradeBackfill(_fast_config(tmp_path)) as collector:
+        receipt = collector.collect()
+
+    assert receipt["complete"] is True
+    assert receipt["groups_completed_this_run"] == 4
+    assert receipt["rows"] == 4
 
 
 def test_manifest_excludes_registered_ignored_prefixes(tmp_path: Path) -> None:

@@ -107,3 +107,44 @@ same leaf-saturation rule used for individual high-volume markets.
 **Next action.** Complete Atlas and a multi-market Ledger pilot on the local
 training machine, reconcile sampled transactions, then start the restart-safe
 yearly Ledger run.
+
+## SPH-T-H002: Sphinx Corpus S0 Fast Ledger
+
+**Status:** `development`
+**Registered:** 2026-07-16
+
+**Question.** Can a training-ready one-year Ledger be collected in approximately
+three to four hours without discarding more than ten percent of observed cash
+notional?
+
+**Controlled change.** Reuse the `SPH-T-H001` Atlas and time window, select
+markets with at least 25 USD reported volume, request public trades with the Data
+API `CASH >= 25` filter, group low-volume markets up to 1 million USD reported
+volume and run 24 workers behind a shared 18 request/second token bucket. The
+unfiltered `SPH-T-H001` contract remains unchanged and uses a separate storage
+namespace.
+
+**Acceptance.** Every selected group must have a completed receipt, every raw
+request must contain the registered cash filter, no leaf may remain saturated,
+and stratified pilots must retain at least 90 percent of unfiltered cash notional.
+Elapsed time is diagnostic and does not override completeness checks.
+
+**Falsification.** Reject the fast tier if retained notional falls below 90
+percent, parallel collection changes normalized identity, group receipts collide,
+rate limiting causes persistent failure, or wallet coverage becomes unsuitable
+for the registered S0 comparisons.
+
+**Development evidence.** In a completed high-volume market window, the 25 USD
+cash filter reduced 3,650 public rows to 925 while retaining 291,666.45 USD of
+311,180.94 USD unfiltered notional (93.7 percent). The official Data API limit is
+200 `/trades` requests per ten seconds; the registered collector stays below it
+at 18 requests per second. A bounded concurrent pilot issued 100 requests in
+6.15 seconds and received 97,361 response rows without a request failure. Every
+saved raw request contained the registered cash filter. A closed-market pilot
+completed eight filtered rows with no gap, and its immediate restart skipped the
+completed group with zero network requests.
+
+**Result.** In progress. No fast Chronicle snapshot is accepted yet.
+
+**Next action.** Complete the shared Atlas, run a bounded concurrent Ledger pilot,
+then start the restart-safe fast yearly Ledger locally.

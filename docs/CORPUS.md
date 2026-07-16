@@ -104,6 +104,23 @@ reconstructed. Sphinx Depth therefore distinguishes:
 Historical backfill is a local batch workload stored beside the training
 machine. Ubuntu is reserved for the continuous Sphinx Pulse collector.
 
+### S0 Fast Ledger
+
+`SPH-T-H002` is a separate training-first view of the same one-year window. It
+keeps public trades with at least 25 USD cash notional and runs concurrent request
+groups below the documented Data API limit. A registered pilot retained 93.7
+percent of cash notional while reducing row count by 74.7 percent. The fast and
+unfiltered Ledgers use separate storage namespaces and must not be presented as
+the same snapshot.
+
+The local runner defaults to the fast profile:
+
+```powershell
+scripts\run_corpus_backfill.ps1 -DataDir "E:\Sphinx Corpus" -Phase atlas-ledger
+```
+
+Pass `-Profile full` only when continuing the unfiltered `SPH-T-H001` Ledger.
+
 ## Versioning
 
 Datasets and models version independently:
