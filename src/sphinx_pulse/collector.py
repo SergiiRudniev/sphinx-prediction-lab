@@ -159,7 +159,7 @@ class PulseCollector:
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=15.0))
 
     async def fetch_catalog(self) -> list[dict[str, Any]]:
-        page_size = 500
+        page_size = 100
         cursor: str | None = None
         seen_cursors: set[str] = set()
         events: list[dict[str, Any]] = []
@@ -167,22 +167,40 @@ class PulseCollector:
             params: dict[str, Any] = {
                 "closed": "false",
                 "limit": page_size,
+                "order": "volume24hr",
+                "ascending": "false",
             }
             if cursor is not None:
                 params["after_cursor"] = cursor
             response = await self.client.get(
-                f"{self.config.gamma_url}/events/keyset",
+                f"{self.config.gamma_url}/markets/keyset",
                 params=params,
             )
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict):
                 raise RuntimeError("Gamma keyset response is not an object")
-            page = payload.get("events")
+            page = payload.get("markets")
             if not isinstance(page, list):
-                raise RuntimeError("Gamma keyset events field is not a list")
-            valid = [event for event in page if isinstance(event, dict)]
-            events.extend(valid)
+                raise RuntimeError("Gamma keyset markets field is not a list")
+            for market in page:
+                if not isinstance(market, dict):
+                    continue
+                relations = market.get("events", [])
+                event = relations[0] if isinstance(relations, list) and relations else {}
+                if not isinstance(event, dict):
+                    event = {}
+                events.append(
+                    {
+                        "id": event.get("id"),
+                        "slug": event.get("slug"),
+                        "title": event.get("title"),
+                        "tags": event.get("tags", []),
+                        "markets": [market],
+                    }
+                )
+            if len(select_markets(events, self.config.max_markets)) >= self.config.max_markets:
+                return events
             next_cursor = payload.get("next_cursor")
             if not next_cursor:
                 return events
@@ -201,7 +219,7 @@ class PulseCollector:
                 {
                     "schema_version": SCHEMA_VERSION,
                     "record_type": "market_catalog",
-                    "source": "polymarket_gamma_events",
+                    "source": "polymarket_gamma_markets",
                     "received_at_ms": observed_at_ms,
                     "payload": market,
                 }

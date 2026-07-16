@@ -270,7 +270,7 @@ class DayPublisher:
             "dataset_id": f"sphinx-pulse-{day}",
             "schema_version": SCHEMA_VERSION,
             "source": {
-                "catalog": "https://gamma-api.polymarket.com/events/keyset",
+                "catalog": "https://gamma-api.polymarket.com/markets/keyset",
                 "stream": "wss://ws-subscriptions-clob.polymarket.com/ws/market",
             },
             "utc_date": day,
