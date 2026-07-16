@@ -84,6 +84,26 @@ reconstructed. Sphinx Depth therefore distinguishes:
 - `collected_l2`: full snapshots collected by Sphinx Pulse;
 - `synthetic_depth`: prohibited for accepted execution evidence.
 
+## Corpus v1 Backfill
+
+`SPH-T-H001` registers the first historical window as
+`[2025-07-16T00:00:00Z, 2026-07-16T00:00:00Z)`.
+
+- Atlas collects both open and closed Gamma market partitions and then keeps
+  markets whose lifecycle intersects the registered window.
+- Ledger uses public Data API trades with explicit `start` and `end` bounds.
+  Markets are batched into bounded request groups. A full page at the maximum
+  offset causes the group time interval to split until no pagination saturation
+  remains.
+- Polygon `OrderFilled` is a verification source. A registered density probe
+  estimated roughly 1.45 billion technical fills for the year, so duplicating
+  the full chain event stream is not the primary training corpus.
+- Depth is collected separately because hourly historical prices and live L2
+  observations have different causal and execution meaning.
+
+Historical backfill is a local batch workload stored beside the training
+machine. Ubuntu is reserved for the continuous Sphinx Pulse collector.
+
 ## Versioning
 
 Datasets and models version independently:
