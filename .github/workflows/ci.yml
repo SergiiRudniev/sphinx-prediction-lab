@@ -31,7 +31,7 @@ jobs:
           cache: pip
 
       - name: Install
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,pulse]"
 
       - name: Contracts
         run: python scripts/check_contracts.py

@@ -71,7 +71,8 @@ license and redistribution constraints
 - Normalized facts: Parquet with UTC timestamps and explicit source provenance.
 - Graph edges: Parquet edge tables plus point-in-time neighborhood indices.
 - Training rows: frozen Sphinx Chronicle snapshots.
-- Large data and credentials: never committed to Git.
+- Large data and credentials: never committed to Git history. Pulse archives use
+  checksum-verified GitHub Release assets.
 
 ## Historical Limits
 
@@ -97,3 +98,13 @@ Snapshot cutoff: YYYY-MM-DDTHH:MM:SSZ
 
 Schema changes require a major dataset version when they alter row meaning,
 causal availability or label construction.
+
+## Pulse Operations
+
+Sphinx Pulse records the public Polymarket market channel without feeding the
+current model. It writes append-only zstd JSONL shards by UTC date and hour.
+Completed UTC days are published as GitHub Releases with a manifest, row counts,
+source endpoints and SHA-256 hashes. Local shards are removed only after every
+remote asset and the manifest pass size and digest verification.
+
+See [Pulse operations](../deploy/pulse/README.md).

@@ -34,3 +34,6 @@ shared funders or relayers do not prove common ownership.
 
 The repository does not claim redistribution rights over third-party data. Dataset
 releases require a source-by-source license and terms review before publication.
+Pulse release manifests identify Polymarket as the source and make no ownership
+claim. They contain only public market-channel observations and public catalog
+responses; credentials and private user-channel events are excluded.

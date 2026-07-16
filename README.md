@@ -118,6 +118,7 @@ Sphinx research must preserve:
 | Sphinx Corpus taxonomy | Locked |
 | Sphinx Trace S0 contract | Design registered as `SPH-T-H000` |
 | Historical backfill | Not started |
+| Sphinx Pulse collector | Implemented; passive collection only |
 | Trained checkpoint | None |
 | Accepted backtest | None |
 | Accepted forward result | None |
@@ -131,6 +132,7 @@ Sphinx research must preserve:
 |-- configs/                Frozen data and model contracts
 |-- docs/                   Architecture, corpus and research protocol
 |-- schemas/                Point-in-time JSON schemas
+|-- deploy/pulse/           Live collector and verified daily publisher
 |-- scripts/                Contract and future pipeline entrypoints
 |-- src/sphinx_trace/       Runtime contracts and deterministic policy boundary
 |-- tests/                  Data-free contract tests
@@ -168,6 +170,7 @@ python -m pip install -e ".[research,dev]"
 - [Evaluation Protocol](docs/EVALUATION_PROTOCOL.md)
 - [Research Journal](docs/RESEARCH.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Sphinx Pulse Operations](deploy/pulse/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

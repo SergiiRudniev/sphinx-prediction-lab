@@ -1,0 +1,102 @@
+name: sphinx-pulse
+
+services:
+  collector:
+    build:
+      context: ../..
+      dockerfile: deploy/pulse/Dockerfile
+    image: sphinx-pulse:0.1.0
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TZ: UTC
+    volumes:
+      - ${PULSE_DATA_DIR:-/srv/sphinx-pulse/data}:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-m",
+          "sphinx_pulse.healthcheck",
+          "/data/status/collector.json",
+          "180",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    mem_limit: 1024m
+    cpus: 2
+
+  publisher:
+    image: sphinx-pulse:0.1.0
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      collector:
+        condition: service_started
+    environment:
+      TZ: UTC
+    command:
+      - python
+      - -m
+      - sphinx_pulse.publisher
+      - --data-dir
+      - /data
+      - --repository
+      - SergiiRudniev/sphinx-prediction-lab
+      - --token-file
+      - /run/secrets/github_token
+      - --interval-seconds
+      - "900"
+    volumes:
+      - ${PULSE_DATA_DIR:-/srv/sphinx-pulse/data}:/data
+    secrets:
+      - github_token
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-m",
+          "sphinx_pulse.healthcheck",
+          "/data/status/publisher.json",
+          "1200",
+        ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    mem_limit: 512m
+    cpus: 1
+
+secrets:
+  github_token:
+    file: ${GITHUB_TOKEN_FILE:-/srv/sphinx-pulse/secrets/github_token}
