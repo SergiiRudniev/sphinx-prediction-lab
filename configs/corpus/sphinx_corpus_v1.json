@@ -1,0 +1,120 @@
+{
+  "id": "sphinx-corpus-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H001",
+  "registered_at": "2026-07-16T00:00:00Z",
+  "window": {
+    "start": "2025-07-16T00:00:00Z",
+    "end_exclusive": "2026-07-16T00:00:00Z"
+  },
+  "network": {
+    "name": "polygon",
+    "chain_id": 137,
+    "rpc_env": "POLYGON_RPC_URL",
+    "confirmations": 128
+  },
+  "sources": {
+    "atlas": {
+      "base_url": "https://gamma-api.polymarket.com",
+      "endpoint": "/markets/keyset",
+      "closed_partitions": [false, true],
+      "page_size": 100
+    },
+    "ledger": {
+      "primary": {
+        "base_url": "https://data-api.polymarket.com",
+        "endpoint": "/trades",
+        "event_unit": "public_trade",
+        "page_size": 1000,
+        "maximum_offset": 3000,
+        "markets_per_request": 20,
+        "taker_only": false,
+        "minimum_window_seconds": 1,
+        "selection": {
+          "minimum_market_volume_usd": 1,
+          "maximum_markets": null,
+          "order": "volume_desc"
+        }
+      },
+      "chain_verification": {
+        "event_unit": "order_fill",
+        "full_year_collection": false,
+        "reason": "The registered pilot estimates approximately 1.45 billion technical order-fill events."
+      },
+      "contracts": [
+        {
+          "id": "clob-v1-standard",
+          "protocol": "clob-v1",
+          "market_type": "standard",
+          "address": "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E",
+          "active_from": "2025-07-16T00:00:00Z",
+          "active_until_exclusive": "2026-04-28T11:00:00Z",
+          "event_signature": "OrderFilled(bytes32,address,address,uint256,uint256,uint256,uint256,uint256)"
+        },
+        {
+          "id": "clob-v1-neg-risk",
+          "protocol": "clob-v1",
+          "market_type": "neg_risk",
+          "address": "0xC5d563A36AE78145C45a50134d48A1215220f80a",
+          "active_from": "2025-07-16T00:00:00Z",
+          "active_until_exclusive": "2026-04-28T11:00:00Z",
+          "event_signature": "OrderFilled(bytes32,address,address,uint256,uint256,uint256,uint256,uint256)"
+        },
+        {
+          "id": "clob-v2-standard",
+          "protocol": "clob-v2",
+          "market_type": "standard",
+          "address": "0xE111180000d2663C0091e4f400237545B87B996B",
+          "active_from": "2026-04-28T11:00:00Z",
+          "active_until_exclusive": "2026-07-16T00:00:00Z",
+          "event_signature": "OrderFilled(bytes32,address,address,uint8,uint256,uint256,uint256,uint256,bytes32,bytes32)"
+        },
+        {
+          "id": "clob-v2-neg-risk",
+          "protocol": "clob-v2",
+          "market_type": "neg_risk",
+          "address": "0xe2222d279d744050d28e00520010520000310F59",
+          "active_from": "2026-04-28T11:00:00Z",
+          "active_until_exclusive": "2026-07-16T00:00:00Z",
+          "event_signature": "OrderFilled(bytes32,address,address,uint8,uint256,uint256,uint256,uint256,bytes32,bytes32)"
+        }
+      ],
+      "scan": {
+        "initial_block_span": 2000,
+        "minimum_block_span": 16,
+        "maximum_block_span": 20000,
+        "target_logs_per_chunk": 5000,
+        "block_header_batch_size": 100
+      }
+    },
+    "depth": {
+      "base_url": "https://clob.polymarket.com",
+      "endpoint": "/prices-history",
+      "fidelity_minutes": 60,
+      "window_days": 30
+    }
+  },
+  "storage": {
+    "schema_version": "1.0.0",
+    "raw_format": "zstd-json",
+    "normalized_format": "zstd-jsonl",
+    "manifest_hash": "sha256",
+    "default_data_dir": "/srv/sphinx-corpus/data",
+    "minimum_free_gib": 8,
+    "ignored_prefixes": [
+      "raw/atlas/closed=true/"
+    ]
+  },
+  "known_gaps": [
+    "Historical off-chain order placement, cancellation and full L2 depth are not reconstructable from fills.",
+    "Data API public trades are the primary Ledger unit; technical on-chain order fills are sampled for verification rather than duplicated in full.",
+    "The documented CLOB v2 cutover time is approximate; boundary validation against observed chain activity is required.",
+    "Gamma metadata is observed at collection time and is not itself a historical point-in-time feature snapshot.",
+    "Hourly price history is a discovery corpus and cannot support five-minute executable markout labels by itself."
+  ],
+  "redistribution": {
+    "publish_historical_payloads": false,
+    "terms_review_required": true
+  }
+}

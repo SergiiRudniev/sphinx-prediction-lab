@@ -41,6 +41,11 @@ pulse = [
   "websockets>=15,<16",
   "zstandard>=0.23,<1",
 ]
+corpus = [
+  "httpx>=0.28,<1",
+  "pycryptodome>=3.21,<4",
+  "zstandard>=0.23,<1",
+]
 dev = [
   "mypy>=1.14",
   "pre-commit>=4.0",
@@ -54,6 +59,7 @@ dev = [
 sphinx-trace = "sphinx_trace.__main__:main"
 sphinx-pulse = "sphinx_pulse.collector:main"
 sphinx-pulse-publish = "sphinx_pulse.publisher:main"
+sphinx-corpus = "sphinx_corpus.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/SergiiRudniev/sphinx-prediction-lab"
@@ -61,7 +67,7 @@ Repository = "https://github.com/SergiiRudniev/sphinx-prediction-lab"
 Issues = "https://github.com/SergiiRudniev/sphinx-prediction-lab/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sphinx_trace", "src/sphinx_pulse"]
+packages = ["src/sphinx_trace", "src/sphinx_pulse", "src/sphinx_corpus"]
 
 [tool.ruff]
 target-version = "py311"

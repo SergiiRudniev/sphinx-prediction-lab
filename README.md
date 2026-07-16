@@ -117,7 +117,7 @@ Sphinx research must preserve:
 | Lab and naming | Locked |
 | Sphinx Corpus taxonomy | Locked |
 | Sphinx Trace S0 contract | Design registered as `SPH-T-H000` |
-| Historical backfill | Not started |
+| Historical backfill | Corpus v1 collector in development (`SPH-T-H001`) |
 | Sphinx Pulse collector | Implemented; passive collection only |
 | Trained checkpoint | None |
 | Accepted backtest | None |
@@ -133,7 +133,7 @@ Sphinx research must preserve:
 |-- docs/                   Architecture, corpus and research protocol
 |-- schemas/                Point-in-time JSON schemas
 |-- deploy/pulse/           Live collector and verified daily publisher
-|-- scripts/                Contract and future pipeline entrypoints
+|-- scripts/                Local Corpus backfill and contract entrypoints
 |-- src/sphinx_trace/       Runtime contracts and deterministic policy boundary
 |-- tests/                  Data-free contract tests
 |-- .github/                CI, issue forms and repository governance
