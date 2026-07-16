@@ -242,7 +242,7 @@ class DayPublisher:
 
     @staticmethod
     def _asset_name(day: str, path: Path, root: Path) -> str:
-        relative = path.relative_to(root).as_posix().replace("/", "--")
+        relative = path.relative_to(root).as_posix().replace("/", "--").replace("=", "-")
         return f"sphinx-pulse-{day}--{relative}"
 
     def _specs(self, day_dir: Path, day: str) -> tuple[list[AssetSpec], dict[str, Any]]:

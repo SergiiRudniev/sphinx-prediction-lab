@@ -144,3 +144,13 @@ def test_only_completed_utc_days_are_eligible(tmp_path: Path) -> None:
     eligible = publisher.eligible_days(today=date(2026, 7, 16))
 
     assert [path.name for path in eligible] == ["date=2026-07-15"]
+
+
+def test_release_asset_names_are_github_stable(tmp_path: Path) -> None:
+    root = tmp_path / "date=2026-07-15"
+    path = root / "hour=23" / "pulse-23-part-00000.jsonl.zst"
+
+    name = DayPublisher._asset_name("2026-07-15", path, root)
+
+    assert name == "sphinx-pulse-2026-07-15--hour-23--pulse-23-part-00000.jsonl.zst"
+    assert "=" not in name
