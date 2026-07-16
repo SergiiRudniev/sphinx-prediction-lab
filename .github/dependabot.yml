@@ -13,3 +13,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     labels: [dependencies]
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies]

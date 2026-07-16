@@ -2,6 +2,8 @@
 
 ![Sphinx Prediction Lab](assets/sphinx-prediction-lab-hero.png)
 
+<img src="assets/sphinx-icon.png" alt="Sphinx icon" width="112">
+
 # Sphinx Prediction Lab
 
 **Causal wallet-flow intelligence for prediction markets**
