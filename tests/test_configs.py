@@ -101,6 +101,57 @@ def test_h010_simulator_keeps_strategy_learned_and_execution_physical() -> None:
     assert config["causality"]["test_labels_opened"] is False
 
 
+def test_h011_campaign_is_uncapped_and_cannot_open_test() -> None:
+    config = load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_campaign_v1.json")
+    assert config["research_id"] == "SPH-T-H011"
+    assert config["data"]["hard_trade_cap"] is None
+    assert config["data"]["hard_wallet_cap"] is None
+    assert config["data"]["all_h009_ledger_rows_processed"] is True
+    assert (
+        config["causal_state"]["resolution_update_rule"]
+        == "wallet_performance_changes_only_after_registered_public_resolution_time"
+    )
+    assert config["architecture"]["first_candidate_target"] == 50_000_000
+    assert config["architecture"]["capacity_selection_ignores_compute_cost"] is True
+    assert config["selection"]["test_opening_allowed"] is False
+
+
+def test_h011_pack_streams_all_rows_without_identity_features() -> None:
+    config = load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_pack_v1.json")
+    assert config["research_id"] == "SPH-T-H011"
+    assert config["features"]["width"] == 128
+    assert config["features"]["identity_embedding"] is False
+    assert config["features"]["hard_wallet_cap"] is None
+    assert config["features"]["hard_market_cap"] is None
+    assert config["acceptance"]["full_stream_rows"] == 176_119_673
+    assert config["input"]["test_labels_opened"] is False
+    assert config["storage"]["checkpoint_maximum_interval_seconds"] <= 900
+
+
+def test_h011_resolution_context_is_causal_and_keeps_test_closed() -> None:
+    config = load_json(ROOT / "configs" / "trace" / "sphinx_trace_h011_resolution_context_v1.json")
+    assert config["research_id"] == "SPH-T-H011"
+    assert config["input"]["test_terminal_fields_accessed"] is False
+    assert config["input"]["same_second_application"] == "strictly_after_resolution_second"
+    assert config["proxy"]["rows_after_resolution_used"] is False
+    assert config["acceptance"]["hard_wallet_cap"] is None
+
+
+def test_h011_model_and_training_are_resumable_and_multi_head() -> None:
+    model = load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_model_v1.json")
+    training = load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_train_v1.json")
+    assert [candidate["id"] for candidate in model["architecture"]["candidates"]] == [
+        "50m",
+        "100m",
+        "150m",
+    ]
+    assert "call_sufficiency_logit" in model["heads"]
+    assert "position_size_beta_alpha" in model["heads"]
+    assert training["data"]["test_rows_consumed"] == 0
+    assert training["evaluation"]["test_opening_allowed"] is False
+    assert training["training"]["checkpoint_maximum_interval_seconds"] <= 900
+
+
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
     contracts = config["sources"]["ledger"]["contracts"]

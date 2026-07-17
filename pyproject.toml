@@ -43,6 +43,8 @@ pulse = [
 ]
 corpus = [
   "httpx>=0.28,<1",
+  "numba>=0.61,<1",
+  "orjson>=3.10,<4",
   "pycryptodome>=3.21,<4",
   "zstandard>=0.23,<1",
 ]

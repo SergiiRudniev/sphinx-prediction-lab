@@ -540,7 +540,7 @@ then profile the complete historical source coverage before choosing the first
 
 ## SPH-T-H009: Full Outcome Chronicle
 
-**Status:** `registered; build in progress`
+**Status:** `full Ledger structurally qualified; Polygon graph pending`
 **Registered:** 2026-07-17
 
 **Question.** Can the complete qualified Atlas and Fast Ledger be transformed
@@ -593,14 +593,27 @@ are lost or duplicated, restart changes an artifact, a missing graph channel is
 silently represented as zero activity, or an incomplete build is described as
 model or profitability evidence.
 
+**Full Ledger result.** The completed global merge contains exactly 176,119,673
+rows across 365 daily shards and 1,368,360 unique participant wallets. The
+adaptive cursor emitted 4,483,489 post-trade component decisions. The catalog
+contains 1,718,409 markets and 671,192 connected components, including 111,955
+multi-market and 40,501 neg-risk components. The full deep-hash validation read
+the catalog, episodes, participant index, all stream shards and all decision
+shards in 602.02 seconds; every hash matched, all causal/label checks passed and
+the violation list was empty. Test terminal labels remained zero.
+
+This qualifies the full Ledger replay structure, not all of H009. The receipt is
+deliberately `fully_qualified=false` because the required Polygon transfer graph
+is not complete. Decision rows therefore carry graph availability as false.
+
 **Evidence boundary.** H009 qualifies data structure and causal replay only. It
 does not show that wallet flow predicts outcomes, identify an insider, establish
 executable fills or costs, open historical test, train a model or demonstrate
 profit.
 
-**Next action.** Complete the registered source audit, build and replay a
-structurally complete pilot, then run the resumable full catalog, trade stream,
-decision index and Polygon backfill.
+**Next action.** Complete the indexed Polygon transfer backfill and rerun graph-
+required qualification. Model work may proceed with the graph channel explicitly
+masked, but cannot claim the temporal-graph variant.
 
 ## SPH-T-H010: Stateful Polymarket Simulator
 
@@ -649,3 +662,88 @@ trade-tape replay before any model campaign. Keep test labels closed.
 **Evidence boundary.** H010 mechanics do not establish historical depth,
 executable fills, model quality, profit, untouched-test, paper-forward or
 production evidence.
+
+## SPH-T-H011: Uncapped Causal Flow Campaign
+
+**Status:** `full H009 input ready; feature/model engineering in progress`
+
+**Registered:** 2026-07-17, before full-corpus model metrics were observed.
+
+**Question.** Does processing every causal trade and participant improve
+terminal outcome selection and development simulator profit beyond the current
+market probability? Separate contemporaneous wallet-flow value from prior
+resolved wallet performance and temporal graph value.
+
+**Controlled variants.** Train market-only, uncapped wallet-flow, causal prior
+resolved wallet-performance and temporal-graph variants on identical H009
+decisions. Do not learn raw wallet identity. Every valid trade updates compact
+wallet, market and event state; no wallet, trade, market or outcome-count cap is
+allowed. Apply terminal wallet-performance updates only after the registered
+public resolution time. All supervised rows remain grouped by connected event
+component and test terminal fields remain unopened.
+
+The feature pack retains every decision and uses component/lifecycle-balanced
+loss weights rather than deleting frequent-event rows. Model components are a
+streaming wallet encoder, linear-cost wallet-to-market latent aggregator,
+multi-scale market memory, linked-market event encoder, chunked universe memory,
+opportunity ranker and probability, uncertainty, sufficiency and sizing heads.
+Candidate capacities are approximately 50M, 100M and 150M parameters, beginning
+with 50M. Compute cost is not a selection criterion.
+
+**Acceptance.** A wallet feature is supported only when the paired
+component-block-bootstrap upper 95% log-loss delta is below zero against
+market-only and its H010 simulator profit delta is positive. Profit must survive
+the registered cost stress. The first model campaign cannot open test.
+
+**Implemented causal pack.** The registered pack processes the full H009 stream
+with no wallet, market or trade cap. Its 128 named features contain clock,
+evidence-market, connected-component, evidence-wallet, all-wallet recurrent
+DeepSet and universe blocks. Every trade updates state; raw wallet identity is a
+state key and never a learned input. Approximate cardinality uses an uncapped
+HyperLogLog update for every row. Decision materialization requires exact
+`stream_row` and evidence-trade-ID agreement. Daily tensors, debug provenance,
+train-only median/IQR statistics and the complete recurrent state have atomic,
+source-bound resume receipts.
+
+A separate resolution ledger computes winner-oriented directional edge and an
+observed-trade PnL proxy per wallet/market, excludes post-resolution trades and
+applies each update strictly after its public resolution second. This proxy is
+explicitly incomplete because the 25 USD source filter and token transfers can
+hide inventory. It is useful as a causal feature, not exact realized PnL.
+
+The inspectable group-latent backbone has terminal-outcome, uncertainty, CALL
+sufficiency, expected-edge and beta sizing heads. Exact candidate sizes are
+50,248,198, 99,789,446 and 158,990,598 parameters. Debug mode records per-layer
+group/latent attention; integrated-gradient and module-ablation inputs remain
+available because all 128 features are named. Attention alone is not treated as
+an explanation.
+
+**Compute preflight.** On the RTX 5070, the 50M bf16 forward/backward benchmark
+processed 6,446 examples/s at batch 512 with 3.53 GiB peak allocated VRAM. Batch
+1024 processed 6,309 examples/s at 6.18 GiB. Batch 2048 reached the 12 GiB memory
+cliff, falling to 498 examples/s at 11.60 GiB. The first run therefore uses batch
+512. These are synthetic compute measurements, not full-pack training time or
+model quality.
+
+**Determinism preflight.** A full-scale one-day build allocated all 1,368,360
+wallet states, 1,189,164 market states and 530,974 component states, processed
+69,380 source trades and materialized 4,256 exact decisions without non-finite
+features or test labels. Replaying the same build after an atomic checkpoint
+produced the same completed-output hashes. The repeated run finished in 71.47
+seconds and reported `output_hashes_match_previous=true`. This validates the
+builder and resume boundary, not predictive quality.
+
+The public CryptoHouse actor source exposed a shared 120-query/hour quota. The
+initial 512-way plan was replaced by 32 hash partitions: it retains every actor
+while reducing the seven-window build from 3,584 to 224 queries. The collector
+now recognizes the quota reset time, checkpoints progress and waits without
+discarding completed partitions.
+
+**Next action.** Finish the actor and resolution contexts, run and replay the
+complete feature pack, then train the matched 50M market-only and uncapped-wallet
+flow pair. Add causal resolved performance next; keep the Polygon graph variant
+blocked until its source is complete.
+
+**Evidence boundary.** H011 validation and conservative trade-tape replay cannot
+establish untouched-test, historical orderbook depth, executable profit,
+paper-forward performance, insider attribution or production readiness.
