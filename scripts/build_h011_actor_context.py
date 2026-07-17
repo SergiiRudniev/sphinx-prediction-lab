@@ -12,7 +12,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sphinx_corpus.cryptohouse import CryptoHouseClient, CryptoHouseQuotaError, single_array
+from sphinx_corpus.cryptohouse import (
+    CryptoHouseClient,
+    CryptoHouseQuotaError,
+    CryptoHouseResultLimitError,
+    single_array,
+)
 from sphinx_corpus.io import atomic_json, now_utc, sha256_file, write_jsonl_zst
 
 
@@ -28,6 +33,35 @@ class ActorTask:
         return (
             f"{self.start:%Y%m%d}-{self.end_exclusive:%Y%m%d}-"
             f"{self.partition:04d}-of-{self.partitions:04d}"
+        )
+
+    def split(self) -> tuple[ActorTask, ActorTask]:
+        child_partitions = self.partitions * 2
+        return (
+            ActorTask(self.start, self.end_exclusive, self.partition, child_partitions),
+            ActorTask(
+                self.start,
+                self.end_exclusive,
+                self.partition + self.partitions,
+                child_partitions,
+            ),
+        )
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "start": self.start.isoformat().replace("+00:00", "Z"),
+            "end_exclusive": self.end_exclusive.isoformat().replace("+00:00", "Z"),
+            "partition": self.partition,
+            "partitions": self.partitions,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> ActorTask:
+        return cls(
+            _parse_utc(str(payload["start"])),
+            _parse_utc(str(payload["end_exclusive"])),
+            int(payload["partition"]),
+            int(payload["partitions"]),
         )
 
 
@@ -158,10 +192,16 @@ def _actor_rows(task: ActorTask, values: list[Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def _execute_task(task: ActorTask, output_dir: Path, url: str) -> dict[str, Any]:
+def _task_paths(task: ActorTask, output_dir: Path) -> tuple[Path, Path]:
     task_dir = output_dir / "tasks" / f"window={task.start:%Y-%m-%d}"
-    output_path = task_dir / f"partition={task.partition:04d}.jsonl.zst"
-    receipt_path = task_dir / f"partition={task.partition:04d}.json"
+    return (
+        task_dir / f"partition={task.partition:04d}.jsonl.zst",
+        task_dir / f"partition={task.partition:04d}.json",
+    )
+
+
+def _execute_task(task: ActorTask, output_dir: Path, url: str) -> dict[str, Any]:
+    output_path, receipt_path = _task_paths(task, output_dir)
     query = actor_query(task)
     query_hash = hashlib.sha256(query.encode()).hexdigest()
     if receipt_path.exists() and output_path.exists():
@@ -195,6 +235,67 @@ def _execute_task(task: ActorTask, output_dir: Path, url: str) -> dict[str, Any]
     return receipt
 
 
+def _write_task_plan(
+    path: Path,
+    *,
+    start: datetime,
+    end_exclusive: datetime,
+    initial_partitions: int,
+    partition_limit: int | None,
+    tasks: dict[str, ActorTask],
+) -> None:
+    atomic_json(
+        path,
+        {
+            "schema_version": "1.0.0",
+            "record_type": "chronicle_actor_context_task_plan",
+            "updated_at": now_utc(),
+            "start": start.isoformat().replace("+00:00", "Z"),
+            "end_exclusive": end_exclusive.isoformat().replace("+00:00", "Z"),
+            "initial_partitions": initial_partitions,
+            "partition_limit": partition_limit,
+            "adaptive_result_splitting": True,
+            "tasks": [tasks[task_id].payload() for task_id in sorted(tasks)],
+        },
+    )
+
+
+def _load_task_plan(
+    path: Path,
+    *,
+    start: datetime,
+    end_exclusive: datetime,
+    initial_partitions: int,
+    partition_limit: int | None,
+) -> dict[str, ActorTask] | None:
+    if not path.exists():
+        return None
+    payload: object = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Actor task plan is not an object")
+    expected = {
+        "start": start.isoformat().replace("+00:00", "Z"),
+        "end_exclusive": end_exclusive.isoformat().replace("+00:00", "Z"),
+        "initial_partitions": initial_partitions,
+        "partition_limit": partition_limit,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            raise RuntimeError(f"Actor task plan changed at {key}")
+    raw_tasks = payload.get("tasks")
+    if not isinstance(raw_tasks, list):
+        raise RuntimeError("Actor task plan has no task list")
+    tasks = {
+        task.id: task
+        for raw in raw_tasks
+        if isinstance(raw, dict)
+        for task in [ActorTask.from_payload(raw)]
+    }
+    if len(tasks) != len(raw_tasks):
+        raise RuntimeError("Actor task plan contains duplicate or invalid tasks")
+    return tasks
+
+
 def build_actor_context(
     output_dir: Path,
     *,
@@ -205,21 +306,73 @@ def build_actor_context(
     partition_limit: int | None,
     workers: int,
     retry_rounds: int = 6,
+    presplit_after: datetime | None = None,
+    presplit_partitions: int | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     if partitions <= 0 or workers <= 0 or retry_rounds <= 0:
         raise ValueError("partitions, workers and retry rounds must be positive")
+    if (presplit_after is None) != (presplit_partitions is None):
+        raise ValueError("presplit_after and presplit_partitions must be supplied together")
+    if presplit_partitions is not None and presplit_partitions < partitions:
+        raise ValueError("presplit_partitions cannot be smaller than initial partitions")
     selected_partitions = range(
         min(partitions, partition_limit) if partition_limit is not None else partitions
     )
     windows = _month_windows(start, end_exclusive)
-    tasks = [
+    initial_tasks = [
         ActorTask(window_start, window_end, partition, partitions)
         for window_start, window_end in windows
         for partition in selected_partitions
     ]
+    plan_path = output_dir / "task-plan.json"
+    coverage_tasks = _load_task_plan(
+        plan_path,
+        start=start,
+        end_exclusive=end_exclusive,
+        initial_partitions=partitions,
+        partition_limit=partition_limit,
+    )
+    if coverage_tasks is None:
+        coverage_tasks = {task.id: task for task in initial_tasks}
+        _write_task_plan(
+            plan_path,
+            start=start,
+            end_exclusive=end_exclusive,
+            initial_partitions=partitions,
+            partition_limit=partition_limit,
+            tasks=coverage_tasks,
+        )
+    if presplit_after is not None and presplit_partitions is not None:
+        changed = True
+        while changed:
+            changed = False
+            for task in list(coverage_tasks.values()):
+                output_path, receipt_path = _task_paths(task, output_dir)
+                if (
+                    task.start < presplit_after
+                    or task.partitions >= presplit_partitions
+                    or (output_path.exists() and receipt_path.exists())
+                ):
+                    continue
+                if presplit_partitions % task.partitions:
+                    raise ValueError(
+                        "presplit_partitions must be a power-of-two multiple of leaf partitions"
+                    )
+                coverage_tasks.pop(task.id)
+                children = task.split()
+                coverage_tasks.update((child.id, child) for child in children)
+                changed = True
+        _write_task_plan(
+            plan_path,
+            start=start,
+            end_exclusive=end_exclusive,
+            initial_partitions=partitions,
+            partition_limit=partition_limit,
+            tasks=coverage_tasks,
+        )
     receipts_by_id: dict[str, dict[str, Any]] = {}
-    pending = tasks
+    pending = list(coverage_tasks.values())
     failures: dict[str, str] = {}
     for retry_round in range(retry_rounds):
         next_pending: list[ActorTask] = []
@@ -241,6 +394,16 @@ def build_actor_context(
                         failures[task.id] = f"{type(error).__name__}: {error}"
                         next_pending.append(task)
                         quota_wait_seconds = max(quota_wait_seconds, error.wait_seconds)
+                    except CryptoHouseResultLimitError as error:
+                        failures.pop(task.id, None)
+                        coverage_tasks.pop(task.id)
+                        children = task.split()
+                        coverage_tasks.update((child.id, child) for child in children)
+                        next_pending.extend(children)
+                        failures[task.id] = (
+                            f"{type(error).__name__}: split {task.partitions} into "
+                            f"{children[0].partitions} partitions"
+                        )
                     except Exception as error:
                         failures[task.id] = f"{type(error).__name__}: {error}"
                         next_pending.append(task)
@@ -251,12 +414,20 @@ def build_actor_context(
                     "record_type": "chronicle_actor_context_progress",
                     "updated_at": now_utc(),
                     "completed_tasks": len(receipts_by_id),
-                    "expected_tasks": len(tasks),
+                    "expected_tasks": len(coverage_tasks),
                     "pending_tasks": len(next_pending) + max(len(pending) - offset - workers, 0),
                     "retry_round": retry_round + 1,
                     "recent_failures": dict(sorted(failures.items())[-16:]),
                     "quota_wait_seconds": quota_wait_seconds,
                 },
+            )
+            _write_task_plan(
+                plan_path,
+                start=start,
+                end_exclusive=end_exclusive,
+                initial_partitions=partitions,
+                partition_limit=partition_limit,
+                tasks=coverage_tasks,
             )
             if quota_wait_seconds > 0.0:
                 next_pending.extend(pending[offset + workers :])
@@ -277,7 +448,7 @@ def build_actor_context(
                         "record_type": "chronicle_actor_context_progress",
                         "updated_at": now_utc(),
                         "completed_tasks": len(receipts_by_id),
-                        "expected_tasks": len(tasks),
+                        "expected_tasks": len(coverage_tasks),
                         "pending_tasks": len(pending),
                         "retry_round": retry_round + 1,
                         "quota_wait_seconds": max(remaining_wait, 0.0),
@@ -290,9 +461,12 @@ def build_actor_context(
             f"Actor context still has {len(pending)} failed tasks after {retry_rounds} "
             f"rounds: {sample}"
         )
-    receipts = list(receipts_by_id.values())
+    missing_receipts = set(coverage_tasks) - set(receipts_by_id)
+    if missing_receipts:
+        raise RuntimeError(f"Actor context is missing {len(missing_receipts)} leaf receipts")
+    receipts = [receipts_by_id[task_id] for task_id in coverage_tasks]
     receipts.sort(key=lambda row: str(row["task_id"]))
-    expected_tasks = len(windows) * partitions
+    expected_tasks = len(coverage_tasks)
     manifest: dict[str, Any] = {
         "schema_version": "1.0.0",
         "record_type": "chronicle_actor_context_manifest",
@@ -303,6 +477,8 @@ def build_actor_context(
         "end_exclusive": end_exclusive.isoformat().replace("+00:00", "Z"),
         "temporal_granularity": "calendar_month_delta_available_after_window_end",
         "partitions": partitions,
+        "adaptive_result_splitting": True,
+        "leaf_partition_counts": sorted({task.partitions for task in coverage_tasks.values()}),
         "partition_limit": partition_limit,
         "task_count": len(receipts),
         "expected_task_count": expected_tasks,
@@ -338,6 +514,8 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--partition-limit", type=int)
     value.add_argument("--workers", type=int, default=4)
     value.add_argument("--retry-rounds", type=int, default=6)
+    value.add_argument("--presplit-after")
+    value.add_argument("--presplit-partitions", type=int)
     return value
 
 
@@ -352,6 +530,8 @@ def main() -> None:
         partition_limit=args.partition_limit,
         workers=args.workers,
         retry_rounds=args.retry_rounds,
+        presplit_after=None if args.presplit_after is None else _parse_utc(args.presplit_after),
+        presplit_partitions=args.presplit_partitions,
     )
     print(
         json.dumps(

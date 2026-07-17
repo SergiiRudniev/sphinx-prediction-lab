@@ -327,6 +327,11 @@ def build_resolution_context(
     if workers <= 0 or (scope_limit is not None and scope_limit <= 0):
         raise ValueError("Resolution workers and scope limit must be positive")
     output_dir.mkdir(parents=True, exist_ok=True)
+    previous_manifest = (
+        _load_object(output_dir / "manifest.json")
+        if (output_dir / "manifest.json").exists()
+        else None
+    )
     check_disk_reserve(output_dir, float(config["storage"]["minimum_free_gib"]))
     namespace = str(h009_config["sources"]["ledger"]["namespace"])
     scopes, catalog_counts = _resolution_scopes(
@@ -402,10 +407,38 @@ def build_resolution_context(
         atomic_json(receipt_path, receipt)
         daily.append(receipt)
     rows = sum(int(receipt["rows"]) for receipt in daily)
+    current_shard_digest = _digest(
+        [
+            f"{receipt['path']}:{receipt['rows']}:{receipt['bytes']}:{receipt['sha256']}"
+            for receipt in daily
+        ]
+    )
+    previous_comparable = bool(
+        previous_manifest is not None
+        and previous_manifest.get("config_sha256") == config_hash
+        and previous_manifest.get("full_run") == full_run
+        and int(previous_manifest.get("scope_count", -1)) == len(scopes)
+    )
+    previous_shards = [] if previous_manifest is None else previous_manifest.get("shards", [])
+    previous_shard_digest = (
+        _digest(
+            [
+                f"{receipt['path']}:{receipt['rows']}:{receipt['bytes']}:{receipt['sha256']}"
+                for receipt in previous_shards
+                if isinstance(receipt, dict)
+            ]
+        )
+        if previous_comparable and isinstance(previous_shards, list)
+        else None
+    )
+    output_hashes_match_previous = bool(
+        previous_comparable and previous_shard_digest == current_shard_digest
+    )
     valid = (
         rows == int(runs_manifest["rows"])
         and int(runs_manifest["source_rows"]) == int(runs_manifest["expected_source_rows"])
         and (not full_run or len(scopes) == int(catalog_counts["selected_scopes"]))
+        and (not previous_comparable or output_hashes_match_previous)
     )
     manifest = {
         "schema_version": "1.0.0",
@@ -426,6 +459,11 @@ def build_resolution_context(
         "rows": rows,
         "days": len(daily),
         "shards": daily,
+        "shard_receipts_sha256": current_shard_digest,
+        "reproducibility": {
+            "previous_comparable_manifest_found": previous_comparable,
+            "output_hashes_match_previous": output_hashes_match_previous,
+        },
         "elapsed_seconds": time.perf_counter() - started,
         "evidence_boundary": str(config["evidence_boundary"]),
     }

@@ -29,6 +29,10 @@ class CryptoHouseQuotaError(CryptoHouseError):
         return max((self.reset_at - datetime.now(tz=UTC)).total_seconds() + 2.0, 2.0)
 
 
+class CryptoHouseResultLimitError(CryptoHouseError):
+    """A deterministic response-size failure that must change the query shape."""
+
+
 def _quota_reset(detail: str) -> datetime | None:
     match = re.search(r"Interval will end at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", detail)
     if match is None:
@@ -88,6 +92,10 @@ class CryptoHouseClient:
                             f"CryptoHouse quota exceeded: {detail}",
                             _quota_reset(detail),
                         )
+                    if "TOO_MANY_ROWS_OR_BYTES" in detail or "Limit for result exceeded" in detail:
+                        raise CryptoHouseResultLimitError(
+                            f"CryptoHouse result limit exceeded: {detail}"
+                        )
                     raise CryptoHouseError(
                         f"CryptoHouse HTTP {response.status_code}: {detail or 'empty response'}"
                     )
@@ -103,7 +111,7 @@ class CryptoHouseClient:
                 return payload
             except (httpx.HTTPError, ValueError, CryptoHouseError) as error:
                 last_error = error
-                if isinstance(error, CryptoHouseQuotaError):
+                if isinstance(error, (CryptoHouseQuotaError, CryptoHouseResultLimitError)):
                     raise
                 if attempt + 1 == self.retries:
                     break

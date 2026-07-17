@@ -46,6 +46,19 @@ class BalanceWeights:
     sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class EvaluationResult:
+    metrics: dict[str, Any]
+    logits: NDArray[np.float32]
+    labels: NDArray[np.float32]
+    baselines: NDArray[np.float32]
+    shard_indices: NDArray[np.uint16]
+    row_indices: NDArray[np.int32]
+    timestamps: NDArray[np.int64]
+    market_ids: NDArray[np.int32]
+    component_ids: NDArray[np.int32]
+
+
 def _load_object(path: Path) -> dict[str, Any]:
     payload: object = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -278,16 +291,24 @@ def _evaluate(
     group_mask: Tensor,
     batch_size: int,
     device: torch.device,
-) -> tuple[dict[str, Any], NDArray[np.float32], NDArray[np.float32], NDArray[np.float32]]:
+) -> EvaluationResult:
     model.eval()
     logits_output: list[NDArray[np.float32]] = []
     labels_output: list[NDArray[np.float32]] = []
     baselines_output: list[NDArray[np.float32]] = []
-    for shard in shards:
+    shard_indices_output: list[NDArray[np.uint16]] = []
+    row_indices_output: list[NDArray[np.int32]] = []
+    timestamps_output: list[NDArray[np.int64]] = []
+    market_ids_output: list[NDArray[np.int32]] = []
+    component_ids_output: list[NDArray[np.int32]] = []
+    for shard_index, shard in enumerate(shards):
         indices = _row_indices(shard, split_code, seed=0, epoch=0, shuffle=False)
         raw = np.load(shard.root / "features.npy", mmap_mode="r")
         labels = np.load(shard.root / "labels.npy", mmap_mode="r")
         baselines = np.load(shard.root / "baselines.npy", mmap_mode="r")
+        timestamps = np.load(shard.root / "timestamps.npy", mmap_mode="r")
+        market_ids = np.load(shard.root / "market_ids.npy", mmap_mode="r")
+        component_ids = np.load(shard.root / "component_ids.npy", mmap_mode="r")
         for offset in range(0, len(indices), batch_size):
             selected = indices[offset : offset + batch_size]
             features = (np.asarray(raw[selected], dtype=np.float32) - median) / scale
@@ -299,6 +320,11 @@ def _evaluate(
             logits_output.append(output["terminal_outcome_logit"].float().cpu().numpy())
             labels_output.append(np.asarray(labels[selected], dtype=np.float32))
             baselines_output.append(np.asarray(baselines[selected], dtype=np.float32))
+            shard_indices_output.append(np.full(len(selected), shard_index, dtype=np.uint16))
+            row_indices_output.append(np.asarray(selected, dtype=np.int32))
+            timestamps_output.append(np.asarray(timestamps[selected], dtype=np.int64))
+            market_ids_output.append(np.asarray(market_ids[selected], dtype=np.int32))
+            component_ids_output.append(np.asarray(component_ids[selected], dtype=np.int32))
     if not logits_output:
         raise RuntimeError(f"H011 evaluation split {split_code} has no labeled rows")
     logits = np.concatenate(logits_output)
@@ -312,7 +338,17 @@ def _evaluate(
     result["log_loss_delta_vs_market"] = result["log_loss"] - baseline_metrics["log_loss"]
     result["brier_delta_vs_market"] = result["brier"] - baseline_metrics["brier"]
     result["rows"] = len(labels)
-    return result, logits, labels, baselines
+    return EvaluationResult(
+        metrics=result,
+        logits=logits,
+        labels=labels,
+        baselines=baselines,
+        shard_indices=np.concatenate(shard_indices_output),
+        row_indices=np.concatenate(row_indices_output),
+        timestamps=np.concatenate(timestamps_output),
+        market_ids=np.concatenate(market_ids_output),
+        component_ids=np.concatenate(component_ids_output),
+    )
 
 
 def train(
@@ -507,7 +543,7 @@ def train(
                         "checkpoint_sha256": sha256_file(checkpoint_path),
                     }
         scheduler.step()
-        validation, _, _, _ = _evaluate(
+        validation_evaluation = _evaluate(
             model,
             shards,
             int(data["validation_split_code"]),
@@ -519,6 +555,7 @@ def train(
             int(training["evaluation_batch_size"]),
             device,
         )
+        validation = validation_evaluation.metrics
         epoch_record = {
             "epoch": epoch,
             "train_loss": epoch_loss / max(batches_seen, 1),
@@ -543,7 +580,7 @@ def train(
     best_path = output_dir / "best-model.pt"
     best = torch.load(best_path, map_location=device, weights_only=False)
     model.load_state_dict(best["model"])
-    validation, validation_logits, validation_labels, validation_baselines = _evaluate(
+    validation_evaluation = _evaluate(
         model,
         shards,
         int(data["validation_split_code"]),
@@ -555,7 +592,7 @@ def train(
         int(training["evaluation_batch_size"]),
         device,
     )
-    calibration, calibration_logits, calibration_labels, calibration_baselines = _evaluate(
+    calibration_evaluation = _evaluate(
         model,
         shards,
         int(data["calibration_split_code"]),
@@ -570,12 +607,22 @@ def train(
     predictions_path = output_dir / "predictions.npz"
     np.savez_compressed(
         predictions_path,
-        validation_logits=validation_logits,
-        validation_labels=validation_labels,
-        validation_baselines=validation_baselines,
-        calibration_logits=calibration_logits,
-        calibration_labels=calibration_labels,
-        calibration_baselines=calibration_baselines,
+        validation_logits=validation_evaluation.logits,
+        validation_labels=validation_evaluation.labels,
+        validation_baselines=validation_evaluation.baselines,
+        validation_shard_indices=validation_evaluation.shard_indices,
+        validation_row_indices=validation_evaluation.row_indices,
+        validation_timestamps=validation_evaluation.timestamps,
+        validation_market_ids=validation_evaluation.market_ids,
+        validation_component_ids=validation_evaluation.component_ids,
+        calibration_logits=calibration_evaluation.logits,
+        calibration_labels=calibration_evaluation.labels,
+        calibration_baselines=calibration_evaluation.baselines,
+        calibration_shard_indices=calibration_evaluation.shard_indices,
+        calibration_row_indices=calibration_evaluation.row_indices,
+        calibration_timestamps=calibration_evaluation.timestamps,
+        calibration_market_ids=calibration_evaluation.market_ids,
+        calibration_component_ids=calibration_evaluation.component_ids,
     )
     result = {
         "schema_version": "1.0.0",
@@ -592,8 +639,8 @@ def train(
         "parameters": parameter_count(model),
         "best_epoch": best_epoch,
         "best_validation_log_loss": best_validation,
-        "validation": validation,
-        "calibration": calibration,
+        "validation": validation_evaluation.metrics,
+        "calibration": calibration_evaluation.metrics,
         "history": history,
         "balance_weights_sha256": balance.sha256,
         "checkpoint_sha256": sha256_file(checkpoint_path),
