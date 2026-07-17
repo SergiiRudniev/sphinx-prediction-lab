@@ -31,6 +31,11 @@ from sphinx_trace.model_h011 import (
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_train_v1.json"
 DEFAULT_MODEL_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_model_v1.json"
+IMPLEMENTATION_PATHS = (
+    Path(__file__).resolve(),
+    ROOT / "src" / "sphinx_trace" / "model_h011.py",
+    ROOT / "src" / "sphinx_trace" / "model.py",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +69,26 @@ def _load_object(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise TypeError(f"Expected JSON object: {path}")
     return payload
+
+
+def _implementation_digest() -> str:
+    digest = hashlib.sha256()
+    for path in IMPLEMENTATION_PATHS:
+        digest.update(f"{path.name}:{sha256_file(path)}\n".encode())
+    return digest.hexdigest()
+
+
+def _training_contract_digest(
+    config_path: Path,
+    model_config_path: Path,
+    implementation_digest: str,
+) -> str:
+    payload = (
+        f"training_config:{sha256_file(config_path)}\n"
+        f"model_config:{sha256_file(model_config_path)}\n"
+        f"implementation:{implementation_digest}\n"
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _pack_shards(pack_dir: Path) -> list[PackShard]:
@@ -366,6 +391,12 @@ def train(
         raise RuntimeError("H011 full training requires CUDA")
     config = load_json(config_path)
     model_config = load_json(model_config_path)
+    implementation_digest = _implementation_digest()
+    contract_digest = _training_contract_digest(
+        config_path,
+        model_config_path,
+        implementation_digest,
+    )
     pack_manifest = _load_object(pack_dir / "manifest.json")
     if (
         pack_manifest.get("valid") is not True
@@ -407,6 +438,8 @@ def train(
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         if checkpoint["source_digest"] != source_digest:
             raise RuntimeError("H011 checkpoint belongs to another feature pack")
+        if checkpoint.get("training_contract_sha256") != contract_digest:
+            raise RuntimeError("H011 checkpoint belongs to another training contract")
         if checkpoint["candidate_id"] != candidate_id or checkpoint["variant_id"] != variant_id:
             raise RuntimeError("H011 checkpoint belongs to another model variant")
         model.load_state_dict(checkpoint["model"])
@@ -428,6 +461,7 @@ def train(
             {
                 "schema_version": "1.0.0",
                 "source_digest": source_digest,
+                "training_contract_sha256": contract_digest,
                 "candidate_id": candidate_id,
                 "variant_id": variant_id,
                 "seed": seed,
@@ -569,7 +603,15 @@ def train(
             stale_epochs = 0
             _atomic_torch_save(
                 output_dir / "best-model.pt",
-                {"model": model.state_dict(), "epoch": epoch, "validation": validation},
+                {
+                    "model": model.state_dict(),
+                    "epoch": epoch,
+                    "validation": validation,
+                    "source_digest": source_digest,
+                    "training_contract_sha256": contract_digest,
+                    "candidate_id": candidate_id,
+                    "variant_id": variant_id,
+                },
             )
         else:
             stale_epochs += 1
@@ -579,6 +621,13 @@ def train(
             break
     best_path = output_dir / "best-model.pt"
     best = torch.load(best_path, map_location=device, weights_only=False)
+    if (
+        best.get("source_digest") != source_digest
+        or best.get("training_contract_sha256") != contract_digest
+        or best.get("candidate_id") != candidate_id
+        or best.get("variant_id") != variant_id
+    ):
+        raise RuntimeError("H011 best model belongs to another training contract")
     model.load_state_dict(best["model"])
     validation_evaluation = _evaluate(
         model,
@@ -631,6 +680,8 @@ def train(
         "research_id": str(config["research_id"]),
         "config_sha256": sha256_file(config_path),
         "model_config_sha256": sha256_file(model_config_path),
+        "implementation_sha256": implementation_digest,
+        "training_contract_sha256": contract_digest,
         "source_digest": source_digest,
         "valid": math.isfinite(best_validation),
         "candidate_id": candidate_id,
