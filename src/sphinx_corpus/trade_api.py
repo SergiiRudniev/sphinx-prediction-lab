@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections import Counter
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from pathlib import Path
@@ -32,6 +32,10 @@ _CONDITION_ID = re.compile(r"^0x[a-fA-F0-9]{64}$")
 
 
 class RequestBudgetReached(RuntimeError):
+    pass
+
+
+class RequestWindowTimeout(RuntimeError):
     pass
 
 
@@ -179,9 +183,9 @@ class TradeAPIBackfill:
             try:
                 self.request_gate.acquire()
                 self.request_counter.reserve()
-                response = self._client().get(
-                    f"{self.base_url}{self.endpoint}", params=params
-                )
+                response = self._client().get(f"{self.base_url}{self.endpoint}", params=params)
+                if response.status_code == 408:
+                    raise RequestWindowTimeout("Data API HTTP 408")
                 if response.status_code == 429 or response.status_code >= 500:
                     raise RuntimeError(f"Data API HTTP {response.status_code}")
                 response.raise_for_status()
@@ -198,6 +202,10 @@ class TradeAPIBackfill:
                 if attempt == 5:
                     break
                 time.sleep(min(16.0, 0.5 * (2**attempt)))
+        if isinstance(last_error, (RequestWindowTimeout, httpx.TimeoutException)):
+            raise RequestWindowTimeout(
+                f"Data API request window timed out: {last_error}"
+            ) from last_error
         raise RuntimeError(f"Data API request failed: {last_error}")
 
     def _markets(self, explicit: set[str] | None, max_markets: int | None) -> list[dict[str, Any]]:
@@ -217,7 +225,16 @@ class TradeAPIBackfill:
             volume = _number(source_payload.get("volumeNum") or source_payload.get("volume"))
             if volume < minimum_volume:
                 continue
-            markets.append({**row, "_volume": volume})
+            markets.append(
+                {
+                    "condition_id": condition_id,
+                    "created_at": row.get("created_at"),
+                    "start_at": row.get("start_at"),
+                    "end_at": row.get("end_at"),
+                    "closed_at": row.get("closed_at"),
+                    "_volume": volume,
+                }
+            )
         markets.sort(
             key=lambda row: (_number(row["_volume"]), str(row["condition_id"])),
             reverse=True,
@@ -254,17 +271,32 @@ class TradeAPIBackfill:
             max_workers=self.workers,
             thread_name_prefix="sphinx-ledger",
         ) as executor:
-            for index, group in enumerate(groups):
+            pending_limit = self.workers * 2
+            group_iterator = iter(enumerate(groups))
+
+            def submit_next() -> bool:
+                try:
+                    index, group = next(group_iterator)
+                except StopIteration:
+                    return False
                 futures[executor.submit(self._collect_group, group)] = index
+                return True
+
+            for _ in range(min(pending_limit, len(groups))):
+                submit_next()
             try:
-                for future in as_completed(futures):
-                    result = future.result()
-                    status = str(result["status"])
-                    completed += int(status == "completed")
-                    skipped += int(status == "skipped")
-                    incomplete += int(status == "incomplete")
-                    rows += int(result["rows"])
-                    gaps += int(result["gaps"])
+                while futures:
+                    done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        del futures[future]
+                        result = future.result()
+                        status = str(result["status"])
+                        completed += int(status == "completed")
+                        skipped += int(status == "skipped")
+                        incomplete += int(status == "incomplete")
+                        rows += int(result["rows"])
+                        gaps += int(result["gaps"])
+                        submit_next()
             except RequestBudgetReached:
                 budget_reached = True
                 for future in futures:
@@ -290,9 +322,7 @@ class TradeAPIBackfill:
             "requests_this_run": self.request_counter.current(),
             "request_budget_reached": budget_reached,
             "complete": (
-                not budget_reached
-                and incomplete == 0
-                and completed + skipped == len(groups)
+                not budget_reached and incomplete == 0 and completed + skipped == len(groups)
             ),
         }
         atomic_json(
@@ -319,9 +349,7 @@ class TradeAPIBackfill:
                     current_volume = Decimal(0)
                 groups.append([market])
                 continue
-            would_exceed_volume = (
-                current and current_volume + volume > self.target_group_volume
-            )
+            would_exceed_volume = current and current_volume + volume > self.target_group_volume
             if len(current) >= self.markets_per_request or would_exceed_volume:
                 groups.append(current)
                 current = []
@@ -336,10 +364,7 @@ class TradeAPIBackfill:
         condition_ids = tuple(str(row["condition_id"]).lower() for row in group)
         scope_id = self._scope_id(condition_ids)
         market_receipt_path = (
-            self.config.data_dir
-            / "receipts"
-            / self.storage_namespace
-            / f"{scope_id}.json"
+            self.config.data_dir / "receipts" / self.storage_namespace / f"{scope_id}.json"
         )
         existing = load_json(market_receipt_path)
         if existing.get("complete") is True:
@@ -451,13 +476,7 @@ class TradeAPIBackfill:
     def _paths(self, scope_id: str, start: int, end: int, offset: int) -> tuple[Path, Path]:
         directory = f"scope={scope_id}"
         stem = f"start={start}-end={end}-offset={offset:05d}"
-        raw = (
-            self.config.data_dir
-            / "raw"
-            / self.storage_namespace
-            / directory
-            / f"{stem}.json.zst"
-        )
+        raw = self.config.data_dir / "raw" / self.storage_namespace / directory / f"{stem}.json.zst"
         receipt = (
             self.config.data_dir
             / "receipts"
@@ -549,6 +568,51 @@ class TradeAPIBackfill:
             / f"start={start}-end={end}.jsonl.zst"
         )
 
+    def _split_window(
+        self,
+        scope_id: str,
+        condition_ids: tuple[str, ...],
+        start: int,
+        end: int,
+        *,
+        reason: str,
+        unresolved_status: str,
+    ) -> dict[str, Any]:
+        receipt_path = self._window_receipt_path(scope_id, start, end)
+        if end - start <= self.minimum_window_seconds:
+            gap = {
+                "schema_version": SCHEMA_VERSION,
+                "scope_id": scope_id,
+                "condition_ids": condition_ids,
+                "start": start,
+                "end": end,
+                "status": unresolved_status,
+                "reason": reason,
+                "complete": False,
+                "rows": 0,
+                "gaps": 1,
+                "updated_at": now_utc(),
+            }
+            atomic_json(receipt_path, gap)
+            return gap
+        split = start + (end - start) // 2
+        split_receipt = {
+            "schema_version": SCHEMA_VERSION,
+            "scope_id": scope_id,
+            "condition_ids": condition_ids,
+            "start": start,
+            "end": end,
+            "status": "split",
+            "reason": reason,
+            "split": split,
+            "complete": False,
+            "rows": 0,
+            "gaps": 0,
+            "updated_at": now_utc(),
+        }
+        atomic_json(receipt_path, split_receipt)
+        return self._window(scope_id, condition_ids, start, end)
+
     def _window(
         self,
         scope_id: str,
@@ -581,62 +645,57 @@ class TradeAPIBackfill:
                         raw_path.unlink()
             return combined
 
-        first = self._page(scope_id, condition_ids, start, end, 0)
-        pages = [first]
-        saturated = False
-        if len(first) == self.page_size:
-            tail = self._page(
+        try:
+            first = self._page(scope_id, condition_ids, start, end, 0)
+            pages = [first]
+            saturated = False
+            if len(first) == self.page_size:
+                tail = self._page(
+                    scope_id,
+                    condition_ids,
+                    start,
+                    end,
+                    self.maximum_offset,
+                )
+                saturated = len(tail) == self.page_size
+                if not saturated:
+                    for offset in range(
+                        self.page_size,
+                        self.maximum_offset + 1,
+                        self.page_size,
+                    ):
+                        page = (
+                            tail
+                            if offset == self.maximum_offset
+                            else self._page(
+                                scope_id,
+                                condition_ids,
+                                start,
+                                end,
+                                offset,
+                            )
+                        )
+                        pages.append(page)
+                        if len(page) < self.page_size:
+                            break
+        except RequestWindowTimeout:
+            return self._split_window(
                 scope_id,
                 condition_ids,
                 start,
                 end,
-                self.maximum_offset,
+                reason="request_timeout",
+                unresolved_status="unresolved_timeout",
             )
-            saturated = len(tail) == self.page_size
-            if not saturated:
-                for offset in range(self.page_size, self.maximum_offset + 1, self.page_size):
-                    page = tail if offset == self.maximum_offset else self._page(
-                        scope_id,
-                        condition_ids,
-                        start,
-                        end,
-                        offset,
-                    )
-                    pages.append(page)
-                    if len(page) < self.page_size:
-                        break
         if saturated:
-            if end - start <= self.minimum_window_seconds:
-                gap = {
-                    "schema_version": SCHEMA_VERSION,
-                    "scope_id": scope_id,
-                    "condition_ids": condition_ids,
-                    "start": start,
-                    "end": end,
-                    "status": "unresolved_saturation",
-                    "complete": False,
-                    "rows": 0,
-                    "gaps": 1,
-                    "updated_at": now_utc(),
-                }
-                atomic_json(receipt_path, gap)
-                return gap
-            split = start + (end - start) // 2
-            split_receipt = {
-                "schema_version": SCHEMA_VERSION,
-                "scope_id": scope_id,
-                "condition_ids": condition_ids,
-                "start": start,
-                "end": end,
-                "status": "split",
-                "split": split,
-                "complete": False,
-                "rows": 0,
-                "gaps": 0,
-                "updated_at": now_utc(),
-            }
-            atomic_json(receipt_path, split_receipt)
-            return self._window(scope_id, condition_ids, start, end)
+            return self._split_window(
+                scope_id,
+                condition_ids,
+                start,
+                end,
+                reason="offset_saturation",
+                unresolved_status="unresolved_saturation",
+            )
 
         trades = [trade for page in pages for trade in page]
         normalized = self._normalize(condition_ids, start, end, trades)

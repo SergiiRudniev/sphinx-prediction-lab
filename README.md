@@ -11,7 +11,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-1f2328?logo=python&logoColor=white)](https://www.python.org/)
 [![Model](https://img.shields.io/badge/model-Sphinx%20Trace%20S0-b08d57)](docs/ARCHITECTURE.md)
 [![Corpus](https://img.shields.io/badge/data-Sphinx%20Corpus-23a9c9)](docs/CORPUS.md)
-[![Status](https://img.shields.io/badge/status-architecture%20design-d6c6a5)](#current-status)
+[![Status](https://img.shields.io/badge/status-Trial%20T0%20diagnostic-d6c6a5)](#current-status)
 [![CI](https://github.com/SergiiRudniev/sphinx-prediction-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/SergiiRudniev/sphinx-prediction-lab/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-1f2328)](LICENSE)
 
@@ -26,8 +26,8 @@ probabilities, detect potentially informed activity and manage positions through
 entry, reduction, exit or settlement.
 
 > [!IMPORTANT]
-> The repository currently contains an architecture, data contracts and research
-> protocol. Sphinx Trace S0 has no trained checkpoint or accepted trading result.
+> The repository contains an architecture, data contracts, research protocol and
+> one diagnostic S0 checkpoint. It has no accepted trading result.
 
 > [!WARNING]
 > This is research software, not financial advice. Automated execution must remain
@@ -51,33 +51,35 @@ flowchart TB
     WEB --> CHRONICLE
     CHRONICLE --> S0["Sphinx Trace S0"]
     S0 --> SIGNAL["Probability · Flow · Edge · Uncertainty"]
-    SIGNAL --> POLICY["Deterministic Position Manager"]
+    SIGNAL --> POLICY["Learned CALL · SKIP · sizing policy"]
 ```
 
 ## Model Family
 
 | Family | Specialization | Primary objective | Current state |
 | --- | --- | --- | --- |
-| **Sphinx Trace** | Wallet-flow prediction-market intelligence | Detect informed activity, estimate fair probabilities and manage positions for maximum net edge | S0 architecture design |
+| **Sphinx Trace** | Wallet-flow prediction-market intelligence | Detect informed activity, estimate fair probabilities and manage positions for maximum net edge | S0 Trial T0 diagnostic |
 
 ![Sphinx Trace S0](assets/sphinx-trace-s0-banner.png)
 
 ### Sphinx Trace S0
 
-S0 is a graph-native causal architecture with five learned stages:
+The H008 S0 direction is a stateful full-universe causal architecture:
 
-1. **Market encoder** — price, spread, depth, flow and time-to-resolution.
-2. **Wallet encoder** — point-in-time behavioral history without memorizing raw IDs.
-3. **Temporal graph encoder** — wallet, market and funding relationships.
-4. **Cross-attention fusion** — the active market queries relevant wallet and graph states.
-5. **Prediction heads** — fair probability, markout, informed flow, net edge and uncertainty.
+1. **Semantic market encoder** — market question, rules, outcomes and structure.
+2. **Streaming wallet memory** — every valid participant without a hard wallet cap.
+3. **Temporal graph encoder** — wallet, funding, market and event relationships.
+4. **Market and event memory** — recurrent state across the complete lifecycle.
+5. **Universe memory** — relative capital flow and opportunity across Polymarket.
+6. **Prediction and Position Books** — prior beliefs, calls, balance and positions.
+7. **Opportunity policy** — terminal outcome, uncertainty, `SKIP` and learned sizing.
 
-The model emits calibrated evidence. A deterministic position manager owns
-`SKIP`, `BUY YES`, `BUY NO`, `HOLD`, `REDUCE`, `CLOSE` and
-`HOLD TO RESOLUTION`.
+The policy learns outcome selection, abstention and balance-conditioned sizing.
+The simulator separately enforces physical cash, liquidity, cost and causal-data
+constraints.
 
 See [S0 Architecture](docs/ARCHITECTURE.md) and the machine-readable
-[`sphinx_trace_s0_policy.json`](configs/trace/sphinx_trace_s0_policy.json).
+[`sphinx_trace_research_mandate_v1.json`](configs/trace/sphinx_trace_research_mandate_v1.json).
 
 ## Sphinx Corpus
 
@@ -117,9 +119,14 @@ Sphinx research must preserve:
 | Lab and naming | Locked |
 | Sphinx Corpus taxonomy | Locked |
 | Sphinx Trace S0 contract | Design registered as `SPH-T-H000` |
-| Historical backfill | Full `SPH-T-H001` and fast S0 `SPH-T-H002` collectors in development |
+| Historical backfill | Full `SPH-T-H001` in development; fast S0 `SPH-T-H002` qualified |
+| Trial T0 target contract | `SPH-T-H005` qualified; test labels unopened |
+| Trial T0 learning preflight | `SPH-T-H006` qualified; resolution signal only; no promotion |
+| Wallet-history ablation | `SPH-T-H007` inconclusive on 96 validation events |
+| Full-universe research mandate | `SPH-T-H008` registered |
+| Full Outcome Chronicle | `SPH-T-H009` registered; resumable build in progress |
 | Sphinx Pulse collector | Implemented; passive collection only |
-| Trained checkpoint | None |
+| Trained checkpoint | Diagnostic S0 checkpoint; 50,213,128 parameters |
 | Accepted backtest | None |
 | Accepted forward result | None |
 | Live execution | Disabled |
@@ -165,6 +172,7 @@ python -m pip install -e ".[research,dev]"
 ## Documentation
 
 - [Sphinx Trace S0 Architecture](docs/ARCHITECTURE.md)
+- [Sphinx Trace Research Mandate](configs/trace/sphinx_trace_research_mandate_v1.json)
 - [Sphinx Corpus](docs/CORPUS.md)
 - [Data Sources](docs/DATA_SOURCES.md)
 - [Evaluation Protocol](docs/EVALUATION_PROTOCOL.md)

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/chronicle_decision_v1.schema.json",
+  "title": "Sphinx Chronicle decision cursor",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "record_type",
+    "decision_id",
+    "component_id",
+    "decision_time_unix",
+    "event_trade_count",
+    "stream_shard",
+    "stream_row",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_type": {"const": "chronicle_decision"},
+    "decision_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "component_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision_time_unix": {"type": "integer", "minimum": 0},
+    "event_trade_count": {"type": "integer", "minimum": 1},
+    "stream_shard": {"type": "string"},
+    "stream_row": {"type": "integer", "minimum": 0},
+    "reason": {
+      "type": "array",
+      "items": {"enum": ["first", "early_power_of_two", "trade_stride", "heartbeat"]}
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,196 @@
+{
+  "id": "sphinx-trace-research-mandate-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H008",
+  "registered_at": "2026-07-17T19:15:00Z",
+  "objective": {
+    "primary_metric": "net_profit_after_executable_costs",
+    "product_action": "select_the_best_contract_side_and_size_for_an_event_or_skip",
+    "default_position_intent": "hold_to_resolution",
+    "wrong_call_cost_priority": "higher_than_missed_opportunity",
+    "compute_economy_is_an_objective": false,
+    "maximum_model_quality_is_the_priority": true
+  },
+  "universe": {
+    "platform": "polymarket",
+    "categories": "all",
+    "resolution_horizon": "unbounded",
+    "include_binary": true,
+    "include_multi_outcome": true,
+    "include_neg_risk": true,
+    "exclude_invalid_cancelled_ambiguous_or_non_replayable_markets": true,
+    "event_level_analysis": true,
+    "event_output_selects_specific_contract_and_side": true,
+    "multiple_related_event_positions_allowed": true
+  },
+  "information": {
+    "market_question_and_rules_text_allowed": true,
+    "external_news_analysis": false,
+    "polymarket_market_trade_and_orderbook_data": true,
+    "polygon_funding_and_transfer_graph_required": true,
+    "other_protocol_wallet_activity_allowed": true,
+    "all_sources_must_be_point_in_time_and_provenanced": true,
+    "new_wallet_policy": "retain_with_novelty_funding_cluster_and_uncertainty_features",
+    "dust_wallet_policy": "retain_valid_activity_through_streaming_robust_aggregation_and_manipulation_features",
+    "hard_wallet_count_cap": null,
+    "raw_wallet_id_trainable_embedding": false
+  },
+  "architecture": {
+    "hierarchy": [
+      "streaming_wallet_memory",
+      "market_memory",
+      "event_memory",
+      "temporal_wallet_event_graph",
+      "universe_memory",
+      "opportunity_ranker",
+      "stateful_prediction_and_position_policy"
+    ],
+    "wallet_processing": "chunked_all_participant_processing_with_latent_market_memory",
+    "time_scales": [
+      "event_time_updates",
+      "minutes",
+      "hours",
+      "days",
+      "full_causal_history"
+    ],
+    "semantic_encoder": "market_question_rules_and_structured_outcomes_only",
+    "specialization": "mixture_of_experts_by_market_structure_lifecycle_and_learned_regime",
+    "candidate_capacity_search": [
+      50000000,
+      100000000,
+      150000000
+    ],
+    "ensembles_allowed": true,
+    "capacity_selection_rule": "select_by_locked_validation_and_simulator_evidence_not_compute_cost",
+    "predictions_are_not_external_evidence": true
+  },
+  "outputs": {
+    "terminal_outcome_distribution": true,
+    "epistemic_and_aleatoric_uncertainty": true,
+    "learned_data_sufficiency": true,
+    "informed_flow_and_coordination_score": true,
+    "event_opportunity_rank": true,
+    "action_space": [
+      "CALL_YES",
+      "CALL_NO",
+      "CALL_OUTCOME",
+      "SKIP",
+      "UPDATE",
+      "CANCEL_CALL",
+      "HOLD"
+    ],
+    "learned_skip": true,
+    "learned_position_size_from_current_balance_and_state": true,
+    "hardcoded_analytical_thresholds": false,
+    "skip_reason_classes": [
+      "insufficient_evidence",
+      "no_model_edge",
+      "execution_not_supported",
+      "model_conflict_or_uncertainty"
+    ]
+  },
+  "prediction_memory": {
+    "retain_full_prediction_trajectory": true,
+    "retain_compressed_recurrent_event_state": true,
+    "track_call_and_position_state_separately": true,
+    "allow_probability_updates": true,
+    "allow_side_change_or_call_cancellation": true,
+    "emit_every_prediction_change": true,
+    "repeat_unexecuted_call_without_new_evidence": false,
+    "active_positions_condition_future_ranking_and_sizing": true,
+    "resolved_results_update_wallet_and_model_statistics_only_after_resolution": true,
+    "past_model_error_conditions_future_uncertainty": true
+  },
+  "simulator": {
+    "required_before_production": true,
+    "scope": "full_point_in_time_polymarket_replay_with_calls_orders_fills_positions_balance_resolution_and_prediction_memory",
+    "default_initial_balance_usd": 10000,
+    "policy_observes_current_balance": true,
+    "strategy_position_count_limit": null,
+    "strategy_category_or_correlation_limit": null,
+    "physical_constraints": [
+      "cannot_spend_more_than_available_balance",
+      "cannot_fill_more_than_point_in_time_orderbook_liquidity",
+      "cannot_use_stale_missing_or_future_data",
+      "fees_latency_slippage_and_partial_fills_are_accounted"
+    ],
+    "production_emergency_controls_are_outside_model": true
+  },
+  "training": {
+    "stages": [
+      "self_supervised_wallet_market_and_graph_pretraining",
+      "supervised_terminal_outcome_and_uncertainty_training",
+      "cross_sectional_event_opportunity_ranking",
+      "stateful_policy_training_in_offline_simulator",
+      "calibration_and_selective_prediction",
+      "locked_walk_forward_and_untouched_test"
+    ],
+    "snapshot_policy": "adaptive_event_time_snapshots_plus_heartbeat_across_full_market_lifecycle",
+    "long_run_resume_required_after_seconds": 7200,
+    "checkpoint_maximum_interval_seconds": 900,
+    "checkpoint_must_include": [
+      "model",
+      "optimizer",
+      "scheduler",
+      "precision_scaler",
+      "random_number_generator_states",
+      "data_partition_and_row_cursor",
+      "sampler_state",
+      "simulator_state",
+      "prediction_memory_state",
+      "config_and_source_hashes"
+    ],
+    "graceful_pause_and_exact_resume_required": true,
+    "training_time_budget": null
+  },
+  "debugging": {
+    "first_class_requirement": true,
+    "replay_each_prediction_from_hashed_inputs": true,
+    "retain_inputs_seen_by_each_encoder": true,
+    "retain_prediction_and_position_timeline": true,
+    "wallet_contribution_via_counterfactual_removal": true,
+    "market_text_and_structured_feature_attribution": true,
+    "graph_path_and_cluster_evidence": true,
+    "with_without_wallet_market_graph_and_universe_counterfactuals": true,
+    "attention_weights_are_not_sufficient_as_explanation": true,
+    "show_top_positive_negative_and_conflicting_evidence": true
+  },
+  "evaluation": {
+    "primary_metric": "net_profit_after_costs_in_full_simulator",
+    "required_diagnostics": [
+      "brier",
+      "log_loss",
+      "calibration",
+      "call_frequency",
+      "skip_frequency_and_selective_risk",
+      "profit_factor",
+      "drawdown",
+      "bankruptcy_rate",
+      "fill_rate",
+      "event_and_category_breadth",
+      "block_bootstrap_confidence_interval"
+    ],
+    "minimum_historical_calls": 1000,
+    "minimum_independent_called_events": 1000,
+    "target_median_calls_per_week": 3,
+    "required_baselines": [
+      "market_implied_probability",
+      "no_trade",
+      "random_frequency_matched",
+      "large_wallet_following",
+      "market_only_model",
+      "wallet_only_model",
+      "no_wallet_history_model",
+      "prior_event_wallet_control",
+      "simple_fractional_kelly_policy"
+    ],
+    "all_models_and_baselines_use_same_simulator": true,
+    "historical_test_stays_closed_until_model_policy_and_simulator_hashes_are_locked": true,
+    "promotion_requires_positive_lower_95pct_net_profit_bound_and_strongest_baseline_outperformance": true,
+    "paper_forward_minimum_days": 90,
+    "paper_forward_minimum_calls": 100,
+    "paper_forward_positive_net_profit_after_costs_required": true
+  },
+  "evidence_boundary": "This mandate defines research direction and evaluation discipline. It is not model-quality, profitability, insider attribution, test or production evidence."
+}

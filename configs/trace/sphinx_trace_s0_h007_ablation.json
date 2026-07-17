@@ -1,0 +1,83 @@
+{
+  "id": "sphinx-trace-s0-h007-wallet-ablation",
+  "version": "1.0.1-amended-before-run",
+  "status": "registered",
+  "research_id": "SPH-T-H007",
+  "registered_at": "2026-07-17T16:30:00Z",
+  "amended_at": "2026-07-17T16:36:00Z",
+  "amendment_reason": "Product objective clarified before training: select a terminal outcome contract and hold to resolution; short-horizon price prediction is not a core objective.",
+  "base_training_contract": {
+    "id": "sphinx-trace-s0-trial-t0-train",
+    "sha256": "dc8f642067b3351db3f76e70377ff636a0c92481f9a793ff3cdf6123d6e56c18"
+  },
+  "feature_pack": {
+    "metadata_sha256": "cf859cd54ab322e47529ab8b07eb35131590884750021688fc0f82d4ebcfe259",
+    "train_rows": 2128,
+    "validation_rows": 773,
+    "calibration_rows": 311,
+    "test_rows": 0
+  },
+  "variants": [
+    {
+      "id": "resolution_no_wallet_history",
+      "wallet_mode": "zero",
+      "outputs": [
+        "resolved_yes"
+      ]
+    },
+    {
+      "id": "resolution_causal_wallet_history",
+      "wallet_mode": "original",
+      "outputs": [
+        "resolved_yes"
+      ]
+    },
+    {
+      "id": "resolution_prior_event_wallet_control",
+      "wallet_mode": "prior_event_control",
+      "outputs": [
+        "resolved_yes"
+      ],
+      "control_rule": "replace wallet tokens with the latest available different-event example whose decision time is not later; zero when no donor exists"
+    }
+  ],
+  "controlled_constants": {
+    "seed": 17,
+    "backbone": "width_640_layers_10_heads_10_ffn_1728",
+    "maximum_epochs": 12,
+    "early_stopping_patience": 3,
+    "precision": "bfloat16",
+    "batch_size": 32,
+    "checkpoint_selection": "validation_total_loss",
+    "parameter_count_maximum_difference": 5000,
+    "test_labels_opened": false
+  },
+  "comparison": {
+    "primary_metric": "validation_uncalibrated_log_loss",
+    "secondary_metric": "validation_uncalibrated_brier",
+    "contract_selection_score": "absolute_difference_between_model_terminal_probability_and_decision_time_yes_price",
+    "side_rule": "buy_yes_when_model_probability_exceeds_yes_price_otherwise_buy_no",
+    "position_rule": "hold_to_resolution",
+    "diagnostic_return": "resolved_share_pnl_before_executable_costs_reported_at_fixed_top_score_fractions",
+    "top_score_fractions": [
+      0.01,
+      0.05,
+      0.1,
+      0.25
+    ],
+    "bootstrap_unit": "event_id",
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 71,
+    "confidence_interval": 0.95,
+    "wallet_signal_supported_if": "upper_95pct_log_loss_delta_is_below_zero_against_both_no_wallet_history_and_prior_event_wallet_control"
+  },
+  "acceptance": {
+    "all_variant_runs_valid": true,
+    "control_donor_time_violations": 0,
+    "control_same_event_donors": 0,
+    "test_rows_consumed": 0,
+    "predictions_hashed": true,
+    "model_promotion_allowed": false
+  },
+  "evidence_boundary": "Development ablation only. It may identify incremental wallet-history signal or multi-task interference, but cannot establish untouched-test, executable-price or trading performance."
+}

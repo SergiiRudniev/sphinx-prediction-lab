@@ -1,0 +1,98 @@
+{
+  "id": "sphinx-trace-s0-trial-t0-train",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H006",
+  "registered_at": "2026-07-17T15:40:00Z",
+  "model_id": "sphinx-trace-s0",
+  "dataset": {
+    "target_contract_id": "sphinx-trace-s0-trial-t0",
+    "target_config_sha256": "9d6f9429e6b4ae0918bef6c4d5c8ad3eba42d7dec3997c208bcb88eddd125f36",
+    "target_pack": "derived/sphinx-trace-s0-trial-t0-pilot",
+    "target_rows": {
+      "train": 2128,
+      "validation": 773,
+      "calibration": 311,
+      "test": 0
+    },
+    "target_sha256": {
+      "train": "af128044fdfd3f2bf88c1a36b442487501241f1e709f4da474037c5ea312871b",
+      "validation": "88f7f15fcb13ed79b52f9dfb554d86e49687eb201c91e87276564cf7ab030c2f",
+      "calibration": "81ed090254d5a55dec1b23a4ab3dc68a1b135eb23e4d9e47a6fd0caa47c563f1"
+    },
+    "source_file_selection": "same_1024_deterministic_uniform_paths_as_target_pilot",
+    "test_labels_opened": false
+  },
+  "features": {
+    "sequence_length": 224,
+    "feature_width": 16,
+    "market_trade_tokens": 128,
+    "wallet_tokens": 32,
+    "context_tokens": 64,
+    "wallet_history_events": 128,
+    "wallet_history_scope": "all_selected_source_partitions_before_decision",
+    "raw_wallet_id_feature": false,
+    "feature_time_rule": "event_time_strictly_before_decision_time",
+    "coverage_is_development_sample": true
+  },
+  "targets": {
+    "output_order": [
+      "resolved_yes",
+      "yes_markout_5m",
+      "yes_markout_1h",
+      "yes_markout_1d",
+      "directional_markout_5m",
+      "directional_markout_1h",
+      "directional_markout_1d",
+      "net_edge_proxy"
+    ],
+    "missing_markouts_masked": true,
+    "resolution_loss": "binary_cross_entropy_with_logits",
+    "continuous_loss": "smooth_l1"
+  },
+  "model": {
+    "width": 640,
+    "layers": 10,
+    "heads": 10,
+    "ffn_width": 1728,
+    "dropout": 0.1,
+    "output_width": 8,
+    "parameter_minimum": 48000000,
+    "parameter_maximum": 52000000
+  },
+  "training": {
+    "seed": 17,
+    "precision": "bfloat16",
+    "batch_size": 32,
+    "maximum_epochs": 12,
+    "early_stopping_patience": 3,
+    "learning_rate": 0.0003,
+    "minimum_learning_rate": 0.00003,
+    "weight_decay": 0.05,
+    "gradient_clip_norm": 1.0,
+    "compile_mode": "max-autotune",
+    "loader_workers": 2,
+    "selection_metric": "validation_total_loss",
+    "calibration_method": "single_temperature_resolved_yes",
+    "loss_weights": {
+      "resolved_yes": 1.0,
+      "yes_markout_5m": 0.25,
+      "yes_markout_1h": 0.25,
+      "yes_markout_1d": 0.25,
+      "directional_markout_5m": 0.15,
+      "directional_markout_1h": 0.15,
+      "directional_markout_1d": 0.15,
+      "net_edge_proxy": 0.25
+    }
+  },
+  "acceptance": {
+    "causal_feature_violations": 0,
+    "event_overlap_count": 0,
+    "test_rows_consumed": 0,
+    "finite_losses_required": true,
+    "training_loss_must_decline": true,
+    "validation_and_calibration_baselines_required": true,
+    "model_promotion_allowed": false
+  },
+  "evidence_boundary": "Pipeline and learning preflight only. The sampled wallet-history coverage, public-trade markouts and fixed-cost proxy cannot establish executable trading performance."
+}

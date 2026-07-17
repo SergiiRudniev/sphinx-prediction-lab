@@ -67,9 +67,7 @@ def _parser() -> argparse.ArgumentParser:
 def _rpc_url(args: argparse.Namespace, config: CorpusConfig) -> str:
     value = getattr(args, "rpc_url", None) or os.environ.get(config.rpc_env)
     if not value:
-        raise RuntimeError(
-            f"Polygon RPC is required; pass --rpc-url or set {config.rpc_env}"
-        )
+        raise RuntimeError(f"Polygon RPC is required; pass --rpc-url or set {config.rpc_env}")
     return str(value)
 
 

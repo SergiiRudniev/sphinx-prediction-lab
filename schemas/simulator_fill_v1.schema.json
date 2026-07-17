@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/simulator_fill_v1.schema.json",
+  "title": "Sphinx simulator fill",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "fill_id",
+    "order_id",
+    "liquidity_id",
+    "timestamp_unix",
+    "side",
+    "shares",
+    "price",
+    "notional_usd",
+    "fee_usd"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_type": {"const": "simulator_fill"},
+    "fill_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "order_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "liquidity_id": {"type": "string", "minLength": 1},
+    "timestamp_unix": {"type": "integer", "minimum": 0},
+    "side": {"enum": ["BUY", "SELL"]},
+    "shares": {"type": "number", "exclusiveMinimum": 0},
+    "price": {"type": "number", "minimum": 0, "maximum": 1},
+    "notional_usd": {"type": "number", "minimum": 0},
+    "fee_usd": {"type": "number", "minimum": 0}
+  }
+}

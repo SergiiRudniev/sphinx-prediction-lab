@@ -49,6 +49,13 @@ class PolygonRPC:
                 return response.json()
             except (httpx.HTTPError, ValueError, RPCError) as exc:
                 last_error = exc
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {
+                    400,
+                    401,
+                    403,
+                    413,
+                }:
+                    break
                 if attempt + 1 == self.retries:
                     break
                 time.sleep(min(8.0, 0.5 * (2**attempt)))
@@ -142,6 +149,29 @@ class PolygonRPC:
                     "fromBlock": hex(start_block),
                     "toBlock": hex(end_block),
                     "topics": [topic],
+                }
+            ],
+        )
+        if not isinstance(result, list) or not all(isinstance(item, dict) for item in result):
+            raise RPCError("eth_getLogs result is not a list of objects")
+        return result
+
+    def logs_filter(
+        self,
+        *,
+        address: str,
+        topics: list[Any],
+        start_block: int,
+        end_block: int,
+    ) -> list[dict[str, Any]]:
+        result = self.call(
+            "eth_getLogs",
+            [
+                {
+                    "address": address,
+                    "fromBlock": hex(start_block),
+                    "toBlock": hex(end_block),
+                    "topics": topics,
                 }
             ],
         )

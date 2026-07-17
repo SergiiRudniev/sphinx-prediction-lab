@@ -20,6 +20,13 @@ Polygon RPC is used to verify transaction ordering, contract events, transfers a
 funding relationships. Wallet clustering must retain provenance and uncertainty;
 shared funders or relayers do not prove common ownership.
 
+H009 queries both sender and recipient topic positions for every uncapped Ledger
+participant, normalizes collateral ERC-20 and Conditional Tokens ERC-1155 edges,
+deduplicates them by chain/transaction/log identity and writes chronological daily
+graph shards. The registered one-year window spans the USDC.e/pUSD collateral and
+CLOB protocol transition, so contract activity windows are explicit in the H009
+corpus contract. An archive-capable Polygon endpoint is required for completion.
+
 ## Collection Rules
 
 - Save raw payloads before normalization.

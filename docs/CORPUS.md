@@ -136,6 +136,37 @@ Snapshot cutoff: YYYY-MM-DDTHH:MM:SSZ
 Schema changes require a major dataset version when they alter row meaning,
 causal availability or label construction.
 
+## Full Outcome Chronicle H009
+
+`SPH-T-H009` replaces the bounded binary markout pilot as the full-universe
+outcome corpus contract. It uses four complementary artifacts:
+
+- `catalog.sqlite` stores every Atlas market, connected event-component,
+  lifecycle eligibility and development-only terminal payout;
+- `episodes.jsonl.zst` represents linked binary, multi-market and neg-risk
+  outcome sets without splitting an event across temporal segments;
+- `stream/date=YYYY-MM-DD.jsonl.zst` preserves every qualified Fast Ledger trade
+  once in deterministic global event-time order;
+- `decisions/date=YYYY-MM-DD.jsonl.zst` points into that stream at adaptive
+  decision states without sampling away trades or wallets.
+
+Participant history is replayed from the shared stream. It is not duplicated into
+fixed 32-wallet tensors. Scope runs and daily shards are atomic; a `PAUSE` file in
+the output root stops at the next completed boundary and the same command resumes
+without rebuilding completed artifacts.
+
+The observed Atlas snapshot is not historical market state. Current price,
+liquidity and mutable metadata are masked from causal training. Question and rule
+text remain stored for provenance but are also masked until point-in-time semantic
+provenance is available. Test components are assigned before the builder may read
+`outcomePrices`; the development build stores no test payout or test-label
+statistics.
+
+The Polygon channel collects collateral ERC-20 and conditional-token ERC-1155
+transfers involving every Ledger participant. Each edge keeps block, transaction,
+log and RPC provenance. A missing RPC produces an explicit unavailable mask and
+blocks full H009 qualification; it is never interpreted as zero graph activity.
+
 ## Pulse Operations
 
 Sphinx Pulse records the public Polymarket market channel without feeding the

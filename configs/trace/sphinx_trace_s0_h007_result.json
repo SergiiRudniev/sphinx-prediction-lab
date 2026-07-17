@@ -1,0 +1,79 @@
+{
+  "id": "sphinx-trace-s0-h007-wallet-ablation-result",
+  "schema_version": "1.0.0",
+  "status": "qualified_ablation_inconclusive_wallet_signal",
+  "research_id": "SPH-T-H007",
+  "completed_at": "2026-07-17T18:47:30.916959Z",
+  "config_sha256": "a4a91ce11359604db4f5e2b2854c67ce9573531c4888395ee6436926480ec5a9",
+  "feature_pack_sha256": "cf859cd54ab322e47529ab8b07eb35131590884750021688fc0f82d4ebcfe259",
+  "validation": {
+    "rows": 773,
+    "event_groups": 96,
+    "market_baseline": {
+      "brier": 0.13370466038649614,
+      "log_loss": 0.4001530617028764
+    },
+    "resolution_no_wallet_history": {
+      "brier": 0.12199930723004807,
+      "log_loss": 0.39326004138650855,
+      "best_epoch": 9
+    },
+    "resolution_causal_wallet_history": {
+      "brier": 0.12754064663416523,
+      "log_loss": 0.392836078935013,
+      "best_epoch": 4
+    },
+    "resolution_prior_event_wallet_control": {
+      "brier": 0.13043232477482586,
+      "log_loss": 0.3946225625791398,
+      "best_epoch": 2
+    }
+  },
+  "event_group_bootstrap": {
+    "samples": 5000,
+    "causal_wallet_minus_no_wallet_log_loss": {
+      "point": -0.0004239624514954917,
+      "confidence_interval_95": [
+        -0.08254099068133428,
+        0.07714919006259088
+      ]
+    },
+    "causal_wallet_minus_prior_event_control_log_loss": {
+      "point": -0.0017864836441267827,
+      "confidence_interval_95": [
+        -0.10858839779097679,
+        0.0942351539535707
+      ]
+    }
+  },
+  "wallet_signal_supported": false,
+  "hold_to_resolution_diagnostic": {
+    "executable_evidence": false,
+    "causal_wallet_top_10pct": {
+      "rows": 78,
+      "one_share_total_cost": 31.779181463760324,
+      "one_share_total_pnl": 4.220818536239676,
+      "roi_on_cost": 0.13281709414236878
+    },
+    "causal_wallet_top_25pct": {
+      "rows": 194,
+      "one_share_total_cost": 95.66090189293027,
+      "one_share_total_pnl": 25.33909810706973,
+      "roi_on_cost": 0.26488458299745965
+    },
+    "warning": "Validation-only public-trade-price diagnostic without bid/ask, depth, fees or slippage; thresholds were not qualified."
+  },
+  "gates": {
+    "all_variant_runs_valid": true,
+    "control_donor_time_violations_zero": true,
+    "control_same_event_donors_zero": true,
+    "parameter_count_difference_within_limit": true,
+    "prediction_order_identical": true,
+    "predictions_hashed": true,
+    "test_rows_consumed_zero": true
+  },
+  "aggregate_result_sha256": "44894073352d308589559ed667d0d7989adba8ecfcb9b3122c5a4e0ca8f7281f",
+  "decision": "diagnostic_only_no_promotion",
+  "test_labels_opened": false,
+  "evidence_boundary": "The 96-event validation pilot cannot establish incremental wallet signal, executable contract selection or trading performance."
+}
