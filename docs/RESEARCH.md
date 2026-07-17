@@ -733,6 +733,16 @@ produced the same completed-output hashes. The repeated run finished in 71.47
 seconds and reported `output_hashes_match_previous=true`. This validates the
 builder and resume boundary, not predictive quality.
 
+**Source-price anomaly rule.** Before full-pack or model results were observed,
+the strict replay encountered a structurally complete public trade whose source
+price was 1.1140588235. The Ledger remains immutable and the row, size and
+notional remain in recurrent state. For model probability fields only, finite
+source prices outside `[0, 1]` are clamped to that physical interval and counted
+per day; no trade is dropped. Non-finite prices and structurally invalid rows
+still fail the build. Daily receipts and checkpoints are now bound to a digest
+of the builder, feature, kernel and source-index implementations so a resume
+cannot mix code versions. This rule was frozen before training metrics.
+
 **Resolved-performance result.** The complete causal ledger read exactly
 141,033,306 selected source trades across 51,683 scope groups, excluded 363,279
 post-resolution rows and emitted 30,058,318 wallet/market resolution updates in

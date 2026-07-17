@@ -1,68 +1,69 @@
 {
-  "id": "sphinx-trace-s0-h011-pack-v1",
-  "version": "1.0.0-registered",
-  "status": "registered",
-  "research_id": "SPH-T-H011",
-  "registered_at": "2026-07-17T22:15:00Z",
-  "dependencies": {
-    "campaign": {
-      "id": "sphinx-trace-s0-h011-campaign-v1",
-      "sha256": "bae924dd1b8788ec5254cb0e532696eb762e1abeab0d66d63f339de0ad78917e"
+    "id": "sphinx-trace-s0-h011-pack-v1",
+    "version": "1.0.0-registered",
+    "status": "registered",
+    "research_id": "SPH-T-H011",
+    "registered_at": "2026-07-17T22:15:00Z",
+    "dependencies": {
+        "campaign": {
+            "id": "sphinx-trace-s0-h011-campaign-v1",
+            "sha256": "bae924dd1b8788ec5254cb0e532696eb762e1abeab0d66d63f339de0ad78917e"
+        },
+        "chronicle": {
+            "id": "sphinx-chronicle-h009-v1",
+            "sha256": "d8fdbe7a310cd3bd6df11b219e2b63bc0d416434a12e11b55b765d0c5a495493"
+        }
     },
-    "chronicle": {
-      "id": "sphinx-chronicle-h009-v1",
-      "sha256": "d8fdbe7a310cd3bd6df11b219e2b63bc0d416434a12e11b55b765d0c5a495493"
-    }
-  },
-  "input": {
-    "stream_record_type": "public_trade",
-    "decision_record_type": "chronicle_decision",
-    "decision_alignment": "exact_stream_row_and_evidence_trade_id",
-    "actor_context": "monthly_delta_available_only_after_window_end",
-    "resolved_wallet_performance": "position_proxy_applied_only_at_registered_public_resolution_time",
-    "development_label_splits": ["train", "validation", "calibration"],
-    "test_labels_opened": false
-  },
-  "features": {
-    "width": 128,
-    "names_sha256": "0177fa7f09134fcd26eba33fd9154a2548b307f80841875e18f0b10751f518db",
-    "identity_embedding": false,
-    "hard_wallet_cap": null,
-    "hard_market_cap": null,
-    "hard_trade_cap": null,
-    "participant_cardinality_sketch": {
-      "algorithm": "HyperLogLog",
-      "precision": 6,
-      "all_rows_update_sketch": true
+    "input": {
+        "stream_record_type": "public_trade",
+        "decision_record_type": "chronicle_decision",
+        "decision_alignment": "exact_stream_row_and_evidence_trade_id",
+        "source_price_domain_policy": "retain_every_structurally_valid_trade_clamp_out_of_range_source_price_to_unit_interval_and_count_anomalies",
+        "actor_context": "monthly_delta_available_only_after_window_end",
+        "resolved_wallet_performance": "position_proxy_applied_only_at_registered_public_resolution_time",
+        "development_label_splits": ["train", "validation", "calibration"],
+        "test_labels_opened": false
     },
-    "blocks": [
-      {"id": "clock", "start": 0, "stop": 8},
-      {"id": "market", "start": 8, "stop": 48},
-      {"id": "component", "start": 48, "stop": 72},
-      {"id": "evidence_wallet", "start": 72, "stop": 100},
-      {"id": "all_wallet_market_aggregate", "start": 100, "stop": 116},
-      {"id": "universe", "start": 116, "stop": 128}
-    ],
-    "normalization": "train_only_deterministic_histogram_median_iqr",
-    "continuous_build_dtype": "float32"
-  },
-  "storage": {
-    "default_output_dir": "derived/sphinx-h011-feature-pack-v1",
-    "daily_atomic_shards": true,
-    "chunk_rows": 1000000,
-    "checkpoint_maximum_interval_seconds": 900,
-    "minimum_free_gib": 25.0,
-    "state_checkpoint": "single_atomic_latest_snapshot_with_deterministic_replay_after_checkpoint"
-  },
-  "acceptance": {
-    "full_stream_rows": 176119673,
-    "all_registered_decisions_emitted": true,
-    "decision_trade_id_mismatches": 0,
-    "unmapped_wallet_rows": 0,
-    "unmapped_market_rows": 0,
-    "non_finite_features": 0,
-    "test_label_rows": 0,
-    "resume_hash_stable": true
-  },
-  "evidence_boundary": "The H011 pack proves deterministic causal feature construction over every H009 Ledger row. It does not prove predictive lift, executable profit, depth availability, funding-graph completeness or insider attribution."
+    "features": {
+        "width": 128,
+        "names_sha256": "0177fa7f09134fcd26eba33fd9154a2548b307f80841875e18f0b10751f518db",
+        "identity_embedding": false,
+        "hard_wallet_cap": null,
+        "hard_market_cap": null,
+        "hard_trade_cap": null,
+        "participant_cardinality_sketch": {
+            "algorithm": "HyperLogLog",
+            "precision": 6,
+            "all_rows_update_sketch": true
+        },
+        "blocks": [
+            {"id": "clock", "start": 0, "stop": 8},
+            {"id": "market", "start": 8, "stop": 48},
+            {"id": "component", "start": 48, "stop": 72},
+            {"id": "evidence_wallet", "start": 72, "stop": 100},
+            {"id": "all_wallet_market_aggregate", "start": 100, "stop": 116},
+            {"id": "universe", "start": 116, "stop": 128}
+        ],
+        "normalization": "train_only_deterministic_histogram_median_iqr",
+        "continuous_build_dtype": "float32"
+    },
+    "storage": {
+        "default_output_dir": "derived/sphinx-h011-feature-pack-v1",
+        "daily_atomic_shards": true,
+        "chunk_rows": 1000000,
+        "checkpoint_maximum_interval_seconds": 900,
+        "minimum_free_gib": 25.0,
+        "state_checkpoint": "single_atomic_latest_snapshot_with_deterministic_replay_after_checkpoint"
+    },
+    "acceptance": {
+        "full_stream_rows": 176119673,
+        "all_registered_decisions_emitted": true,
+        "decision_trade_id_mismatches": 0,
+        "unmapped_wallet_rows": 0,
+        "unmapped_market_rows": 0,
+        "non_finite_features": 0,
+        "test_label_rows": 0,
+        "resume_hash_stable": true
+    },
+    "evidence_boundary": "The H011 pack proves deterministic causal feature construction over every H009 Ledger row. It does not prove predictive lift, executable profit, depth availability, funding-graph completeness or insider attribution."
 }

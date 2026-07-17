@@ -1,76 +1,76 @@
 {
-  "id": "sphinx-trace-s0-h011-train-v1",
-  "version": "1.0.0-registered",
-  "status": "registered",
-  "research_id": "SPH-T-H011",
-  "registered_at": "2026-07-17T22:40:00Z",
-  "dependencies": {
-    "campaign": {
-      "id": "sphinx-trace-s0-h011-campaign-v1",
-      "sha256": "bae924dd1b8788ec5254cb0e532696eb762e1abeab0d66d63f339de0ad78917e"
+    "id": "sphinx-trace-s0-h011-train-v1",
+    "version": "1.0.0-registered",
+    "status": "registered",
+    "research_id": "SPH-T-H011",
+    "registered_at": "2026-07-17T22:40:00Z",
+    "dependencies": {
+        "campaign": {
+            "id": "sphinx-trace-s0-h011-campaign-v1",
+            "sha256": "bae924dd1b8788ec5254cb0e532696eb762e1abeab0d66d63f339de0ad78917e"
+        },
+        "feature_pack": {
+            "id": "sphinx-trace-s0-h011-pack-v1",
+            "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+        },
+        "model": {
+            "id": "sphinx-trace-s0-h011-model-v1",
+            "sha256": "d9797557fa2a5e42d7a209b755e54fb497a065d722188c2dd26d0616fb0162ea"
+        }
     },
-    "feature_pack": {
-      "id": "sphinx-trace-s0-h011-pack-v1",
-      "sha256": "77b6741dc93e21150fead67e9345b63e848b1381e99452db5efa36c29c9f8b1a"
+    "data": {
+        "train_split_code": 1,
+        "validation_split_code": 2,
+        "calibration_split_code": 3,
+        "test_split_code": 4,
+        "test_rows_consumed": 0,
+        "normalization": "pack_train_only_median_iqr",
+        "feature_clip_after_normalization": 12.0,
+        "component_balance": "inverse_sqrt_frequency_normalized",
+        "lifecycle_buckets": 10,
+        "loss_weight_clip": [0.25, 4.0]
     },
-    "model": {
-      "id": "sphinx-trace-s0-h011-model-v1",
-      "sha256": "39a5ca0958fc67bc70dcd668ca4755d48ff3b5c5a4b5a1c4a47e1330feadf621"
-    }
-  },
-  "data": {
-    "train_split_code": 1,
-    "validation_split_code": 2,
-    "calibration_split_code": 3,
-    "test_split_code": 4,
-    "test_rows_consumed": 0,
-    "normalization": "pack_train_only_median_iqr",
-    "feature_clip_after_normalization": 12.0,
-    "component_balance": "inverse_sqrt_frequency_normalized",
-    "lifecycle_buckets": 10,
-    "loss_weight_clip": [0.25, 4.0]
-  },
-  "training": {
-    "first_candidate": "50m",
-    "first_variant": "h011_market_only",
-    "seed": 17,
-    "epochs": 12,
-    "batch_size": 512,
-    "evaluation_batch_size": 4096,
-    "optimizer": "AdamW",
-    "learning_rate": 0.0003,
-    "minimum_learning_rate": 0.00001,
-    "weight_decay": 0.01,
-    "gradient_clip_norm": 1.0,
-    "precision": "bf16_mixed",
-    "compile": false,
-    "checkpoint_maximum_interval_seconds": 600,
-    "early_stopping_patience": 3,
-    "loss": {
-      "binary_cross_entropy": 1.0,
-      "brier": 0.1,
-      "expected_edge_smooth_l1": 0.2,
-      "heteroscedastic_binary_cross_entropy": 0.1,
-      "uncertainty_scale_penalty": 0.001
-    }
-  },
-  "evaluation": {
-    "primary": "validation_log_loss",
-    "required": [
-      "log_loss",
-      "brier",
-      "accuracy",
-      "expected_calibration_error",
-      "market_baseline_log_loss",
-      "market_baseline_brier"
-    ],
-    "prediction_artifacts": true,
-    "test_opening_allowed": false
-  },
-  "resume": {
-    "exact_model_optimizer_scheduler_and_rng": true,
-    "graceful_pause_file": "PAUSE",
-    "atomic_checkpoint": true
-  },
-  "evidence_boundary": "Outcome training and development calibration only. CALL/SKIP, learned sizing, simulator profit, untouched test and paper-forward profit require later registered stages."
+    "training": {
+        "first_candidate": "50m",
+        "first_variant": "h011_market_only",
+        "seed": 17,
+        "epochs": 12,
+        "batch_size": 512,
+        "evaluation_batch_size": 4096,
+        "optimizer": "AdamW",
+        "learning_rate": 0.0003,
+        "minimum_learning_rate": 0.00001,
+        "weight_decay": 0.01,
+        "gradient_clip_norm": 1.0,
+        "precision": "bf16_mixed",
+        "compile": false,
+        "checkpoint_maximum_interval_seconds": 600,
+        "early_stopping_patience": 3,
+        "loss": {
+            "binary_cross_entropy": 1.0,
+            "brier": 0.1,
+            "expected_edge_smooth_l1": 0.2,
+            "heteroscedastic_binary_cross_entropy": 0.1,
+            "uncertainty_scale_penalty": 0.001
+        }
+    },
+    "evaluation": {
+        "primary": "validation_log_loss",
+        "required": [
+            "log_loss",
+            "brier",
+            "accuracy",
+            "expected_calibration_error",
+            "market_baseline_log_loss",
+            "market_baseline_brier"
+        ],
+        "prediction_artifacts": true,
+        "test_opening_allowed": false
+    },
+    "resume": {
+        "exact_model_optimizer_scheduler_and_rng": true,
+        "graceful_pause_file": "PAUSE",
+        "atomic_checkpoint": true
+    },
+    "evidence_boundary": "Outcome training and development calibration only. CALL/SKIP, learned sizing, simulator profit, untouched test and paper-forward profit require later registered stages."
 }

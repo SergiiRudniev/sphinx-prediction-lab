@@ -57,6 +57,25 @@ def test_trade_orientation_is_relative_to_catalog_outcome_zero(
     assert trade.wallet == "0xdef"
 
 
+def test_source_price_anomaly_is_retained_and_clamped_for_model_state() -> None:
+    trade = parse_trade_payload(
+        {
+            "trade_id": "anomaly",
+            "condition_id": "0xabc",
+            "wallet": "0xdef",
+            "timestamp_unix": 100,
+            "price": "1.1140588235",
+            "size": "68",
+            "notional_usd": "75.755999998",
+            "outcome_index": 1,
+            "side": "SELL",
+        }
+    )
+    assert trade.source_price_anomaly is True
+    assert trade.raw_price == 1.0
+    assert trade.outcome0_probability == 0.0
+
+
 def test_hll_processes_every_identity_without_retaining_identity_tokens() -> None:
     registers = np.zeros(H011_HLL_REGISTERS, dtype=np.uint8)
     for value in range(10_000):
