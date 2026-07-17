@@ -200,9 +200,7 @@ class LedgerBackfill:
             topic = event_topic(contract.event_signature)
             for sample_start in sorted(set(starts)):
                 sample_end = min(end_block, sample_start + sample_blocks - 1)
-                count = len(
-                    self.rpc.logs(contract.address, topic, sample_start, sample_end)
-                )
+                count = len(self.rpc.logs(contract.address, topic, sample_start, sample_end))
                 observations.append(
                     {
                         "start_block": sample_start,

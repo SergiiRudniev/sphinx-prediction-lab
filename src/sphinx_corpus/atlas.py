@@ -140,13 +140,7 @@ class AtlasBackfill:
             payload = self._fetch(params)
             markets = payload["markets"]
             page = int(state["next_page"])
-            page_path = (
-                self.root
-                / "raw"
-                / "atlas"
-                / f"closed={name}"
-                / f"page-{page:06d}.json.zst"
-            )
+            page_path = self.root / "raw" / "atlas" / f"closed={name}" / f"page-{page:06d}.json.zst"
             write_json_zst(
                 page_path,
                 {
@@ -181,11 +175,7 @@ class AtlasBackfill:
     def normalize(self) -> dict[str, int]:
         page_paths = list(
             (self.root / "raw" / "atlas" / "closed=false").glob("page-*.json.zst")
-        ) + list(
-            (self.root / "raw" / "atlas" / "closed=true-windowed").glob(
-                "page-*.json.zst"
-            )
-        )
+        ) + list((self.root / "raw" / "atlas" / "closed=true-windowed").glob("page-*.json.zst"))
         page_paths.sort()
 
         def source_markets() -> Any:
@@ -199,9 +189,7 @@ class AtlasBackfill:
                 if not isinstance(markets, list):
                     raise TypeError(f"Invalid markets list: {page_path}")
                 for market in markets:
-                    if not isinstance(market, dict) or not market_intersects(
-                        market, self.config
-                    ):
+                    if not isinstance(market, dict) or not market_intersects(market, self.config):
                         continue
                     identity = str(market.get("conditionId") or market.get("id") or "")
                     if not identity or identity in seen:
@@ -212,9 +200,7 @@ class AtlasBackfill:
         def market_rows() -> Any:
             for identity, market, observed_at in source_markets():
                 events = [
-                    item
-                    for item in _list_value(market.get("events"))
-                    if isinstance(item, dict)
+                    item for item in _list_value(market.get("events")) if isinstance(item, dict)
                 ]
                 event_ids = [
                     str(event.get("id") or event.get("slug"))

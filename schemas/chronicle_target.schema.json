@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/chronicle_target.schema.json",
+  "title": "Sphinx Chronicle Trial T0 target row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "example_id",
+    "condition_id",
+    "event_id",
+    "split",
+    "decision_time",
+    "decision_time_unix",
+    "feature_max_event_time_unix",
+    "history_trade_count",
+    "anchor_trade_id",
+    "anchor_wallet",
+    "anchor_side",
+    "anchor_outcome_index",
+    "yes_price",
+    "yes_direction",
+    "resolved_at",
+    "resolved_yes",
+    "targets",
+    "source"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "record_type": { "const": "chronicle_target" },
+    "example_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "condition_id": { "type": "string", "pattern": "^0x[a-f0-9]{64}$" },
+    "event_id": { "type": "string", "minLength": 1 },
+    "split": { "type": "string", "enum": ["train", "validation", "calibration"] },
+    "decision_time": { "type": "string", "format": "date-time" },
+    "decision_time_unix": { "type": "integer", "minimum": 0 },
+    "feature_max_event_time_unix": { "type": "integer", "minimum": 0 },
+    "history_trade_count": { "type": "integer", "minimum": 1 },
+    "anchor_trade_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "anchor_wallet": { "type": "string", "pattern": "^0x[a-f0-9]{40}$" },
+    "anchor_side": { "type": "string", "enum": ["BUY", "SELL"] },
+    "anchor_outcome_index": { "type": "integer", "enum": [0, 1] },
+    "yes_price": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+    "yes_direction": { "type": "integer", "enum": [-1, 1] },
+    "resolved_at": { "type": "string", "format": "date-time" },
+    "resolved_yes": { "type": "integer", "enum": [0, 1] },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "yes_markout_5m",
+        "yes_markout_1h",
+        "yes_markout_1d",
+        "directional_markout_5m",
+        "directional_markout_1h",
+        "directional_markout_1d",
+        "resolved_directional_edge",
+        "net_edge_proxy",
+        "markout_observed_at_5m",
+        "markout_observed_at_1h",
+        "markout_observed_at_1d"
+      ],
+      "properties": {
+        "yes_markout_5m": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "yes_markout_1h": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "yes_markout_1d": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "directional_markout_5m": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "directional_markout_1h": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "directional_markout_1d": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "resolved_directional_edge": { "type": "number", "minimum": -1, "maximum": 1 },
+        "net_edge_proxy": { "type": "number", "minimum": -1.01, "maximum": 1 },
+        "markout_observed_at_5m": { "type": ["string", "null"], "format": "date-time" },
+        "markout_observed_at_1h": { "type": ["string", "null"], "format": "date-time" },
+        "markout_observed_at_1d": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger_namespace", "atlas_observed_at"],
+      "properties": {
+        "ledger_namespace": { "const": "ledger-api-cash-min-25" },
+        "atlas_observed_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

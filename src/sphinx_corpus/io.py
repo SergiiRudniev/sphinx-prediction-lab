@@ -6,7 +6,9 @@ import os
 import shutil
 import time
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +99,21 @@ def iter_jsonl_zst(path: Path) -> Iterator[dict[str, Any]]:
             yield value
 
 
+def count_jsonl_zst(path: Path) -> int:
+    count = 0
+    has_data = False
+    last_byte = 0
+    with (
+        path.open("rb") as source,
+        zstandard.ZstdDecompressor().stream_reader(source) as reader,
+    ):
+        while chunk := reader.read(8 * 1024 * 1024):
+            has_data = True
+            count += chunk.count(b"\n")
+            last_byte = chunk[-1]
+    return count + int(has_data and last_byte != ord("\n"))
+
+
 def _atomic_bytes(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -149,23 +166,30 @@ def build_manifest(
     version: str,
     research_id: str,
     source_config: dict[str, Any],
+    workers: int = 1,
 ) -> dict[str, Any]:
-    files: list[dict[str, Any]] = []
+    if workers <= 0:
+        raise ValueError("manifest workers must be positive")
     ignored = tuple(str(value) for value in source_config["storage"].get("ignored_prefixes", []))
+    paths: list[Path] = []
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.name.endswith(".tmp") or path.name == "manifest.json":
             continue
         relative = path.relative_to(root).as_posix()
         if relative.startswith(ignored):
             continue
-        entry: dict[str, Any] = {
-            "path": relative,
-            "bytes": path.stat().st_size,
-            "sha256": sha256_file(path),
-        }
-        if path.name.endswith(".jsonl.zst"):
-            entry["rows"] = sum(1 for _ in iter_jsonl_zst(path))
-        files.append(entry)
+        paths.append(path)
+    entry_builder = partial(_manifest_entry, root=root)
+    files: list[dict[str, Any]] = []
+    if workers == 1:
+        files = [entry_builder(path) for path in paths]
+    else:
+        with ThreadPoolExecutor(
+            max_workers=workers,
+            thread_name_prefix="sphinx-manifest",
+        ) as executor:
+            for offset in range(0, len(paths), 4096):
+                files.extend(executor.map(entry_builder, paths[offset : offset + 4096]))
     manifest = {
         "dataset_id": corpus_id,
         "version": version,
@@ -173,16 +197,25 @@ def build_manifest(
         "generated_at": now_utc(),
         "window": source_config["window"],
         "protocols": sorted(
-            {
-                item["protocol"]
-                for item in source_config["sources"]["ledger"]["contracts"]
-            }
+            {item["protocol"] for item in source_config["sources"]["ledger"]["contracts"]}
         ),
         "sources": source_config["sources"],
         "known_gaps": source_config["known_gaps"],
         "files": files,
         "file_count": len(files),
         "total_bytes": sum(int(item["bytes"]) for item in files),
+        "row_count": sum(int(item.get("rows", 0)) for item in files),
     }
     atomic_json(root / "manifest.json", manifest)
     return manifest
+
+
+def _manifest_entry(path: Path, *, root: Path) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "path": path.relative_to(root).as_posix(),
+        "bytes": path.stat().st_size,
+        "sha256": sha256_file(path),
+    }
+    if path.name.endswith(".jsonl.zst"):
+        entry["rows"] = count_jsonl_zst(path)
+    return entry

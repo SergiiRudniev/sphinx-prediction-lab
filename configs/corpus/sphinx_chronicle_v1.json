@@ -2,8 +2,10 @@
   "id": "sphinx-chronicle-v1",
   "corpus": "Sphinx Corpus",
   "dataset": "Sphinx Chronicle",
-  "version": "1.0.0-design",
-  "status": "design",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H005",
+  "trial_contract": "configs/trace/sphinx_trace_s0_trial_t0.json",
   "sources": [
     "sphinx-atlas",
     "sphinx-ledger",
@@ -23,17 +25,20 @@
     "resolution_labels_joined_after_feature_freeze": true
   },
   "targets": [
-    "markout_5m",
-    "markout_1h",
-    "markout_1d",
-    "resolved_outcome",
-    "net_edge_after_costs"
+    "yes_markout_5m",
+    "yes_markout_1h",
+    "yes_markout_1d",
+    "resolved_yes",
+    "resolved_directional_edge",
+    "net_edge_proxy"
   ],
   "split": {
     "type": "chronological_event_grouped",
     "random_row_split": false,
     "purge_overlapping_targets": true,
-    "untouched_test_required": true
+    "untouched_test_required": true,
+    "test_labels_opened": false,
+    "embargo_days": 7
   },
   "storage": {
     "format": "parquet",

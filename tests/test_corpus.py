@@ -7,11 +7,20 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import httpx
+import pytest
+
 from sphinx_corpus.atlas import AtlasBackfill, market_intersects
 from sphinx_corpus.config import CorpusConfig, ExchangeContract, Window
-from sphinx_corpus.io import build_manifest, iter_jsonl_zst, write_json_zst
+from sphinx_corpus.io import (
+    build_manifest,
+    count_jsonl_zst,
+    iter_jsonl_zst,
+    write_json_zst,
+    write_jsonl_zst,
+)
 from sphinx_corpus.ledger import decode_order_fill, event_topic
-from sphinx_corpus.trade_api import TradeAPIBackfill
+from sphinx_corpus.trade_api import RequestWindowTimeout, TradeAPIBackfill
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -108,9 +117,7 @@ def test_decodes_v2_sell_order_fill() -> None:
 
 
 def test_event_topics_differ_across_protocol_versions() -> None:
-    v1 = event_topic(
-        "OrderFilled(bytes32,address,address,uint256,uint256,uint256,uint256,uint256)"
-    )
+    v1 = event_topic("OrderFilled(bytes32,address,address,uint256,uint256,uint256,uint256,uint256)")
     v2 = event_topic(
         "OrderFilled(bytes32,address,address,uint8,uint256,uint256,uint256,uint256,bytes32,bytes32)"
     )
@@ -142,11 +149,7 @@ def test_atlas_normalization_deduplicates_and_filters_window(tmp_path: Path) -> 
         "response": {"markets": [in_window, outside]},
     }
     write_json_zst(
-        tmp_path
-        / "raw"
-        / "atlas"
-        / "closed=true-windowed"
-        / "page-000000.json.zst",
+        tmp_path / "raw" / "atlas" / "closed=true-windowed" / "page-000000.json.zst",
         page,
     )
 
@@ -228,6 +231,32 @@ class ParallelTradeBackfill(TradeAPIBackfill):
         return {"status": "completed", "rows": len(group), "gaps": 0}
 
 
+class TimeoutTradeBackfill(FakeTradeBackfill):
+    def _page(
+        self,
+        scope_id: str,
+        condition_ids: tuple[str, ...],
+        start: int,
+        end: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        if end - start > 2:
+            raise RequestWindowTimeout("simulated timeout")
+        condition_id = condition_ids[0]
+        return [
+            {
+                "conditionId": condition_id,
+                "timestamp": start,
+                "proxyWallet": "0xwallet",
+                "asset": "token",
+                "side": "BUY",
+                "size": 1,
+                "price": 0.5,
+                "transactionHash": f"0x{start}",
+            }
+        ]
+
+
 def test_trade_api_splits_saturated_time_windows(tmp_path: Path) -> None:
     condition_id = "0x" + ("ab" * 32)
     with FakeTradeBackfill(_config(tmp_path)) as collector:
@@ -238,6 +267,40 @@ def test_trade_api_splits_saturated_time_windows(tmp_path: Path) -> None:
     assert result["rows"] == 4
     files = list((tmp_path / "normalized" / "ledger-api").rglob("*.jsonl.zst"))
     assert len(files) == 4
+
+
+def test_trade_api_splits_timed_out_windows(tmp_path: Path) -> None:
+    condition_id = "0x" + ("bc" * 32)
+    with TimeoutTradeBackfill(_config(tmp_path)) as collector:
+        result = collector._window(condition_id, (condition_id,), 100, 107)
+
+    assert result["complete"] is True
+    assert result["gaps"] == 0
+    assert result["rows"] == 4
+    receipt_path = (
+        tmp_path
+        / "receipts"
+        / "ledger-api-windows"
+        / f"scope={condition_id}"
+        / "start=100-end=107.json"
+    )
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["reason"] == "request_timeout"
+
+
+def test_trade_api_maps_repeated_http_408_to_window_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sphinx_corpus.trade_api.time.sleep", lambda _: None)
+    transport = httpx.MockTransport(lambda _: httpx.Response(408))
+    with TradeAPIBackfill(_config(tmp_path)) as collector:
+        client = httpx.Client(transport=transport)
+        collector._thread_clients.client = client
+        collector._clients.append(client)
+
+        with pytest.raises(RequestWindowTimeout):
+            collector._fetch({"market": "condition"})
 
 
 def test_trade_api_preserves_indistinguishable_repeated_rows(tmp_path: Path) -> None:
@@ -270,6 +333,41 @@ def test_fast_trade_api_profile_freezes_filter_and_rate_limit(tmp_path: Path) ->
         assert collector.request_gate.rate == 18
         assert params["filterType"] == "CASH"
         assert params["filterAmount"] == 25
+
+
+def test_trade_api_keeps_only_collection_fields_in_memory(tmp_path: Path) -> None:
+    condition_id = "0x" + ("12" * 32)
+    config = _fast_config(tmp_path)
+    write_jsonl_zst(
+        tmp_path / "normalized" / "atlas" / "markets.jsonl.zst",
+        [
+            {
+                "condition_id": condition_id,
+                "created_at": "2025-08-01T00:00:00Z",
+                "start_at": "2025-08-02T00:00:00Z",
+                "end_at": "2025-08-03T00:00:00Z",
+                "closed_at": "2025-08-04T00:00:00Z",
+                "source_payload": {
+                    "volumeNum": 100,
+                    "large_unused_field": "unused" * 1000,
+                },
+            }
+        ],
+    )
+
+    with TradeAPIBackfill(config) as collector:
+        markets = collector._markets(None, None)
+
+    assert markets == [
+        {
+            "condition_id": condition_id,
+            "created_at": "2025-08-01T00:00:00Z",
+            "start_at": "2025-08-02T00:00:00Z",
+            "end_at": "2025-08-03T00:00:00Z",
+            "closed_at": "2025-08-04T00:00:00Z",
+            "_volume": Decimal(100),
+        }
+    ]
 
 
 def test_trade_api_groups_large_markets_separately(tmp_path: Path) -> None:
@@ -322,3 +420,24 @@ def test_manifest_excludes_registered_ignored_prefixes(tmp_path: Path) -> None:
     paths = {str(row["path"]) for row in manifest["files"]}
     assert "raw/atlas/closed=true/old.json.zst" not in paths
     assert "raw/atlas/closed=true-windowed/kept.json.zst" in paths
+
+
+def test_manifest_parallel_workers_preserve_rows(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    write_jsonl_zst(
+        tmp_path / "normalized" / "one.jsonl.zst",
+        [{"row": 1}, {"row": 2}],
+    )
+
+    manifest = build_manifest(
+        tmp_path,
+        corpus_id=config.id,
+        version=config.version,
+        research_id=config.research_id,
+        source_config=config.payload,
+        workers=2,
+    )
+
+    assert manifest["row_count"] == 2
+    assert manifest["file_count"] == 1
+    assert count_jsonl_zst(tmp_path / "normalized" / "one.jsonl.zst") == 2

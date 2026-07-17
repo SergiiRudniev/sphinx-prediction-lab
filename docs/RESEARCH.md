@@ -110,7 +110,7 @@ yearly Ledger run.
 
 ## SPH-T-H002: Sphinx Corpus S0 Fast Ledger
 
-**Status:** `development`
+**Status:** `qualified`
 **Registered:** 2026-07-16
 
 **Question.** Can a training-ready one-year Ledger be collected in approximately
@@ -144,7 +144,508 @@ saved raw request contained the registered cash filter. A closed-market pilot
 completed eight filtered rows with no gap, and its immediate restart skipped the
 completed group with zero network requests.
 
-**Result.** In progress. No fast Chronicle snapshot is accepted yet.
+**Result.** Qualified as the S0 fast Ledger snapshot. The yearly run completed all
+57,828 registered request groups spanning 1,189,164 selected markets and produced
+176,119,673 normalized public-trade rows. Receipt audit found zero incomplete
+groups, zero unresolved pagination gaps, zero duplicate condition assignments and
+zero group budget mismatches. The exact row total independently reconstructed from
+123,443 compressed Ledger partitions matches the group-receipt total.
 
-**Next action.** Complete the shared Atlas, run a bounded concurrent Ledger pilot,
-then start the restart-safe fast yearly Ledger locally.
+The frozen corpus manifest covers 1,008,442 files, 27,853,609,624 source bytes and
+181,945,996 normalized rows across all included namespaces. Its SHA-256 is
+`be7d5c384fe6a5199e7e575f4dcf16dbbc36b6ee1d0b65de3f654c03eebbb4d5`.
+A deterministic spread sample of 2,048 Ledger partitions parsed 2,914,572 rows,
+18,549 condition IDs and 265,783 wallets. It found no missing required values,
+duplicate trade IDs, malformed identifiers, invalid prices or sizes, inconsistent
+notional arithmetic, out-of-window timestamps or within-file ordering violations.
+
+The sample contains 6,757 rows (0.232 percent) whose normalized `size * price` is
+between 21.4036 and 25 USD even though the request used `filterType=CASH` and
+`filterAmount=25`. Every one has `size >= 25`; the current Data API documentation
+requires both filter parameters but does not define the server-side CASH formula.
+This is retained as a source-semantics caveat, not treated as corruption or silently
+removed. One stale page-receipt `.tmp` from an interrupted attempt remains outside
+the manifest; its group later completed successfully and its final receipt is valid.
+
+**Next action.** Freeze the causal target schema and chronological split over this
+snapshot, then run Sphinx Trace S0 Trial T0 before allocating the full token budget.
+
+## SPH-T-H003: Sphinx Trace S0 Throughput Qualification
+
+**Status:** `qualified`
+**Registered:** 2026-07-17
+
+**Question.** What end-to-end training throughput can a roughly 50 million
+parameter Sphinx Trace S0-shaped model sustain on the local RTX 5070 when fed
+fixed-shape tensors packed from real Sphinx Ledger rows?
+
+**Controlled change.** Pack a deterministic subset of completed fast Ledger
+partitions into fixed 224-token sequences containing 128 trade tokens, 32 wallet
+tokens and 64 market/graph/time tokens. Benchmark a ten-layer, 640-width,
+ten-head SDPA backbone with BF16 autocast, fused AdamW, fixed shapes, pinned
+prefetch and optional `torch.compile`. Keep the source cutoff and benchmark
+configuration in the run receipt.
+
+**Acceptance.** The run must report the exact parameter count, source paths and
+row count, packed sequence count, measured rather than assumed token throughput,
+step latency, peak allocated and reserved VRAM, PyTorch/CUDA versions, compile
+status and extrapolated wall times. At least 100 measured optimizer steps must
+follow warmup, unless a recorded platform limitation prevents the configured
+path from running.
+
+**Falsification.** Do not use the result if synthetic tensors replace the real
+Ledger loader, dynamic input shapes cause recompilation during measurement,
+the model is outside 48–52 million parameters, fewer than 100 optimizer steps
+are measured, or CUDA memory/compile failures are omitted from the receipt.
+
+**Evidence boundary.** This qualification measures engineering throughput only.
+Its proxy targets and loss are not model-quality, trading, calibration or
+promotion evidence.
+
+**Result.** Qualified as engineering evidence. The deterministic pack contains
+8,192 fixed 224-token sequences built from 564,534 real normalized Ledger rows
+across 366 used source files. The measured model has 50,213,128 parameters.
+Preflight eager runs sustained 97,230 tokens/second at batch 16, 97,714 at
+batch 32 and 92,170 at batch 64. Batch 32 with BF16, Flash SDPA, fused AdamW
+and active `torch.compile`/Triton sustained 128,320 tokens/second across 1,000
+measured optimizer steps and 7,168,000 tokens. Mean, p50 and p95 step times were
+55.57, 55.45 and 56.21 milliseconds. Steady device usage was 4.15 GB including
+the CUDA context; PyTorch reserved 2.84 GB. A cold compile took 53.70 seconds,
+while the cached final run compiled and executed its first step in 2.93 seconds.
+
+At measured core-loop throughput, 1.0, 2.5 and 4.0 billion tokens require 2.16,
+5.41 and 8.66 hours respectively. These estimates exclude validation,
+checkpointing, final target construction and future architectural changes. The
+proxy loss decrease is not evidence of predictive or trading quality.
+
+**Next action.** Freeze the causal target schema and temporal train/validation/
+test split, then run S0 Trial T0 before committing the full token budget.
+
+## SPH-T-H004: Fast Ledger Worker Scaling Qualification
+
+**Status:** `qualified`
+**Registered:** 2026-07-17
+
+**Question.** Can the restart-safe fast Ledger sustain approximately 15
+successful Data API responses per second on the local collection machine?
+
+**Controlled change.** Resume the unchanged `SPH-T-H002` Atlas, market groups,
+18 request/second global gate and storage namespace with 56 workers instead of
+24. Preserve every completed receipt and do not change filtering, normalization
+or recursive completeness rules.
+
+**Acceptance.** The resumed process must expose the configured worker pool,
+keep the error log empty, remain below 4 GB resident memory and sustain at least
+12 successful newly persisted raw responses per second across two consecutive
+30-second measurements. Completed group receipts must be monotonic across the
+restart.
+
+**Falsification.** Reject 56 workers if successful persistence remains below 10
+responses per second, memory exceeds 4 GB, the process reports an unhandled
+error, completed receipts regress or rate limiting causes persistent failure.
+
+**Result.** Qualified as an operational throughput change. The restart preserved
+all 38,439 completed group receipts. The resumed process exposed 56 established
+HTTPS connections, remained error-free and used at most 1.34 GB resident memory
+during qualification. A first post-warmup interval persisted 10.93 successful
+raw responses per second; the next two consecutive intervals sustained 13.00
+and 12.08 responses per second. The accepted intervals averaged 12.54 responses
+per second, compared with 6.79 across the two 24-worker preflight intervals.
+Completed-group throughput rose from 39-49 to 76-86 groups per minute during
+the sampled windows. The measured path improved materially but did not sustain
+the nominal 15-response target.
+
+**Next action.** Keep the 56-worker, 18 request/second run active and use the
+fixed 57,828-group denominator for completion reporting.
+
+## SPH-T-H005: Sphinx Trace S0 Trial T0 Target Contract
+
+**Status:** `qualified`
+**Registered:** 2026-07-17
+
+**Question.** Can the qualified fast Ledger and terminal binary Atlas markets
+produce a causal, event-grouped target index for the first Sphinx Trace S0 trial
+without opening the untouched test labels?
+
+**Controlled change.** Restrict the first target contract to resolved two-outcome
+markets whose ordered outcomes are exactly `Yes` and `No` and whose terminal
+prices form a one-hot result. Normalize every Ledger trade price into the
+equivalent YES probability. Anchor a decision one second after an observed trade,
+use only events strictly before that decision as features, and derive future
+trade-price markouts at 5 minutes, 1 hour and 1 day. Treat these markouts and the
+fixed-cost edge as development proxies rather than executable-price evidence.
+
+Assign the entire event group to one chronological segment using the latest
+resolution time among its eligible markets. Keep only decisions inside that same
+segment, require each markout observation to remain before the segment end and
+leave seven-day embargoes between train, validation, calibration and test. The
+test segment remains label-withheld during development.
+
+**Acceptance.** Every emitted row must have `feature_max_event_time < decision_time`;
+event IDs must be disjoint across segments; no decision or target observation may
+fall in an embargo; future observations must satisfy the registered horizon and
+tolerance; terminal resolution labels must be binary; restart must preserve row
+identity and split assignment; no test target value or test label statistic may be
+written by the development builder.
+
+**Falsification.** Reject the contract if any event group crosses segments,
+same-second ordering enters the future feature set, target lookup crosses a split
+boundary, outcome order is inferred from display text, test labels are exposed,
+or the pilot requires current wallet aggregates that cannot be reconstructed at
+the decision time.
+
+**Evidence boundary.** Historical public trade prices are not executable bid/ask
+or L2 depth. Trial T0 may qualify target construction and model learning behavior,
+but cannot establish executable net edge or trading performance.
+
+**Result.** Qualified as the Trial T0 target and split contract. Atlas contained
+547,220 eligible terminal binary `Yes/No` markets across 82,939 event groups after
+excluding malformed resolution times and markets without exactly one event ID.
+The frozen event-resolution split assigns 19,890 groups to train, 16,185 to
+validation, 14,205 to calibration and 24,628 to the still-unopened test; 8,031
+groups fall in embargoes or outside the registered one-year window.
+
+The bounded real-data pilot uniformly selected 1,024 of 123,443 Ledger partitions
+and read 1,477,551 public trades. It emitted 3,212 target rows: 2,128 train, 773
+validation and 311 calibration examples across 359 event groups. No event crossed
+segments, no feature timestamp reached or exceeded its decision timestamp, no
+markout violated its registered horizon or lag, and every resolution-edge and
+fixed-cost proxy recomputed exactly. The development builder withheld 153,762
+source rows assigned to test and emitted zero test rows or label statistics.
+
+An immediate restart reproduced identical compressed output hashes for all three
+development splits. Five-minute, one-hour and one-day markouts were available for
+2,509, 2,955 and 1,097 examples respectively. This confirms the contract and also
+shows that the one-day public-trade target is materially sparser than shorter
+horizons. No model has been trained and no performance claim exists.
+
+**Next action.** Build the full development Chronicle feature pack with causal
+market and wallet histories, register Trial T0 training gates and run the first
+train/validation/calibration-only learning test without opening historical test.
+
+## SPH-T-H006: Sphinx Trace S0 Trial T0 Learning Preflight
+
+**Status:** `qualified learning preflight; no promotion`
+**Registered:** 2026-07-17
+
+**Question.** Can the 50 million parameter Sphinx Trace S0-shaped backbone learn
+the registered multi-head Trial T0 targets from causal market and wallet histories
+without consuming test rows or relying on raw wallet identity?
+
+**Controlled change.** Pack the qualified 3,212-row `SPH-T-H005` development
+target index into 224-token sequences: 128 causal market-trade tokens, 32 causal
+wallet-history tokens and 64 market context tokens. Wallet history may use all
+events in the same 1,024-partition deterministic source sample strictly before
+the decision, but raw wallet identifiers and future resolved performance are
+excluded. Train the 48-52 million parameter throughput-qualified backbone with
+eight registered outputs, masked continuous labels and a binary resolution head.
+
+Use train for optimization, validation for checkpoint selection and calibration
+only for a single frozen probability temperature. Do not emit, load or summarize
+test rows. Compare the probability head with the decision-time market probability
+and compare markout heads with a zero-change baseline.
+
+**Acceptance.** The pack must report zero feature-time violations, zero cross-split
+event overlap, zero consumed test rows, exact target hashes and deterministic row
+identity. The model must remain inside 48-52 million trainable parameters, all
+losses must remain finite, train loss must decline and validation plus calibration
+baseline comparisons must be recorded. This preflight cannot promote the model
+regardless of metric direction.
+
+**Falsification.** Invalidate the run if any feature timestamp reaches the decision
+time, raw wallet identity enters a feature, missing labels contribute to loss,
+checkpoint selection observes calibration or test, event groups cross segments,
+or a failed/negative learning result is omitted.
+
+**Evidence boundary.** The wallet history covers a deterministic development
+sample rather than the complete Ledger. Public-trade markouts and fixed costs are
+not executable fills. This run tests the pipeline and learning behavior only.
+
+**Result.** Qualified as pipeline and learning-behavior evidence, not as model
+promotion evidence. The pack reproduced all 3,212 registered development rows
+(2,128 train, 773 validation and 311 calibration) from 1,477,551 Ledger trades.
+It indexed 172,762 wallet histories and reported zero missing histories, feature-
+time violations, event overlaps, raw wallet identity features or consumed test
+rows. Test labels remain unopened.
+
+The measured backbone has 50,213,128 parameters. BF16 training with fused AdamW
+and active `torch.compile` selected epoch 4 by validation loss and stopped after
+epoch 7. Train loss fell from 0.702622 to 0.260836; the best validation loss was
+0.412560. The final successful run took 71.36 seconds and PyTorch reported 2.70
+GB peak allocated and 2.90 GB peak reserved memory. Windows used
+`max-autotune-no-cudagraphs` after the registered CUDA Graph mode failed during
+an earlier diagnostic attempt; the effective mode and failure are not hidden.
+
+The resolution head showed a real development signal. On validation, Brier score
+was 0.121416 versus 0.133705 for the decision-time market price, and log loss was
+0.365398 versus 0.400153. After fitting one temperature on calibration, its
+in-sample calibration Brier was 0.129079 versus 0.136632 for market and log loss
+was 0.382724 versus 0.403911. This does not establish out-of-sample test gain.
+
+The multi-task result is negative: none of the seven markout or net-edge heads
+beat the registered zero-change baseline on validation or calibration. Validation
+also worsened after epoch 4 while train loss continued falling. The checkpoint is
+therefore retained only as a diagnostic artifact and cannot drive calls, paper
+orders or live orders.
+
+**Next action.** Register an ablation that separates the resolution objective
+from markout/edge objectives, adds market-only baselines and fixes target scaling
+and imbalance before expanding Chronicle coverage. Keep the untouched historical
+test closed.
+
+## SPH-T-H007: Terminal-Outcome Wallet-History Ablation
+
+**Status:** `qualified ablation; wallet signal inconclusive; no promotion`
+**Registered:** 2026-07-17
+
+**Amended before training:** 2026-07-17. The product objective was clarified as
+contract selection followed by holding to terminal resolution. No H007 run had
+started. Short-horizon markout prediction was removed from the experiment before
+observing any H007 result.
+
+**Question.** Does causal cross-market wallet history add terminal-outcome signal
+beyond the same within-market flow and context?
+
+**Controlled change.** Reuse the frozen H006 feature pack, backbone, seed,
+optimizer, temporal splits and validation checkpoint rule. Train three matched
+variants: resolution without the 32 wallet-history tokens, resolution with the
+original causal wallet-history tokens and resolution with wallet tokens taken
+from the latest non-future example belonging to a different event. Every variant
+has one terminal `resolved_yes` output. The market and context tokens remain
+unchanged, so this isolates incremental cross-market wallet history rather than
+every within-market participant-flow statistic.
+
+The prior-event control may only use a donor whose decision time is no later than
+the recipient and whose event ID differs. The earliest rows without an eligible
+donor receive zero wallet tokens. No raw wallet identifier or test row may enter
+any variant.
+
+**Acceptance.** Every variant must satisfy the H006 causal and finite-training
+gates, consume zero test rows and save hashed validation predictions. Backbone
+parameter counts may differ by at most 5,000 because the resolution-only output
+layer is narrower. The control must report zero future-time and same-event donor
+violations. Compare uncalibrated validation log loss as the primary metric using
+5,000 deterministic event-group bootstrap samples. Support incremental wallet
+signal only if the upper 95% delta bound is below zero against both the no-wallet
+and prior-event controls. Promotion remains forbidden regardless of direction.
+
+**Falsification.** Reject the comparison if example order differs between runs,
+the control draws from a later decision or the same event, a variant changes the
+backbone or training schedule, row-level bootstrap replaces event-group sampling,
+predictions are not bound by hash, or any test label is opened.
+
+Price is an input cost, not a forecast target. For descriptive contract-selection
+diagnostics, rank the fixed validation rows by the absolute gap between terminal
+probability and the decision-time YES price, choose YES for a positive gap and NO
+otherwise, and compute terminal share PnL at fixed top-score fractions. These
+public-trade prices exclude executable bid/ask, fees, depth and slippage, so the
+diagnostic cannot qualify a betting policy.
+
+**Evidence boundary.** This is a bounded development ablation over sampled public
+trades. It cannot establish executable edge, hidden-insider detection, full-corpus
+generalization or trading performance.
+
+**Result.** Qualified as a controlled negative/inconclusive development result.
+All three 50,208,641-parameter runs completed with finite declining train loss,
+identical validation row order, hashed predictions and zero consumed test rows.
+The prior-event control used 2,122 of 2,128 train rows, 772 of 773 validation
+rows and 306 of 311 calibration rows as causal donors, with zero future-time or
+same-event violations.
+
+On 773 validation examples across 96 event groups, the decision-time market
+baseline had Brier 0.133705 and log loss 0.400153. Resolution without dedicated
+wallet-history tokens reached Brier 0.121999 and log loss 0.393260. Original
+causal wallet history reached Brier 0.127541 and log loss 0.392836. The causal
+prior-event wallet control reached Brier 0.130432 and log loss 0.394623.
+
+The causal-wallet point estimate improved log loss by only 0.000424 against no
+wallet history and 0.001786 against the prior-event control. The registered
+5,000-sample event-group bootstrap intervals were [-0.082541, 0.077149] and
+[-0.108588, 0.094235]. Both cross zero by a wide margin, so the registered
+wallet-signal criterion failed. This pilot does not demonstrate incremental
+cross-market wallet value.
+
+The descriptive hold-to-resolution ranking is unstable. The causal-wallet model
+lost 0.033 shares before costs in its top 1% and gained 4.221 shares on 31.779
+public-price cost in its top 10%. Its top 25% gained 25.339 shares on 95.661 cost,
+but the no-wallet model produced a larger top-25% diagnostic. These validation-
+only figures omit executable bid/ask, depth, fees and slippage and do not qualify
+thresholds, stake sizing or a betting policy.
+
+**Next action.** Build the full outcome-only Chronicle from the complete Ledger
+instead of the 1,024-file pilot, increase independent event coverage and preserve
+the same wallet/no-wallet/prior-event controls. Only then decide whether wallet
+history belongs in full S0 training. Keep the historical test closed.
+
+## SPH-T-H008: Full-Universe Stateful Research Mandate
+
+**Status:** `registered design mandate; no performance evidence`
+**Registered:** 2026-07-17
+
+**Objective.** Maximize net profit after executable costs by selecting a concrete
+Polymarket event outcome and learned position size, or by learning to `SKIP`.
+Compute cost, training time and minimal parameter count are explicitly not model
+objectives. Wrong CALLs are more costly than missed opportunities, while the
+selected policy must retain useful call frequency.
+
+**Scope decision.** Include binary, multi-outcome and neg-risk structures across
+all categories and resolution horizons. Exclude only invalid, cancelled,
+ambiguous or non-replayable records. Permit market question/rules semantics but
+exclude external news. Require point-in-time Polygon funding/transfer graphs and
+permit other-protocol wallet activity with reproducible provenance.
+
+**Architecture decision.** Remove the participant cap through streaming wallet
+memory and chunked latent aggregation. Build the hierarchy `wallet -> market ->
+event -> graph -> universe -> opportunity ranker`, conditioned by separate
+Prediction and Position Books. Preserve the complete prediction trajectory. A
+CALL may update, change side or be cancelled; prior predictions remain internal
+state and cannot become self-confirming market evidence.
+
+New and dust wallets remain visible through novelty, uncertainty, robust
+aggregation and manipulation features. `SKIP`, outcome selection and balance-
+conditioned sizing are learned. Analytical thresholds, category exposure caps and
+position-count caps are not substituted for the model in research simulation.
+The replay engine still enforces cash, point-in-time liquidity, fees, latency,
+slippage, partial fills and data integrity as physical constraints.
+
+**Training decision.** Allow semantic, wallet, graph and market self-supervised
+pretraining; terminal-outcome supervision; cross-sectional ranking; and stateful
+policy learning in a full Polymarket simulator. Compare approximately 50M, 100M
+and 150M candidates and ensembles. Select by locked evidence rather than compute
+cost. Any run longer than two hours must checkpoint complete training and
+simulator state at least every 15 minutes and support graceful exact resume.
+
+**Debugging decision.** Treat prediction debugging as a first-class deliverable.
+Every CALL or `SKIP` must replay from hashed inputs and expose the observed market,
+wallet, graph, semantic, universe and position state; prediction changes; top
+positive, negative and conflicting evidence; graph paths; and counterfactual
+with/without-module results. Attention weights alone are not explanations.
+
+**Evaluation decision.** Primary metric is simulator net profit after executable
+costs. Run every model and baseline through the same simulator. Historical
+promotion requires at least 1,000 calls across 1,000 independent events, a
+positive lower 95% block-bootstrap net-profit bound and improvement over the
+strongest registered baseline. Target at least three median calls per week. Keep
+test labels closed until model, policy, simulator, calibration and source hashes
+are locked. Subsequent production consideration requires at least 90 days and 100
+positive-net-profit paper-forward calls.
+
+**Evidence boundary.** This is a registered research and architecture mandate,
+not evidence that any model is profitable, detects insiders or is ready for test,
+paper execution or production.
+
+**Next action.** Freeze the H008 full Chronicle episode and simulator schemas,
+then profile the complete historical source coverage before choosing the first
+50M/100M/150M pretraining and outcome-training campaign.
+
+## SPH-T-H009: Full Outcome Chronicle
+
+**Status:** `registered; build in progress`
+**Registered:** 2026-07-17
+
+**Question.** Can the complete qualified Atlas and Fast Ledger be transformed
+into a causal, restartable full-universe outcome corpus that preserves every
+public trade and every participant, represents multi-market and neg-risk events,
+keeps the historical test terminal labels physically closed and admits a
+point-in-time Polygon funding and transfer graph?
+
+**Controlled construction.** Treat a Gamma market as a binary condition and
+join markets through shared event IDs into connected event components. Assign an
+entire component to one chronological segment using its latest market close;
+never split linked markets across train, validation, calibration or test. Retain
+all valid Ledger rows in one globally event-time-ordered daily stream. Build a
+reconstructable decision cursor at early powers of two, every 128 later component
+trades and after six hours without a decision. This cursor is an index, not a
+trade or wallet sampling rule.
+
+The collected Atlas snapshot is provenance, not historical state. Mutable
+snapshot values, including current prices, liquidity and post-collection
+metadata, are masked from causal features. Terminal payout vectors may be opened
+for train, validation and calibration only after component assignment. The
+development builder must decide that a component is test before reading its
+terminal price field. Test rows may exist in the unlabeled catalog and trade
+stream, but their terminal values may not be read, emitted or summarized.
+
+Collect Polygon ERC-20 collateral and ERC-1155 conditional-token transfers for
+all unique Ledger participants with block timestamps and transaction/log
+provenance. The graph is mandatory for full qualification. A structural pilot may
+carry an explicit unavailable mask when an archive RPC is absent, but this cannot
+be reported as a completed graph or a fully qualified Chronicle.
+
+**Registered sources.** Atlas contains 1,718,409 markets, 671,186 events and
+3,436,728 tokens. The qualified Fast Ledger contains 176,119,673 public trades
+covering 1,189,164 markets in 57,828 complete scope groups and 123,443 compressed
+files. Exact source and receipt hashes are frozen in
+`configs/corpus/sphinx_chronicle_h009_v1.json`.
+
+**Acceptance.** Preserve exactly 176,119,673 Ledger rows with stable identity and
+global ordering; retain an uncapped participant set; produce linked multi-market
+and neg-risk episodes; report zero component overlap, future-feature violations
+and test-terminal-field access; reproduce completed artifact hashes after a
+restart; checkpoint at atomic scope-run or daily-shard boundaries no more than 15
+minutes apart; and complete the registered Polygon graph backfill before full
+qualification.
+
+**Falsification.** Reject the build if a wallet or trade is sampled away, a
+connected component crosses splits, current Atlas market state is treated as a
+historical feature, any test payout is accessed during development, source rows
+are lost or duplicated, restart changes an artifact, a missing graph channel is
+silently represented as zero activity, or an incomplete build is described as
+model or profitability evidence.
+
+**Evidence boundary.** H009 qualifies data structure and causal replay only. It
+does not show that wallet flow predicts outcomes, identify an insider, establish
+executable fills or costs, open historical test, train a model or demonstrate
+profit.
+
+**Next action.** Complete the registered source audit, build and replay a
+structurally complete pilot, then run the resumable full catalog, trade stream,
+decision index and Polygon backfill.
+
+## SPH-T-H010: Stateful Polymarket Simulator
+
+**Status:** `registered; mechanics implemented; corpus integration pending`
+
+**Registered:** 2026-07-17, before simulator or model-profit results were
+observed.
+
+**Question.** Can every Sphinx candidate and baseline be trained and compared in
+one causal replay system that carries prediction memory, orders, fills, cash,
+positions and resolutions without inventing executable liquidity?
+
+**Frozen mechanics.** The simulator accepts learned CALL, update, cancel, hold,
+reduce, close and `SKIP` decisions. Its deterministic boundary enforces available
+cash and shares, latency, marketable limits, expiry, adverse price movement,
+fees, partial fills, shared liquidity consumption and terminal payouts. There is
+no strategy position, category or correlation cap. Those choices remain model
+outputs; only physical impossibilities are rejected.
+
+Prediction and position state are separate. Each prediction binds to a hashed
+causal input. Orders cannot fill from the decision's own evidence trade, inputs
+must be globally non-decreasing in event time and a liquidity event cannot be
+consumed twice. The full state has a deterministic checkpoint hash and restores
+orders, positions, fills, processed liquidity, marks, cash, PnL and prediction
+memory exactly.
+
+**Two evidence tiers.** The development replay uses later public trades as a
+conservative liquidity proxy with a registered latency, duplication haircut,
+participation fraction, adverse tick, fee and cost stress. It never imputes a
+fill when no eligible later trade exists. This proxy is useful for policy
+iteration but cannot qualify executable historical profit. Simulator
+qualification requires point-in-time orderbook depth from Sphinx Depth or an
+equivalent archive, with real level consumption and missing depth causing order
+rejection.
+
+**Initial result.** Unit replay covers delayed and partial buying, self-fill
+prevention, cash rejection, share reservation, selling, fee and cost-basis
+accounting, expiry, duplicate-liquidity rejection, resolution and exact
+checkpoint restoration. This is an engineering result only. H009 stream and
+terminal labels have not yet been integrated into a full H010 run.
+
+**Next action.** Finish the complete H009 stream, construct event-time simulator
+episodes, register market and wallet baselines, and run development-only
+trade-tape replay before any model campaign. Keep test labels closed.
+
+**Evidence boundary.** H010 mechanics do not establish historical depth,
+executable fills, model quality, profit, untouched-test, paper-forward or
+production evidence.

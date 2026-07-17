@@ -1,0 +1,111 @@
+{
+  "id": "sphinx-trace-s0-trial-t0",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H005",
+  "model_id": "sphinx-trace-s0",
+  "corpus": {
+    "config_id": "sphinx-corpus-s0-fast-v1",
+    "ledger_namespace": "ledger-api-cash-min-25",
+    "manifest_sha256": "be7d5c384fe6a5199e7e575f4dcf16dbbc36b6ee1d0b65de3f654c03eebbb4d5",
+    "window": {
+      "start": "2025-07-16T00:00:00Z",
+      "end_exclusive": "2026-07-16T00:00:00Z"
+    }
+  },
+  "eligibility": {
+    "resolution_status": "resolved",
+    "ordered_outcomes": [
+      "Yes",
+      "No"
+    ],
+    "terminal_probability_minimum": 0.999,
+    "terminal_probability_maximum": 0.001,
+    "require_single_event_id": true
+  },
+  "decision": {
+    "unit": "post_trade_market_state",
+    "minimum_history_trades": 128,
+    "stride_trades": 64,
+    "decision_delay_seconds": 1,
+    "feature_time_rule": "event_time_strictly_before_decision_time",
+    "wallet_reputation": "resolved_before_decision_only",
+    "raw_wallet_id_embedding": false
+  },
+  "targets": {
+    "fair_probability": "resolved_yes",
+    "markout_price_basis": "next_public_trade_yes_equivalent",
+    "markout_executable": false,
+    "horizons": [
+      {
+        "id": "5m",
+        "seconds": 300,
+        "maximum_lag_seconds": 900
+      },
+      {
+        "id": "1h",
+        "seconds": 3600,
+        "maximum_lag_seconds": 10800
+      },
+      {
+        "id": "1d",
+        "seconds": 86400,
+        "maximum_lag_seconds": 172800
+      }
+    ],
+    "directional_flow": "yes_direction_times_yes_markout",
+    "resolved_directional_edge": "yes_direction_times_resolved_yes_minus_decision_yes_price",
+    "net_edge_proxy": {
+      "basis": "resolved_directional_edge_minus_fixed_cost",
+      "fixed_round_trip_cost_bps": 50,
+      "executable_evidence": false
+    },
+    "missing_markout_policy": "nullable_with_mask",
+    "resolution_joined_after_feature_freeze": true
+  },
+  "split": {
+    "type": "chronological_event_grouped",
+    "group_key": "event_id",
+    "group_anchor": "latest_eligible_market_resolution_time",
+    "random_row_split": false,
+    "purge_overlapping_targets": true,
+    "embargo_days": 7,
+    "segments": [
+      {
+        "id": "train",
+        "start": "2025-07-16T00:00:00Z",
+        "end_exclusive": "2026-02-16T00:00:00Z",
+        "allowed_use": "model_fitting_and_train_only_normalization"
+      },
+      {
+        "id": "validation",
+        "start": "2026-02-23T00:00:00Z",
+        "end_exclusive": "2026-04-20T00:00:00Z",
+        "allowed_use": "checkpoint_and_architecture_selection"
+      },
+      {
+        "id": "calibration",
+        "start": "2026-04-27T00:00:00Z",
+        "end_exclusive": "2026-05-25T00:00:00Z",
+        "allowed_use": "probability_threshold_and_policy_selection"
+      },
+      {
+        "id": "test",
+        "start": "2026-06-01T00:00:00Z",
+        "end_exclusive": "2026-07-16T00:00:00Z",
+        "allowed_use": "single_open_after_model_and_policy_hash_lock"
+      }
+    ],
+    "test_labels_opened": false,
+    "development_builder_emits_test_rows": false,
+    "report_test_label_statistics": false
+  },
+  "pilot": {
+    "source_file_selection": "deterministic_uniform_path_spread",
+    "source_file_limit": 1024,
+    "maximum_examples": 8192,
+    "output_format": "zstd_jsonl_target_index",
+    "full_chronicle_output_format": "parquet"
+  },
+  "evidence_boundary": "Target and split qualification only; public-trade markouts and fixed costs are not executable trading evidence."
+}

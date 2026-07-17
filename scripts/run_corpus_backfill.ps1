@@ -3,7 +3,11 @@ param(
     [ValidateSet("atlas", "ledger", "depth", "manifest", "atlas-ledger")]
     [string]$Phase = "atlas-ledger",
     [ValidateSet("fast", "full")]
-    [string]$Profile = "fast"
+    [string]$Profile = "fast",
+    [ValidateRange(0, 256)]
+    [int]$Workers = 0,
+    [ValidateRange(0, 100)]
+    [double]$RequestsPerSecond = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,7 +29,22 @@ New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
 function Invoke-CorpusPhase {
     param([string]$Name)
 
-    & $Python -m sphinx_corpus.cli --config $Config --data-dir $DataDir $Name
+    $Arguments = @(
+        "-m", "sphinx_corpus.cli",
+        "--config", $Config,
+        "--data-dir", $DataDir,
+        $Name
+    )
+    if ($Name -eq "ledger") {
+        if ($Workers -gt 0) {
+            $Arguments += @("--workers", "$Workers")
+        }
+        if ($RequestsPerSecond -gt 0) {
+            $Arguments += @("--requests-per-second", "$RequestsPerSecond")
+        }
+    }
+
+    & $Python @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "Sphinx Corpus phase failed: $Name"
     }

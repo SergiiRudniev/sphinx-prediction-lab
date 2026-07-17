@@ -1,0 +1,53 @@
+{
+  "id": "sphinx-trace-s0-throughput-v1",
+  "version": "1.0.0",
+  "status": "qualified",
+  "research_id": "SPH-T-H003",
+  "registered_at": "2026-07-17T10:40:00Z",
+  "qualified_at": "2026-07-17T11:00:22Z",
+  "source": {
+    "namespace": "normalized/ledger-api-cash-min-25",
+    "sequence_count": 8192,
+    "source_file_limit": 12000,
+    "trade_tokens": 128,
+    "wallet_tokens": 32,
+    "context_tokens": 64,
+    "stride_trades": 64,
+    "feature_width": 16
+  },
+  "model": {
+    "width": 640,
+    "layers": 10,
+    "heads": 10,
+    "head_width": 64,
+    "ffn_width": 1728,
+    "dropout": 0.05,
+    "output_width": 8,
+    "parameter_minimum": 48000000,
+    "parameter_maximum": 52000000
+  },
+  "training": {
+    "precision": "bfloat16",
+    "optimizer": "fused_adamw",
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "batch_size": 32,
+    "preflight_batch_sizes": [16, 32, 64],
+    "warmup_steps": 20,
+    "measured_steps": 1000,
+    "compile_mode": "max-autotune",
+    "loader_workers": 4,
+    "prefetch_factor": 4,
+    "pin_memory": true,
+    "persistent_workers": true
+  },
+  "extrapolation_tokens": [
+    500000000,
+    1000000000,
+    1500000000,
+    2000000000,
+    2500000000,
+    4000000000
+  ],
+  "evidence_boundary": "Engineering throughput only; proxy loss is not model-quality evidence."
+}

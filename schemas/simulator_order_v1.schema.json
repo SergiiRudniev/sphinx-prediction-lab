@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/simulator_order_v1.schema.json",
+  "title": "Sphinx simulator order",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "order_id",
+    "decision_id",
+    "component_id",
+    "condition_id",
+    "token_id",
+    "outcome",
+    "side",
+    "submitted_at_unix",
+    "eligible_at_unix",
+    "expires_at_unix",
+    "requested_shares",
+    "limit_price",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_type": {"const": "simulator_order"},
+    "order_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision_id": {"type": "string", "minLength": 1},
+    "component_id": {"type": "string", "minLength": 1},
+    "condition_id": {"type": "string", "minLength": 1},
+    "token_id": {"type": "string", "minLength": 1},
+    "outcome": {"type": "string", "minLength": 1},
+    "side": {"enum": ["BUY", "SELL"]},
+    "submitted_at_unix": {"type": "integer", "minimum": 0},
+    "eligible_at_unix": {"type": "integer", "minimum": 0},
+    "expires_at_unix": {"type": "integer", "minimum": 0},
+    "requested_shares": {"type": "number", "exclusiveMinimum": 0},
+    "limit_price": {"type": "number", "minimum": 0, "maximum": 1},
+    "status": {"enum": ["PENDING", "PARTIAL", "FILLED", "CANCELLED", "EXPIRED", "REJECTED"]},
+    "filled_shares": {"type": "number", "minimum": 0},
+    "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

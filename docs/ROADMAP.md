@@ -14,7 +14,8 @@
 - [ ] Start append-only Sphinx Pulse collection.
 - [ ] Build Sphinx Depth from live L2 observations.
 - [ ] Construct point-in-time Sphinx Web neighborhoods.
-- [ ] Freeze Sphinx Chronicle v1.
+- [x] Freeze Trial T0 target and chronological split contract.
+- [x] Freeze the H009 full-universe Chronicle contract and schemas.
 
 ## Phase 2 — Baselines
 
@@ -25,10 +26,19 @@
 
 ## Phase 3 — Sphinx Trace S0
 
+- [x] Run the train/validation/calibration-only Trial T0 learning preflight.
+- [x] Run the outcome-only causal wallet-history pilot ablation.
+- [x] Register the full-universe stateful H008 research mandate.
+- [x] Freeze the full Chronicle episode schemas.
+- [ ] Finish the H009 full Ledger stream and required Polygon graph backfill.
+- [x] Freeze the H010 full Polymarket simulator mechanics and schemas.
+- [x] Implement cash, orders, partial fills, positions, resolution and exact resume.
+- [ ] Integrate the H009 event stream with H010 development replay.
+- [ ] Qualify point-in-time execution with historical orderbook depth.
 - [ ] Train market, wallet and graph encoders.
 - [ ] Run matched cross-attention ablations.
 - [ ] Calibrate probability, flow, edge and uncertainty heads.
-- [ ] Freeze the deterministic position policy.
+- [ ] Freeze the learned selective policy and physical execution envelope.
 - [ ] Open the untouched historical test once.
 
 ## Phase 4 — Forward

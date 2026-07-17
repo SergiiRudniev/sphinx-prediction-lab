@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/chronicle_stream_manifest_v1.schema.json",
+  "title": "Sphinx Chronicle chronological stream manifest",
+  "type": "object",
+  "required": ["schema_version", "record_type", "rows", "shards", "globally_ordered"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_type": {"const": "chronicle_stream_manifest"},
+    "rows": {"type": "integer", "minimum": 0},
+    "globally_ordered": {"const": true},
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["date", "path", "rows", "bytes", "sha256"],
+        "properties": {
+          "date": {"type": "string", "format": "date"},
+          "path": {"type": "string"},
+          "rows": {"type": "integer", "minimum": 0},
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

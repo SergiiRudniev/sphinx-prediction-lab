@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/chronicle_episode_v1.schema.json",
+  "title": "Sphinx Chronicle connected event episode",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "record_type",
+    "component_id",
+    "split",
+    "markets",
+    "test_labels_opened"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_type": {"const": "chronicle_episode"},
+    "component_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "event_ids": {"type": "array", "items": {"type": "string"}},
+    "split": {"type": ["string", "null"]},
+    "anchor_closed_at": {"type": ["string", "null"], "format": "date-time"},
+    "neg_risk": {"type": "boolean"},
+    "markets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["condition_id", "market_id", "outcomes", "token_ids", "terminal_label"],
+        "properties": {
+          "condition_id": {"type": "string"},
+          "market_id": {"type": "string"},
+          "outcomes": {"type": "array", "items": {"type": "string"}},
+          "token_ids": {"type": "array", "items": {"type": "string"}},
+          "terminal_label": {
+            "type": ["array", "null"],
+            "items": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    },
+    "test_labels_opened": {"const": false}
+  },
+  "additionalProperties": true
+}

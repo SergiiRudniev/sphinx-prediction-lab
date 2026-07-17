@@ -1,0 +1,73 @@
+{
+  "id": "sphinx-trace-s0-trial-t0-result",
+  "schema_version": "1.0.0",
+  "status": "qualified_learning_preflight",
+  "research_id": "SPH-T-H006",
+  "completed_at": "2026-07-17T16:18:23.289289Z",
+  "config": {
+    "id": "sphinx-trace-s0-trial-t0-train",
+    "sha256": "dc8f642067b3351db3f76e70377ff636a0c92481f9a793ff3cdf6123d6e56c18"
+  },
+  "feature_pack": {
+    "metadata_sha256": "cf859cd54ab322e47529ab8b07eb35131590884750021688fc0f82d4ebcfe259",
+    "source_rows": 1477551,
+    "source_files": 1024,
+    "unique_wallets": 172762,
+    "train_rows": 2128,
+    "validation_rows": 773,
+    "calibration_rows": 311,
+    "test_rows": 0,
+    "causal_feature_violations": 0,
+    "event_overlap_count": 0,
+    "raw_wallet_id_feature": false
+  },
+  "model": {
+    "parameters": 50213128,
+    "checkpoint_bytes": 200886768,
+    "checkpoint_sha256": "cced4a87ee885f1e0602262f2577f4817b7ba105ceb1194df29571d3d1863ffb"
+  },
+  "training": {
+    "best_epoch": 4,
+    "epochs_completed": 7,
+    "elapsed_seconds": 71.35921749999397,
+    "first_train_loss": 0.7026219181160429,
+    "last_train_loss": 0.26083598163590505,
+    "best_validation_loss": 0.4125599441677332,
+    "compile_effective": "max-autotune-no-cudagraphs",
+    "peak_allocated_bytes": 2697499648,
+    "peak_reserved_bytes": 2900361216,
+    "calibration_temperature": 1.3365219256814596
+  },
+  "metrics": {
+    "validation": {
+      "model_brier": 0.12141599883933228,
+      "market_brier": 0.13370466038649614,
+      "model_log_loss": 0.36539817597382973,
+      "market_log_loss": 0.4001530617028764,
+      "continuous_heads_better_than_zero_baseline": 0,
+      "continuous_heads_total": 7
+    },
+    "calibration_in_sample": {
+      "model_brier": 0.12907880297993213,
+      "market_brier": 0.136632470384944,
+      "model_log_loss": 0.382723709888378,
+      "market_log_loss": 0.40391116635117613,
+      "continuous_heads_better_than_zero_baseline": 0,
+      "continuous_heads_total": 7
+    }
+  },
+  "gates": {
+    "causal_feature_violations_zero": true,
+    "event_overlap_zero": true,
+    "test_rows_consumed_zero": true,
+    "parameter_count_in_range": true,
+    "finite_losses": true,
+    "training_loss_declined": true,
+    "baseline_metrics_recorded": true
+  },
+  "run_result_sha256": "d36daa0d91c86cc754eac78e18066c39d4312da083637ee07b3d152aee4099e1",
+  "calibration_receipt_sha256": "60a50da3dcb28dd37d741a76177a2180f7ac9fc63af7af4047abe878eb1f154f",
+  "decision": "diagnostic_only_no_promotion",
+  "test_labels_opened": false,
+  "evidence_boundary": "A bounded learning preflight over sampled public trades. It is not executable-price, trading, promotion or untouched-test evidence."
+}

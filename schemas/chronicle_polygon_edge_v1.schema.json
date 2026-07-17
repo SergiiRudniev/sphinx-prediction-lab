@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SergiiRudniev/sphinx-prediction-lab/schemas/chronicle_polygon_edge_v1.schema.json",
+  "title": "Sphinx Chronicle point-in-time Polygon graph edge",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "record_type",
+    "edge_id",
+    "chain_id",
+    "edge_type",
+    "block_number",
+    "timestamp_unix",
+    "transaction_hash",
+    "log_index",
+    "source_address",
+    "target_address",
+    "contract_address"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_type": {"const": "chronicle_polygon_edge"},
+    "edge_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "chain_id": {"const": 137},
+    "edge_type": {"type": "string"},
+    "block_number": {"type": "integer", "minimum": 0},
+    "timestamp_unix": {"type": "integer", "minimum": 0},
+    "transaction_hash": {"type": "string"},
+    "log_index": {"type": "integer", "minimum": 0},
+    "source_address": {"type": "string"},
+    "target_address": {"type": "string"},
+    "contract_address": {"type": "string"},
+    "token_id": {"type": ["string", "null"]},
+    "amount": {"type": ["string", "null"]},
+    "observed_via": {"type": "string"}
+  },
+  "additionalProperties": false
+}

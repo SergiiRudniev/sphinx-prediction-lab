@@ -112,11 +112,7 @@ class DepthBackfill:
                 partition = f"start={start_ts}-end={end_ts}"
                 directory = f"token={token_id}"
                 raw_path = (
-                    self.config.data_dir
-                    / "raw"
-                    / "depth"
-                    / directory
-                    / f"{partition}.json.zst"
+                    self.config.data_dir / "raw" / "depth" / directory / f"{partition}.json.zst"
                 )
                 normalized_path = (
                     self.config.data_dir
