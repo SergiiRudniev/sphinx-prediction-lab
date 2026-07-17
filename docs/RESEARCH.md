@@ -733,16 +733,27 @@ produced the same completed-output hashes. The repeated run finished in 71.47
 seconds and reported `output_hashes_match_previous=true`. This validates the
 builder and resume boundary, not predictive quality.
 
-The public CryptoHouse actor source exposed a shared 120-query/hour quota. The
-initial 512-way plan was replaced by 32 hash partitions: it retains every actor
-while reducing the seven-window build from 3,584 to 224 queries. The collector
-now recognizes the quota reset time, checkpoints progress and waits without
-discarding completed partitions.
+**Resolved-performance result.** The complete causal ledger read exactly
+141,033,306 selected source trades across 51,683 scope groups, excluded 363,279
+post-resolution rows and emitted 30,058,318 wallet/market resolution updates in
+310 daily shards. A cached full replay finished in 77.32 seconds and reproduced
+the same shard-receipt digest
+`124b6091b2fa0e2604fa0b54637966d22b1b7d86282a369819ebe088c8a5084f`.
+The manifest is valid and complete with test terminal access remaining false.
 
-**Next action.** Finish the actor and resolution contexts, run and replay the
-complete feature pack, then train the matched 50M market-only and uncapped-wallet
-flow pair. Add causal resolved performance next; keep the Polygon graph variant
-blocked until its source is complete.
+The public CryptoHouse actor source exposed a shared 120-query/hour quota and a
+976.56 KiB response limit. The collector begins with 32 hash partitions,
+preserves every completed partition and deterministically splits only oversized
+buckets into disjoint 64-way leaves, recursively if required. Result-limit
+failures are no longer retried unchanged. The collector recognizes the quota
+reset time, checkpoints the adaptive leaf plan and waits without discarding
+completed actors. This changes query shape only; no actor is capped or sampled.
+
+**Next action.** Run and replay the complete resolution-backed feature pack,
+then train the matched 50M market-only, uncapped-wallet-flow and causal resolved-
+performance variants. Finish the quota-aware actor context in parallel and add
+its matched variant; keep the Polygon graph variant blocked until its source is
+complete.
 
 **Evidence boundary.** H011 validation and conservative trade-tape replay cannot
 establish untouched-test, historical orderbook depth, executable profit,

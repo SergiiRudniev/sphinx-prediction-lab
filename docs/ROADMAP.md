@@ -37,6 +37,7 @@
 - [ ] Integrate the H009 event stream with H010 development replay.
 - [ ] Qualify point-in-time execution with historical orderbook depth.
 - [x] Implement the uncapped H011 recurrent feature kernel and 50M/100M/150M backbones.
+- [x] Build and hash-replay the full causal wallet-resolution context.
 - [ ] Train market, wallet and graph encoders.
 - [ ] Run matched cross-attention ablations.
 - [ ] Calibrate probability, flow, edge and uncertainty heads.

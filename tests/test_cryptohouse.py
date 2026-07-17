@@ -11,6 +11,7 @@ from sphinx_corpus.cryptohouse import (
     CryptoHouseClient,
     CryptoHouseError,
     CryptoHouseQuotaError,
+    CryptoHouseResultLimitError,
     single_array,
 )
 
@@ -78,6 +79,10 @@ def test_actor_query_is_partitioned_and_rows_are_available_after_window() -> Non
     assert rows[0]["available_at"] == "2025-08-01T00:00:00Z"
     assert rows[0]["maker_fills"] == 2
 
+    left, right = task.split()
+    assert (left.partition, left.partitions) == (7, 1024)
+    assert (right.partition, right.partitions) == (519, 1024)
+
 
 def test_quota_response_is_not_retried_immediately() -> None:
     calls = 0
@@ -100,3 +105,23 @@ def test_quota_response_is_not_retried_immediately() -> None:
         client.close()
     assert calls == 1
     assert raised.value.reset_at == datetime(2099, 1, 1, tzinfo=UTC)
+
+
+def test_result_limit_response_is_not_retried_immediately() -> None:
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            500,
+            text="DB::Exception: Limit for result exceeded (TOO_MANY_ROWS_OR_BYTES)",
+        )
+
+    client = CryptoHouseClient(retries=5, transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(CryptoHouseResultLimitError):
+            client.query_json("SELECT 1")
+    finally:
+        client.close()
+    assert calls == 1
