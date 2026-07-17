@@ -768,3 +768,42 @@ complete.
 **Evidence boundary.** H011 validation and conservative trade-tape replay cannot
 establish untouched-test, historical orderbook depth, executable profit,
 paper-forward performance, insider attribution or production readiness.
+
+## SPH-T-H012: Portfolio-Aware Selective Policy
+
+**Status:** `registered; implementation pending H011 outcome evidence`
+
+**Registered:** 2026-07-17, before full H011 outcome or profit metrics were
+observed.
+
+**Question.** Can one learned, portfolio-aware policy turn calibrated H011
+outcome state into profitable `CALL_YES`, `CALL_NO` and `SKIP` decisions, revise
+earlier calls and size multiple concurrent positions without fixed confidence,
+edge, category or position limits?
+
+**Controlled construction.** Warm-start the selected H011 backbone, add causal
+portfolio and prior-prediction state, and train categorical action plus beta-size
+outputs against the exact H010 development replay. The model sees current cash
+and equity. The only hard rejections are physical cash, share, time and observed-
+liquidity constraints. There is no call-frequency bonus, skip penalty, fixed
+threshold or fixed bet size. Reward is the change in net liquidation value after
+registered latency, fill, adverse-price and fee costs.
+
+Fit policy only on the early component-time block of validation, select on its
+later disjoint block and use calibration as the final development audit. Keep
+test physically closed. All model and baseline candidates must consume identical
+liquidity events through H010.
+
+**Acceptance.** Promotion requires positive calibration net profit under cost
+stress, a positive component-block-bootstrap lower 95% profit bound and
+outperformance of both current market probability and the strongest learned
+baseline. CALL frequency is reported, not hardcoded; the policy must earn useful
+weekly profit by choosing when evidence is sufficient.
+
+**Next action.** Complete the H011 outcome ablations, implement the H009/H010
+event-time adapter and train the first portfolio-aware selective policy without
+opening test.
+
+**Evidence boundary.** Trade-tape development profit cannot establish historical
+orderbook executability, untouched-test performance, paper-forward profit,
+insider attribution or production safety.
