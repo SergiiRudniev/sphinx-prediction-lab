@@ -30,11 +30,13 @@
 - [x] Run the outcome-only causal wallet-history pilot ablation.
 - [x] Register the full-universe stateful H008 research mandate.
 - [x] Freeze the full Chronicle episode schemas.
-- [ ] Finish the H009 full Ledger stream and required Polygon graph backfill.
+- [x] Finish and deep-hash validate the H009 full Ledger stream and decisions.
+- [ ] Finish the required H009 Polygon graph backfill.
 - [x] Freeze the H010 full Polymarket simulator mechanics and schemas.
 - [x] Implement cash, orders, partial fills, positions, resolution and exact resume.
 - [ ] Integrate the H009 event stream with H010 development replay.
 - [ ] Qualify point-in-time execution with historical orderbook depth.
+- [x] Implement the uncapped H011 recurrent feature kernel and 50M/100M/150M backbones.
 - [ ] Train market, wallet and graph encoders.
 - [ ] Run matched cross-attention ablations.
 - [ ] Calibrate probability, flow, edge and uncertainty heads.

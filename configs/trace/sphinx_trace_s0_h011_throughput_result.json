@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "record_type": "h011_synthetic_throughput_result",
+  "research_id": "SPH-T-H011",
+  "measured_at": "2026-07-17T22:48:00Z",
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "gpu_memory_gib": 12,
+    "precision": "bf16_mixed",
+    "candidate": "50m",
+    "parameters": 50248198,
+    "sequence_tokens": 14,
+    "feature_width": 128,
+    "optimizer": "AdamW"
+  },
+  "measurements": [
+    {
+      "batch_size": 512,
+      "examples_per_second": 6446.447865577197,
+      "step_seconds": 0.07942358500004047,
+      "peak_allocated_gib": 3.526096820831299,
+      "peak_reserved_gib": 3.787109375
+    },
+    {
+      "batch_size": 1024,
+      "examples_per_second": 6309.471894438723,
+      "step_seconds": 0.16229567499976838,
+      "peak_allocated_gib": 6.183038234710693,
+      "peak_reserved_gib": 6.49609375
+    },
+    {
+      "batch_size": 2048,
+      "examples_per_second": 498.11136503436603,
+      "step_seconds": 4.111530360000325,
+      "peak_allocated_gib": 11.59699010848999,
+      "peak_reserved_gib": 11.896484375
+    }
+  ],
+  "selected_batch_size": 512,
+  "decision": "Use batch 512 for the first 50M run; 1024 has no throughput gain and 2048 enters the 12 GiB memory cliff.",
+  "evidence_boundary": "Synthetic compute-only throughput. Full pack decoding, evaluation, convergence and wall-clock training time remain unmeasured."
+}

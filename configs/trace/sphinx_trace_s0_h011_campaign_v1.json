@@ -1,0 +1,151 @@
+{
+  "id": "sphinx-trace-s0-h011-campaign-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H011",
+  "registered_at": "2026-07-17T21:42:00Z",
+  "question": "Does uncapped causal participant flow, prior resolved performance and temporal graph context improve terminal outcome selection and development simulator profit beyond market-only evidence?",
+  "dependencies": {
+    "mandate": {
+      "id": "sphinx-trace-research-mandate-v1",
+      "sha256": "155a4c4f9ca34f04600c7a002853ef8e334ee2a621a6443edbeefb2097d04b91"
+    },
+    "chronicle": {
+      "id": "sphinx-chronicle-h009-v1",
+      "sha256": "d8fdbe7a310cd3bd6df11b219e2b63bc0d416434a12e11b55b765d0c5a495493"
+    },
+    "simulator": {
+      "id": "sphinx-trace-simulator-h010-v1",
+      "sha256": "9378e2efda75695fd2c8d95f8d8069c14bb8e3cdf2d318c19923fb5d2dfefee6"
+    }
+  },
+  "data": {
+    "splits": ["train", "validation", "calibration"],
+    "test_labels_opened": false,
+    "test_terminal_fields_accessed": false,
+    "all_h009_ledger_rows_processed": true,
+    "hard_trade_cap": null,
+    "hard_wallet_cap": null,
+    "hard_market_cap": null,
+    "decision_source": "h009_adaptive_post_trade_component_cursor",
+    "supervised_unit": "evidence_condition_at_component_decision",
+    "same_second_ordering": "deterministic_replay_order_without_causal_precedence_claim",
+    "market_text": "masked_until_point_in_time_semantic_provenance_exists",
+    "external_news": false
+  },
+  "causal_state": {
+    "wallet_identity_embedding": false,
+    "every_valid_trade_updates_wallet_market_event_and_universe_state": true,
+    "wallet_state": [
+      "activity_count_and_notional",
+      "buy_sell_and_outcome_flow",
+      "recency_and_interarrival",
+      "market_and_event_breadth",
+      "size_and_price_moments",
+      "prior_resolved_directional_edge",
+      "prior_resolved_calibration_and_pnl_proxy",
+      "novelty_and_uncertainty",
+      "temporal_graph_and_counterparty_state_when_available"
+    ],
+    "resolution_update_rule": "wallet_performance_changes_only_after_registered_public_resolution_time",
+    "market_state": [
+      "last_trade_probability",
+      "multi_scale_returns_and_velocity",
+      "volume_and_flow_imbalance",
+      "unique_participant_and_concentration_moments",
+      "wallet_state_deepset_moments",
+      "lifecycle_and_structure"
+    ],
+    "event_state": "recurrent_aggregation_of_every_linked_market_without_outcome_count_cap",
+    "universe_state": "chunked_cross_event_latent_memory",
+    "state_backend": "compact_array_and_memory_mapped_state_with_deterministic_wallet_and_market_ids"
+  },
+  "feature_pack": {
+    "format": "sharded_memory_mapped_tensors_with_json_receipts",
+    "continuous_precision": "float32_build_float16_or_bfloat16_train",
+    "normalization": "train_only_robust_statistics",
+    "categorical_hashing": "structure_and_provenance_only_not_wallet_identity",
+    "all_rows_retained_in_authoritative_stream": true,
+    "all_decisions_retained": true,
+    "loss_weighting": "component_and_lifecycle_balanced_without_dropping_rows",
+    "atomic_daily_resume": true,
+    "checkpoint_maximum_interval_seconds": 900
+  },
+  "variants": [
+    {
+      "id": "h011_market_only",
+      "wallet_flow": false,
+      "prior_resolved_wallet_performance": false,
+      "temporal_graph": false
+    },
+    {
+      "id": "h011_uncapped_wallet_flow",
+      "wallet_flow": true,
+      "prior_resolved_wallet_performance": false,
+      "temporal_graph": false
+    },
+    {
+      "id": "h011_causal_wallet_performance",
+      "wallet_flow": true,
+      "prior_resolved_wallet_performance": true,
+      "temporal_graph": false
+    },
+    {
+      "id": "h011_temporal_graph",
+      "wallet_flow": true,
+      "prior_resolved_wallet_performance": true,
+      "temporal_graph": true
+    }
+  ],
+  "architecture": {
+    "family": "Sphinx Trace S0",
+    "components": [
+      "streaming_wallet_state_encoder",
+      "linear_cost_wallet_to_market_latent_aggregator",
+      "multi_scale_market_memory",
+      "stateful_linked_market_event_encoder",
+      "chunked_universe_latents",
+      "opportunity_ranker",
+      "terminal_probability_uncertainty_sufficiency_and_size_heads"
+    ],
+    "quadratic_attention_over_raw_wallets": false,
+    "candidate_parameter_targets": [50000000, 100000000, 150000000],
+    "first_candidate_target": 50000000,
+    "ensembles_allowed_after_single_model_ablation": true,
+    "capacity_selection_ignores_compute_cost": true
+  },
+  "training": {
+    "stages": [
+      "masked_event_and_next_flow_pretraining",
+      "terminal_outcome_and_uncertainty_supervision",
+      "cross_sectional_opportunity_ranking",
+      "selective_call_skip_and_sizing_in_h010"
+    ],
+    "optimizer": "AdamW",
+    "precision": "bf16_mixed",
+    "gradient_checkpointing_allowed": true,
+    "compiled_training_allowed": true,
+    "exact_resume_required": true,
+    "checkpoint_maximum_interval_seconds": 900,
+    "training_time_budget": null,
+    "seed_set": [17, 29, 43]
+  },
+  "selection": {
+    "development_primary": "h010_net_profit_after_registered_proxy_costs",
+    "required_probability_metrics": ["log_loss", "brier", "calibration_error"],
+    "market_baseline": "last_causal_trade_probability_for_the_same_contract",
+    "wallet_increment_supported_if": "paired_component_block_bootstrap_upper_95pct_log_loss_delta_below_zero_and_positive_simulator_profit_delta",
+    "wrong_call_priority": "higher_than_missed_opportunity",
+    "minimum_median_calls_per_week_target": 3,
+    "test_opening_allowed": false
+  },
+  "falsification": [
+    "any_future_trade_graph_resolution_or_mutable_atlas_state_enters_features",
+    "any_wallet_market_trade_or_decision_is_hard_capped_or_silently_sampled",
+    "wallet_variant_does_not_beat_market_only_under_paired_component_bootstrap",
+    "profit_disappears_under_registered_cost_stress",
+    "result_depends_on_raw_wallet_identity_embedding",
+    "resume_changes_feature_checkpoint_or_model_hash"
+  ],
+  "evidence_boundary": "H011 is a development campaign. Validation and conservative trade-tape simulation may choose features and capacity but cannot establish untouched-test, executable-depth, paper-forward, insider-attribution or production profit."
+}
