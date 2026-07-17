@@ -1,0 +1,126 @@
+{
+  "id": "sphinx-trace-s0-h012-selective-policy-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H012",
+  "registered_at": "2026-07-17T23:43:30Z",
+  "objective": "learn_portfolio_aware_CALL_YES_CALL_NO_SKIP_and_sizing_for_maximum_net_profit_after_costs",
+  "dependencies": {
+    "simulator": {
+      "id": "sphinx-trace-simulator-h010-v1",
+      "sha256": "9378e2efda75695fd2c8d95f8d8069c14bb8e3cdf2d318c19923fb5d2dfefee6"
+    },
+    "feature_pack": {
+      "id": "sphinx-trace-s0-h011-pack-v1",
+      "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+    },
+    "outcome_model": {
+      "id": "sphinx-trace-s0-h011-model-v1",
+      "sha256": "d9797557fa2a5e42d7a209b755e54fb497a065d722188c2dd26d0616fb0162ea"
+    },
+    "outcome_training": {
+      "id": "sphinx-trace-s0-h011-train-v1",
+      "sha256": "78ef7de7e69ba9a62e3368b0db82d3e88f19e47e759e140954a2fb9366f1e571"
+    }
+  },
+  "causal_data": {
+    "outcome_backbone_fit_split": "train",
+    "policy_fit_split": "validation_early_component_time_block",
+    "policy_selection_split": "validation_late_component_time_block",
+    "development_audit_split": "calibration",
+    "test_opened": false,
+    "terminal_fields_available_only_after_public_resolution": true,
+    "component_groups_never_cross_internal_policy_blocks": true
+  },
+  "state": {
+    "market_latent": "selected_H011_outcome_backbone_causal_latent",
+    "portfolio_inputs": [
+      "cash_fraction",
+      "equity_fraction",
+      "gross_cost_fraction",
+      "marked_exposure_fraction",
+      "unrealized_return",
+      "realized_return",
+      "drawdown_fraction",
+      "open_position_count_log1p",
+      "pending_order_count_log1p"
+    ],
+    "prediction_memory_inputs": [
+      "previous_action",
+      "previous_probability",
+      "previous_size_fraction",
+      "seconds_since_prediction_log1p",
+      "position_exists",
+      "position_fraction",
+      "average_entry_price",
+      "current_mark"
+    ],
+    "current_balance_visible_to_model": true
+  },
+  "policy": {
+    "actions": ["CALL_YES", "CALL_NO", "SKIP", "UPDATE", "HOLD", "REDUCE", "CLOSE"],
+    "call_or_skip": "learned_categorical_output_not_fixed_threshold",
+    "side": "learned_yes_no_output",
+    "size": "learned_beta_fraction_of_current_available_equity",
+    "multiple_concurrent_positions": true,
+    "prediction_revision": true,
+    "strategy_position_cap": null,
+    "strategy_category_cap": null,
+    "strategy_correlation_cap": null,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_bet_size": null
+  },
+  "architecture": {
+    "shared_outcome_backbone": true,
+    "portfolio_encoder_width": 256,
+    "prediction_memory_encoder_width": 256,
+    "fusion_latents": 4,
+    "fusion_layers": 4,
+    "debug_action_logits": true,
+    "debug_size_distribution": true,
+    "debug_portfolio_token": true,
+    "integrated_gradients_and_group_ablations": true
+  },
+  "training": {
+    "method": "recurrent_clipped_policy_gradient_against_exact_H010_development_replay",
+    "primary_reward": "change_in_net_liquidation_value_after_all_registered_costs",
+    "wrong_call_has_realized_negative_reward": true,
+    "skip_reward": 0.0,
+    "call_frequency_bonus": 0.0,
+    "hardcoded_frequency_target": null,
+    "cost_stress_multipliers_sampled_during_fit": [1.0, 1.5, 2.0],
+    "terminal_discount": 1.0,
+    "exact_resume": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "execution_boundary": {
+    "physical_cash_and_share_constraints_only": true,
+    "latency_partial_fill_and_liquidity_consumption": true,
+    "missing_liquidity_rejects_order": true,
+    "decision_evidence_trade_cannot_fill_its_own_order": true,
+    "trade_tape_proxy_is_not_executable_profit_evidence": true
+  },
+  "evaluation": {
+    "primary": "weekly_net_profit_after_costs",
+    "required": [
+      "net_profit",
+      "weekly_profit_distribution",
+      "maximum_drawdown",
+      "profit_factor",
+      "CALL_precision",
+      "CALL_frequency",
+      "SKIP_frequency",
+      "independent_event_breadth",
+      "component_block_bootstrap_95pct_interval",
+      "cost_stress",
+      "market_baseline_delta",
+      "strongest_learned_baseline_delta"
+    ],
+    "test_opening_allowed": false,
+    "promotion_requires_positive_lower_95pct_profit_bound": true,
+    "promotion_requires_baseline_outperformance": true
+  },
+  "evidence_boundary": "H012 development replay can select a learned policy but cannot establish historical orderbook executability, untouched-test performance, paper-forward profit, insider attribution or production safety."
+}

@@ -41,6 +41,7 @@
 - [ ] Train market, wallet and graph encoders.
 - [ ] Run matched cross-attention ablations.
 - [ ] Calibrate probability, flow, edge and uncertainty heads.
+- [x] Register the portfolio-aware learned CALL/NO/SKIP and sizing campaign.
 - [ ] Freeze the learned selective policy and physical execution envelope.
 - [ ] Open the untouched historical test once.
 
