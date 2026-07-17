@@ -161,3 +161,41 @@ def test_day_builder_rejects_decision_trade_mismatch(tmp_path: Path) -> None:
             output_dir=tmp_path / "output",
             emit=True,
         )
+
+
+def test_day_builder_keeps_and_counts_out_of_range_source_price(tmp_path: Path) -> None:
+    stream = tmp_path / "stream.jsonl.zst"
+    decisions = tmp_path / "decisions.jsonl.zst"
+    write_jsonl_zst(stream, [_trade("anomaly", "0xa", 100, 0, "1.1140588235")])
+    write_jsonl_zst(
+        decisions,
+        [
+            {
+                "decision_id": "decision",
+                "component_id": "component",
+                "decision_time_unix": 100,
+                "feature_max_event_time_unix": 100,
+                "evidence_trade_id": "anomaly",
+                "stream_row": 0,
+            }
+        ],
+    )
+    receipt = _process_day(
+        date="1970-01-01",
+        stream_path=stream,
+        expected_stream_rows=1,
+        decision_path=decisions,
+        index=_index(),
+        state=RecurrentState.empty(_index()),
+        kernel=python_h011_kernel(),
+        chunk_rows=10,
+        actor_enabled=False,
+        resolution=_empty_resolution(),
+        output_dir=tmp_path / "output",
+        emit=True,
+    )
+    features = np.load(tmp_path / "output" / "shards" / "date=1970-01-01" / "features.npy")
+    assert receipt["source_price_anomaly_rows"] == 1
+    assert receipt["stream_rows"] == 1
+    assert features[0, 11] == 1.0
+    assert features[0, 12] == 1.0

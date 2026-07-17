@@ -1,59 +1,59 @@
 {
-  "id": "sphinx-trace-s0-h011-model-v1",
-  "version": "1.0.0-registered",
-  "status": "registered",
-  "research_id": "SPH-T-H011",
-  "registered_at": "2026-07-17T22:35:00Z",
-  "dependencies": {
-    "campaign": {
-      "id": "sphinx-trace-s0-h011-campaign-v1",
-      "sha256": "bae924dd1b8788ec5254cb0e532696eb762e1abeab0d66d63f339de0ad78917e"
+    "id": "sphinx-trace-s0-h011-model-v1",
+    "version": "1.0.0-registered",
+    "status": "registered",
+    "research_id": "SPH-T-H011",
+    "registered_at": "2026-07-17T22:35:00Z",
+    "dependencies": {
+        "campaign": {
+            "id": "sphinx-trace-s0-h011-campaign-v1",
+            "sha256": "bae924dd1b8788ec5254cb0e532696eb762e1abeab0d66d63f339de0ad78917e"
+        },
+        "feature_pack": {
+            "id": "sphinx-trace-s0-h011-pack-v1",
+            "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+        }
     },
-    "feature_pack": {
-      "id": "sphinx-trace-s0-h011-pack-v1",
-      "sha256": "77b6741dc93e21150fead67e9345b63e848b1381e99452db5efa36c29c9f8b1a"
-    }
-  },
-  "input": {
-    "feature_width": 128,
-    "groups": [
-      {"id": "clock", "start": 0, "stop": 8},
-      {"id": "market", "start": 8, "stop": 48},
-      {"id": "component", "start": 48, "stop": 72},
-      {"id": "evidence_wallet", "start": 72, "stop": 100},
-      {"id": "wallet_set", "start": 100, "stop": 116},
-      {"id": "universe", "start": 116, "stop": 128}
+    "input": {
+        "feature_width": 128,
+        "groups": [
+            {"id": "clock", "start": 0, "stop": 8},
+            {"id": "market", "start": 8, "stop": 48},
+            {"id": "component", "start": 48, "stop": 72},
+            {"id": "evidence_wallet", "start": 72, "stop": 100},
+            {"id": "wallet_set", "start": 100, "stop": 116},
+            {"id": "universe", "start": 116, "stop": 128}
+        ],
+        "raw_wallet_identity": false,
+        "normalization": "bound_H011_train_only_median_iqr"
+    },
+    "architecture": {
+        "latent_tokens": 8,
+        "dropout": 0.05,
+        "candidates": [
+            {"id": "50m", "width": 512, "heads": 8, "layers": 14, "ffn_width": 1536},
+            {"id": "100m", "width": 640, "heads": 10, "layers": 18, "ffn_width": 1920},
+            {"id": "150m", "width": 768, "heads": 12, "layers": 20, "ffn_width": 2304}
+        ],
+        "quadratic_attention_over_raw_wallets": false,
+        "attention_domain": "six_recurrent_information_groups_plus_learned_latents",
+        "debug_attention_available": true,
+        "integrated_gradient_compatible": true
+    },
+    "heads": [
+        "terminal_outcome_logit",
+        "uncertainty_log_scale",
+        "call_sufficiency_logit",
+        "expected_net_edge",
+        "position_size_beta_alpha",
+        "position_size_beta_beta"
     ],
-    "raw_wallet_identity": false,
-    "normalization": "bound_H011_train_only_median_iqr"
-  },
-  "architecture": {
-    "latent_tokens": 8,
-    "dropout": 0.05,
-    "candidates": [
-      {"id": "50m", "width": 512, "heads": 8, "layers": 14, "ffn_width": 1536},
-      {"id": "100m", "width": 640, "heads": 10, "layers": 18, "ffn_width": 1920},
-      {"id": "150m", "width": 768, "heads": 12, "layers": 20, "ffn_width": 2304}
-    ],
-    "quadratic_attention_over_raw_wallets": false,
-    "attention_domain": "six_recurrent_information_groups_plus_learned_latents",
-    "debug_attention_available": true,
-    "integrated_gradient_compatible": true
-  },
-  "heads": [
-    "terminal_outcome_logit",
-    "uncertainty_log_scale",
-    "call_sufficiency_logit",
-    "expected_net_edge",
-    "position_size_beta_alpha",
-    "position_size_beta_beta"
-  ],
-  "variant_masks": {
-    "h011_market_only": "clock_and_market_only",
-    "h011_uncapped_wallet_flow": "mask_resolution_actor_and_graph_channels",
-    "h011_causal_wallet_performance": "mask_actor_and_graph_channels",
-    "h011_actor_context": "mask_graph_channel",
-    "h011_temporal_graph": "requires_complete_polygon_feature_extension"
-  },
-  "evidence_boundary": "Architecture registration only. Parameter count, convergence, calibration, selective calls, sizing and simulator profit require measured receipts."
+    "variant_masks": {
+        "h011_market_only": "clock_and_market_only",
+        "h011_uncapped_wallet_flow": "mask_resolution_actor_and_graph_channels",
+        "h011_causal_wallet_performance": "mask_actor_and_graph_channels",
+        "h011_actor_context": "mask_graph_channel",
+        "h011_temporal_graph": "requires_complete_polygon_feature_extension"
+    },
+    "evidence_boundary": "Architecture registration only. Parameter count, convergence, calibration, selective calls, sizing and simulator profit require measured receipts."
 }

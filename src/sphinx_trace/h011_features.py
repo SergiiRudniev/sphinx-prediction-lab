@@ -172,6 +172,7 @@ class ParsedTrade:
     outcome_index: int
     side_buy: int
     direction_outcome0: int
+    source_price_anomaly: bool
 
 
 def parse_trade_payload(payload: dict[str, Any]) -> ParsedTrade:
@@ -193,23 +194,28 @@ def parse_trade_payload(payload: dict[str, Any]) -> ParsedTrade:
         raise ValueError("Ledger trade has an empty identity field")
     if side not in {"BUY", "SELL"} or outcome_index not in {0, 1}:
         raise ValueError("Ledger trade has an unsupported side or outcome index")
-    if not 0.0 < raw_price < 1.0 or size <= 0.0 or notional <= 0.0:
+    if not all(math.isfinite(value) for value in (raw_price, size, notional)):
+        raise ValueError("Ledger trade has non-finite numeric values")
+    if size <= 0.0 or notional <= 0.0:
         raise ValueError("Ledger trade has values outside the registered domain")
+    source_price_anomaly = not 0.0 <= raw_price <= 1.0
+    model_price = min(1.0, max(0.0, raw_price))
     side_buy = int(side == "BUY")
     direction = 1 if side_buy == int(outcome_index == 0) else -1
-    probability = raw_price if outcome_index == 0 else 1.0 - raw_price
+    probability = model_price if outcome_index == 0 else 1.0 - model_price
     return ParsedTrade(
         trade_id=trade_id,
         condition_id=condition_id,
         wallet=wallet,
         timestamp_unix=timestamp_unix,
-        raw_price=raw_price,
+        raw_price=model_price,
         outcome0_probability=probability,
         size=size,
         notional=notional,
         outcome_index=outcome_index,
         side_buy=side_buy,
         direction_outcome0=direction,
+        source_price_anomaly=source_price_anomaly,
     )
 
 

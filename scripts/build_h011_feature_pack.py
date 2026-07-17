@@ -39,6 +39,19 @@ DEFAULT_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_pack_v1.json
 DEFAULT_H009_CONFIG = ROOT / "configs" / "corpus" / "sphinx_chronicle_h009_v1.json"
 SPLIT_CODES = {None: 0, "train": 1, "validation": 2, "calibration": 3, "test": 4}
 DEVELOPMENT_SPLITS = frozenset({"train", "validation", "calibration"})
+IMPLEMENTATION_PATHS = (
+    Path(__file__).resolve(),
+    ROOT / "src" / "sphinx_trace" / "h011_features.py",
+    ROOT / "src" / "sphinx_trace" / "h011_kernel.py",
+    ROOT / "src" / "sphinx_trace" / "h011_sources.py",
+)
+
+
+def _implementation_hash() -> str:
+    digest = hashlib.sha256()
+    for path in IMPLEMENTATION_PATHS:
+        digest.update(f"{path.name}:{sha256_file(path)}\n".encode())
+    return digest.hexdigest()
 
 
 @dataclass(slots=True)
@@ -472,6 +485,7 @@ def _checkpoint_arrays(path: Path, state: RecurrentState) -> None:
 def _save_checkpoint(
     output_dir: Path,
     config_hash: str,
+    implementation_hash: str,
     stream_scope_digest: str,
     stream_manifest_sha256: str,
     decision_manifest_sha256: str,
@@ -488,6 +502,7 @@ def _save_checkpoint(
         "record_type": "h011_feature_state_checkpoint",
         "generated_at": now_utc(),
         "config_sha256": config_hash,
+        "implementation_sha256": implementation_hash,
         "stream_scope_digest": stream_scope_digest,
         "stream_manifest_sha256": stream_manifest_sha256,
         "decision_manifest_sha256": decision_manifest_sha256,
@@ -510,6 +525,7 @@ def _save_checkpoint(
 def _restore_checkpoint(
     output_dir: Path,
     config_hash: str,
+    implementation_hash: str,
     stream_scope_digest: str,
     stream_manifest_sha256: str,
     decision_manifest_sha256: str,
@@ -523,6 +539,7 @@ def _restore_checkpoint(
     receipt = _load_object(receipt_path)
     expected = {
         "config_sha256": config_hash,
+        "implementation_sha256": implementation_hash,
         "stream_scope_digest": stream_scope_digest,
         "stream_manifest_sha256": stream_manifest_sha256,
         "decision_manifest_sha256": decision_manifest_sha256,
@@ -635,7 +652,7 @@ def _input_arrays(chunk_rows: int) -> dict[str, NDArray[Any]]:
 def _parse_trade(
     line: bytes,
     index: StaticIndex,
-) -> tuple[str, str, int, int, int, float, float, float, int, int, int, float]:
+) -> tuple[str, str, int, int, int, float, float, float, int, int, int, float, int]:
     payload: object = orjson.loads(line)
     if not isinstance(payload, dict):
         raise TypeError("H009 Ledger row is not an object")
@@ -653,18 +670,30 @@ def _parse_trade(
     notional = float(payload["notional_usd"])
     outcome = int(payload["outcome_index"])
     side_text = str(payload.get("side") or "").upper()
-    if (
-        not trade_id
-        or outcome not in {0, 1}
-        or side_text not in {"BUY", "SELL"}
-        or not 0.0 < raw_price < 1.0
-        or size <= 0.0
-        or notional <= 0.0
-    ):
-        raise RuntimeError("H011 encountered an invalid normalized Ledger row")
+    invalid: list[str] = []
+    if not trade_id:
+        invalid.append("trade_id")
+    if outcome not in {0, 1}:
+        invalid.append("outcome_index")
+    if side_text not in {"BUY", "SELL"}:
+        invalid.append("side")
+    if not math.isfinite(raw_price):
+        invalid.append("price_non_finite")
+    if not math.isfinite(size) or size <= 0.0:
+        invalid.append("size")
+    if not math.isfinite(notional) or notional <= 0.0:
+        invalid.append("notional_usd")
+    if invalid:
+        raise RuntimeError(
+            "H011 encountered an invalid normalized Ledger row: "
+            f"fields={','.join(invalid)} trade_id={trade_id} condition_id={condition} "
+            f"price={raw_price!r} size={size!r} notional_usd={notional!r}"
+        )
+    source_price_anomaly = int(not 0.0 <= raw_price <= 1.0)
+    model_price = min(1.0, max(0.0, raw_price))
     side_buy = int(side_text == "BUY")
     direction = 1 if side_buy == int(outcome == 0) else -1
-    probability = raw_price if outcome == 0 else 1.0 - raw_price
+    probability = model_price if outcome == 0 else 1.0 - model_price
     return (
         trade_id,
         wallet,
@@ -672,12 +701,13 @@ def _parse_trade(
         market_id,
         timestamp,
         probability,
-        raw_price,
+        model_price,
         size,
         outcome,
         side_buy,
         direction,
         notional,
+        source_price_anomaly,
     )
 
 
@@ -765,6 +795,7 @@ def _process_day(
     resolution_pointer = 0
     stream_row = 0
     chunk_count = 0
+    source_price_anomaly_rows = 0
     reader: BinaryIO = raw_jsonl_zst_lines(stream_path)
     try:
         for line in reader:
@@ -781,7 +812,9 @@ def _process_day(
                 side_buy,
                 direction,
                 notional,
+                source_price_anomaly,
             ) = _parse_trade(line, index)
+            source_price_anomaly_rows += source_price_anomaly
             timestamp = int(timestamp_value)
             slot = -1
             if decision_pointer < len(decisions):
@@ -858,6 +891,7 @@ def _process_day(
             "resolution_events": resolution_events,
             "resolution_events_applied_in_stream": resolution_pointer,
             "resolution_events_deferred_until_day_end": deferred_resolution_events,
+            "source_price_anomaly_rows": source_price_anomaly_rows,
             "replay_only": True,
             "elapsed_seconds": time.perf_counter() - started,
         }
@@ -923,6 +957,7 @@ def _process_day(
         "resolution_events": resolution_events,
         "resolution_events_applied_in_stream": resolution_pointer,
         "resolution_events_deferred_until_day_end": deferred_resolution_events,
+        "source_price_anomaly_rows": source_price_anomaly_rows,
         "files": files,
         "elapsed_seconds": time.perf_counter() - started,
     }
@@ -1025,6 +1060,7 @@ def build_feature_pack(
     config = load_json(config_path)
     h009_config = load_json(h009_config_path)
     config_hash = sha256_file(config_path)
+    implementation_hash = _implementation_hash()
     if _feature_names_hash() != config["features"]["names_sha256"]:
         raise RuntimeError("H011 feature names changed after registration")
     if chunk_rows <= 0 or (day_limit is not None and day_limit <= 0):
@@ -1050,6 +1086,7 @@ def build_feature_pack(
     state, checkpoint_date = _restore_checkpoint(
         output_dir,
         config_hash,
+        implementation_hash,
         str(stream_manifest["scope_digest"]),
         stream_manifest_hash,
         decision_manifest_hash,
@@ -1081,6 +1118,11 @@ def build_feature_pack(
             raise InterruptedError("H011 feature pack paused; remove PAUSE to resume")
         receipt_path = output_dir / "receipts" / f"date={date}.json"
         cached = _load_object(receipt_path) if receipt_path.exists() else None
+        if cached is not None and (
+            cached.get("config_sha256") != config_hash
+            or cached.get("implementation_sha256") != implementation_hash
+        ):
+            raise RuntimeError("H011 daily receipt belongs to another implementation contract")
         if checkpoint_date is not None and date <= checkpoint_date:
             if cached is None:
                 raise RuntimeError("H011 checkpoint is ahead of its daily receipts")
@@ -1119,6 +1161,8 @@ def build_feature_pack(
             )
             if int(replay["stream_rows"]) != int(cached["stream_rows"]):
                 raise RuntimeError("H011 deterministic replay changed a day row count")
+            if int(replay["source_price_anomaly_rows"]) != int(cached["source_price_anomaly_rows"]):
+                raise RuntimeError("H011 deterministic replay changed source-price anomalies")
             receipts.append(cached)
         else:
             decision_shard = decision_by_date.get(date)
@@ -1138,6 +1182,8 @@ def build_feature_pack(
                 output_dir=output_dir,
                 emit=True,
             )
+            receipt["config_sha256"] = config_hash
+            receipt["implementation_sha256"] = implementation_hash
             atomic_json(receipt_path, receipt)
             receipts.append(receipt)
         last_date = date
@@ -1147,6 +1193,7 @@ def build_feature_pack(
             _save_checkpoint(
                 output_dir,
                 config_hash,
+                implementation_hash,
                 str(stream_manifest["scope_digest"]),
                 stream_manifest_hash,
                 decision_manifest_hash,
@@ -1163,6 +1210,7 @@ def build_feature_pack(
     checkpoint = _save_checkpoint(
         output_dir,
         config_hash,
+        implementation_hash,
         str(stream_manifest["scope_digest"]),
         stream_manifest_hash,
         decision_manifest_hash,
@@ -1177,6 +1225,7 @@ def build_feature_pack(
     decision_rows = sum(int(row["rows"]) for row in receipts)
     test_label_rows = sum(int(row["test_label_rows"]) for row in receipts)
     non_finite = sum(int(row["non_finite_features"]) for row in receipts)
+    source_price_anomaly_rows = sum(int(row["source_price_anomaly_rows"]) for row in receipts)
     resolution_totals: Counter[str] = Counter()
     for receipt in receipts:
         resolution_totals["events"] += int(receipt.get("resolution_events", 0))
@@ -1201,6 +1250,7 @@ def build_feature_pack(
     previous_comparable = bool(
         previous_manifest
         and previous_manifest.get("config_sha256") == config_hash
+        and previous_manifest.get("implementation_sha256") == implementation_hash
         and previous_manifest.get("stream_scope_digest") == stream_manifest["scope_digest"]
         and previous_manifest.get("full_run") == full_run
         and int(previous_manifest.get("days") or -1) == len(receipts)
@@ -1226,6 +1276,7 @@ def build_feature_pack(
         "generated_at": now_utc(),
         "research_id": str(config["research_id"]),
         "config_sha256": config_hash,
+        "implementation_sha256": implementation_hash,
         "valid": valid,
         "full_run": full_run,
         "stream_scope_digest": stream_manifest["scope_digest"],
@@ -1244,6 +1295,11 @@ def build_feature_pack(
         "test_labels_opened": False,
         "test_label_rows": test_label_rows,
         "non_finite_features": non_finite,
+        "source_price_domain": {
+            "policy": str(config["input"]["source_price_domain_policy"]),
+            "anomaly_rows": source_price_anomaly_rows,
+            "trades_dropped": 0,
+        },
         "actor_context": {
             "complete": schedule.complete,
             "manifest_sha256": schedule.manifest_sha256,
