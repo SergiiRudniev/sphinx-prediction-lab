@@ -1,0 +1,32 @@
+{
+  "id": "sphinx-trace-h010-development-tape-v1-result",
+  "version": "1.0.0-result",
+  "status": "complete",
+  "research_id": "SPH-T-H010",
+  "completed_at": "2026-07-18T02:33:57.248800Z",
+  "source": {
+    "source_digest": "f288f0cf142af57bd5c8714d5df459684a22fa6224dcdddf4ec3542b5f84395b",
+    "conditions_digest": "d5075287e60ec76895339ff0b9d83c37c90ac0f044895514c81dfab0040a1aa1",
+    "manifest_sha256": "2b81546da6f8821f8c2c3b6e7e4927ea5dd18471821460a90b0e28985d845b1b",
+    "shard_digest": "150e5d9d9e793923bc30121eee1eac3f2c38ee31075ca42fd74be4876d88735b"
+  },
+  "scope": {
+    "source_rows_scanned": 176119673,
+    "retained_rows": 47252399,
+    "shards": 365,
+    "bytes": 4713675472,
+    "conditions": 288350,
+    "validation_conditions": 153006,
+    "calibration_conditions": 135344,
+    "validation_decisions": 809614,
+    "calibration_decisions": 578176
+  },
+  "validation": {
+    "manifest_valid": true,
+    "condition_loader_validation_count": 153006,
+    "condition_loader_calibration_count": 135344,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "evidence_boundary": "Causal development trade-liquidity proxy only; not historical orderbook depth, executable-profit, untouched-test or paper-forward evidence."
+}
