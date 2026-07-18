@@ -47,6 +47,8 @@ class SimulationRules:
     tick_size: Decimal = Decimal("0.01")
     fee_bps: Decimal = Decimal("100")
     opposing_side_required: bool = False
+    retain_processed_liquidity_ids: bool = True
+    retain_prediction_records: bool = True
 
     def __post_init__(self) -> None:
         if self.initial_cash_usd <= ZERO:
@@ -172,7 +174,10 @@ class ReplaySimulator:
         self.positions: dict[str, SimulatedPosition] = {}
         self.fills: list[SimulatedFill] = []
         self.predictions: list[PredictionRecord] = []
+        self.prediction_count = 0
         self.processed_liquidity_ids: set[str] = set()
+        self.processed_liquidity_count = 0
+        self.last_liquidity_id: str | None = None
         self.last_marks: dict[str, Decimal] = {}
         self.equity_curve: list[tuple[int, Decimal]] = [(0, rules.initial_cash_usd)]
         self.realized_pnl_usd = ZERO
@@ -220,7 +225,9 @@ class ReplaySimulator:
         input_sha256: str,
     ) -> PredictionRecord:
         self._advance(timestamp_unix)
-        if any(record.decision_id == decision_id for record in self.predictions):
+        if self.rules.retain_prediction_records and any(
+            record.decision_id == decision_id for record in self.predictions
+        ):
             raise ValueError(f"Prediction already recorded: {decision_id}")
         probability_value = decimal(probability)
         size_value = decimal(size_fraction)
@@ -236,7 +243,9 @@ class ReplaySimulator:
             size_fraction=size_value,
             input_sha256=input_sha256,
         )
-        self.predictions.append(record)
+        self.prediction_count += 1
+        if self.rules.retain_prediction_records:
+            self.predictions.append(record)
         return record
 
     def place_order(
@@ -327,10 +336,13 @@ class ReplaySimulator:
 
     def process_liquidity(self, event: LiquidityEvent) -> list[SimulatedFill]:
         self._advance(event.timestamp_unix)
-        if event.liquidity_id in self.processed_liquidity_ids:
-            raise ValueError(f"Liquidity event was replayed twice: {event.liquidity_id}")
-        self.processed_liquidity_ids.add(event.liquidity_id)
-        self.last_marks[event.token_id] = event.price
+        if self.rules.retain_processed_liquidity_ids:
+            if event.liquidity_id in self.processed_liquidity_ids:
+                raise ValueError(f"Liquidity event was replayed twice: {event.liquidity_id}")
+            self.processed_liquidity_ids.add(event.liquidity_id)
+        self.processed_liquidity_count += 1
+        self.last_liquidity_id = event.liquidity_id
+        had_position = event.token_id in self.positions
         available = (
             event.shares
             * self.rules.available_share_fraction
@@ -349,6 +361,8 @@ class ReplaySimulator:
             ),
             key=lambda order: (order.submitted_at_unix, order.order_id),
         )
+        if had_position or candidates:
+            self.last_marks[event.token_id] = event.price
         for order in candidates:
             if available <= ZERO:
                 break
@@ -391,7 +405,8 @@ class ReplaySimulator:
             self._apply_fill(order, fill)
             emitted.append(fill)
             available -= shares
-        self._record_equity(event.timestamp_unix)
+        if had_position or emitted:
+            self._record_equity(event.timestamp_unix)
         return emitted
 
     def _apply_fill(self, order: SimulatedOrder, fill: SimulatedFill) -> None:
@@ -420,6 +435,7 @@ class ReplaySimulator:
             self.closed_pnls.append(pnl)
             if sell_position.shares == ZERO:
                 del self.positions[order.token_id]
+                self.last_marks.pop(order.token_id, None)
         self.total_fees_usd += fill.fee_usd
         self.fills.append(fill)
         order.filled_shares += fill.shares
@@ -454,8 +470,30 @@ class ReplaySimulator:
             self.closed_pnls.append(pnl)
             resolution_pnl += pnl
             del self.positions[token_id]
+            self.last_marks.pop(token_id, None)
         self._record_equity(timestamp_unix)
         return resolution_pnl
+
+    def equity_usd(self) -> Decimal:
+        """Return current marked equity without exposing mutable portfolio internals."""
+
+        return self._equity()
+
+    def available_cash_usd(self) -> Decimal:
+        """Return cash not reserved by pending buy orders."""
+
+        return max(ZERO, self.cash_usd - self._reserved_cash())
+
+    def marked_exposure_usd(self) -> Decimal:
+        """Return current marked value of all open outcome-token positions."""
+
+        return sum(
+            (
+                position.shares * self.last_marks.get(position.token_id, position.average_price)
+                for position in self.positions.values()
+            ),
+            ZERO,
+        )
 
     def _equity(self) -> Decimal:
         marked_positions = sum(
@@ -502,7 +540,8 @@ class ReplaySimulator:
             "maximum_drawdown": float(maximum_drawdown),
             "orders": len(self.orders),
             "fills": len(self.fills),
-            "predictions": len(self.predictions),
+            "predictions": self.prediction_count,
+            "liquidity_events": self.processed_liquidity_count,
             "open_positions": len(self.positions),
             "order_status_counts": status_counts,
         }
@@ -523,7 +562,10 @@ class ReplaySimulator:
             "positions": positions,
             "fills": fills,
             "predictions": predictions,
+            "prediction_count": self.prediction_count,
             "processed_liquidity_ids": sorted(self.processed_liquidity_ids),
+            "processed_liquidity_count": self.processed_liquidity_count,
+            "last_liquidity_id": self.last_liquidity_id,
             "last_marks": {key: str(value) for key, value in sorted(self.last_marks.items())},
             "equity_curve": [[timestamp, str(value)] for timestamp, value in self.equity_curve],
             "realized_pnl_usd": str(self.realized_pnl_usd),
@@ -578,7 +620,15 @@ class ReplaySimulator:
             row["probability"] = decimal(row["probability"])
             row["size_fraction"] = decimal(row["size_fraction"])
             simulator.predictions.append(PredictionRecord(**row))
+        simulator.prediction_count = int(
+            payload.get("prediction_count", len(simulator.predictions))
+        )
         simulator.processed_liquidity_ids = set(payload["processed_liquidity_ids"])
+        simulator.processed_liquidity_count = int(
+            payload.get("processed_liquidity_count", len(simulator.processed_liquidity_ids))
+        )
+        last_liquidity_id = payload.get("last_liquidity_id")
+        simulator.last_liquidity_id = None if last_liquidity_id is None else str(last_liquidity_id)
         simulator.last_marks = {key: decimal(value) for key, value in payload["last_marks"].items()}
         simulator.equity_curve = [
             (int(timestamp), decimal(value)) for timestamp, value in payload["equity_curve"]

@@ -617,7 +617,7 @@ masked, but cannot claim the temporal-graph variant.
 
 ## SPH-T-H010: Stateful Polymarket Simulator
 
-**Status:** `registered; mechanics implemented; corpus integration pending`
+**Status:** `bounded event adapter implemented; full development replay pending`
 
 **Registered:** 2026-07-17, before simulator or model-profit results were
 observed.
@@ -655,9 +655,26 @@ accounting, expiry, duplicate-liquidity rejection, resolution and exact
 checkpoint restoration. This is an engineering result only. H009 stream and
 terminal labels have not yet been integrated into a full H010 run.
 
-**Next action.** Finish the complete H009 stream, construct event-time simulator
-episodes, register market and wallet baselines, and run development-only
-trade-tape replay before any model campaign. Keep test labels closed.
+**H009 event adapter.** The bounded adapter consumes an exact source-bound
+`shard_ordinal/row_ordinal` cursor, applies public liquidity first and only then
+applies calls whose evidence-trade ID, timestamp and condition match that row.
+It maps the learned outcome index to the actual catalog token, derives the
+binary complement reference without inventing a fill, cancels stale pending
+orders, and supports call, update, hold, reduce, close and resolution actions.
+Portfolio and prediction-memory tensors are derived from the same simulator
+state used for fills.
+
+Full-tape mode no longer retains one Python object for every irrelevant trade or
+one equity point for every unchanged portfolio mark. It keeps a monotonic source
+cursor, counts consumed liquidity, retains marks only for exposed or fillable
+tokens and records equity only when portfolio value can change. Prediction and
+liquidity retention remain available for small audit runs. Exact adapter plus
+simulator restoration is hash-stable in unit replay; an append-only disk audit
+sink is still required before the full development run.
+
+**Next action.** Bind completed H011 prediction rows and catalog resolutions to
+the adapter, add the append-only audit sink and run the first development-only
+trade-tape replay with test physically closed.
 
 **Evidence boundary.** H010 mechanics do not establish historical depth,
 executable fills, model quality, profit, untouched-test, paper-forward or
