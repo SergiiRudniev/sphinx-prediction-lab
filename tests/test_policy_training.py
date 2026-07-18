@@ -155,3 +155,39 @@ def test_selective_utility_reports_equal_weight_selection_numerator() -> None:
     assert metrics["weighted_chosen_log_utility_sum"] == pytest.approx(
         metrics["weighted_chosen_log_utility"] * 4.0
     )
+
+
+def test_counterfactual_value_ignores_physically_masked_sentinel_logits() -> None:
+    logits = torch.zeros((1, 7), requires_grad=True)
+    with torch.no_grad():
+        logits[0, 1] = torch.finfo(torch.float32).min
+    output = _output(logits)
+    physical = torch.tensor([[True, False, True, False, False, False, False]])
+
+    loss, metrics = selective_log_utility_loss(
+        output,
+        torch.tensor([1.0]),
+        torch.tensor([0.5]),
+        _action_value_config(),
+        physical_action_mask=physical,
+    )
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert torch.isfinite(metrics["action_value_loss"])
+    assert logits.grad is not None
+    assert logits.grad[0, 1] == 0.0
+
+
+def test_logged_execution_rejects_physically_impossible_behavior_action() -> None:
+    output = _output(torch.zeros((1, 7)))
+    physical = torch.tensor([[True, False, True, False, False, False, False]])
+
+    with pytest.raises(ValueError, match="not physically available"):
+        logged_execution_action_value_loss(
+            output,
+            torch.tensor([1]),
+            torch.tensor([0.01]),
+            torch.tensor([1.0]),
+            physical_action_mask=physical,
+        )

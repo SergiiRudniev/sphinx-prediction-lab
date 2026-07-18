@@ -51,6 +51,7 @@ def selective_log_utility_loss(
     config: dict[str, Any],
     *,
     sample_weights: Tensor | None = None,
+    physical_action_mask: Tensor | None = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Optimize learned CALL-0/CALL-1/SKIP and sizing by realized log utility."""
 
@@ -59,6 +60,12 @@ def selective_log_utility_loss(
         raise ValueError("H012 warm-start requires three initial action logits")
     if labels_outcome0.shape != market_probability_outcome0.shape:
         raise ValueError("H012 utility labels and market probabilities must align")
+    inferred_mask = logits.float() > torch.finfo(torch.float32).min / 2.0
+    available_actions = (
+        inferred_mask if physical_action_mask is None else physical_action_mask[:, :3].bool()
+    )
+    if available_actions.shape != logits.shape or not bool(available_actions.any(dim=1).all()):
+        raise ValueError("H012 physical initial-action mask must cover every row")
     loss_mode = str(config.get("loss_mode", "expected_utility"))
     temperature = float(config.get("action_value_temperature", 1.0))
     if temperature <= 0.0:
@@ -118,11 +125,20 @@ def selective_log_utility_loss(
         reduction="none",
     )
     outcome_loss = weighted_mean(outcome_rows)
-    action_value_rows = F.smooth_l1_loss(
+    safe_action_logits = torch.where(
+        available_actions,
         logits.float(),
         reference_log_utility.detach(),
+    )
+    action_value_elements = F.smooth_l1_loss(
+        safe_action_logits,
+        reference_log_utility.detach(),
         reduction="none",
-    ).mean(dim=-1)
+    )
+    action_value_rows = (
+        (action_value_elements * available_actions.float()).sum(dim=-1)
+        / available_actions.sum(dim=-1).clamp_min(1)
+    )
     action_value_loss = weighted_mean(action_value_rows)
     if loss_mode == "expected_utility":
         action_value_weight = 0.0
@@ -182,6 +198,7 @@ def logged_execution_action_value_loss(
     execution_fractions: Tensor,
     *,
     sample_weights: Tensor | None = None,
+    physical_action_mask: Tensor | None = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Regress only the logged action to its fill- and resolution-aware value."""
 
@@ -200,6 +217,14 @@ def logged_execution_action_value_loss(
     fractions = execution_fractions.float()
     if bool(((actions < 0) | (actions >= 3)).any()):
         raise ValueError("H015 logged behavior action is outside CALL-0/CALL-1/SKIP")
+    inferred_mask = logits > torch.finfo(torch.float32).min / 2.0
+    available_actions = (
+        inferred_mask if physical_action_mask is None else physical_action_mask[:, :3].bool()
+    )
+    if available_actions.shape != logits.shape or not bool(available_actions.any(dim=1).all()):
+        raise ValueError("H015 physical initial-action mask must cover every row")
+    if not bool(available_actions.gather(1, actions[:, None]).all()):
+        raise ValueError("H015 logged behavior action was not physically available")
     if not bool(torch.isfinite(targets).all()) or not bool(torch.isfinite(fractions).all()):
         raise ValueError("H015 logged execution targets must be finite")
     if bool(((fractions < 0.0) | (fractions > 1.0)).any()):
