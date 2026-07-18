@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from enum import StrEnum
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ class FeeProtocol(StrEnum):
 class FeeFormula(StrEnum):
     ZERO = "zero"
     POLYMARKET_CURVE = "polymarket_curve"
+    V1_OUTPUT_ASSET_CURVE = "v1_output_asset_curve"
     V1_MIN_PRICE_CURVE = "v1_min_price_curve"
 
 
@@ -53,8 +55,8 @@ class FeeScheduleEvidence:
     """One contemporaneous fee schedule bound to one causal tape event."""
 
     schedule_id: str
-    liquidity_id: str
-    transaction_hash: str
+    liquidity_id: str | None
+    transaction_hash: str | None
     condition_id: str
     timestamp_unix: int
     protocol: FeeProtocol
@@ -66,6 +68,8 @@ class FeeScheduleEvidence:
     outcome_rounding_decimals: int
     rounding: FeeRounding
     source: str
+    effective_from_unix: int | None = None
+    effective_to_unix: int | None = None
     source_order_hash: str | None = None
     source_block_number: int | None = None
     source_log_index: int | None = None
@@ -75,9 +79,11 @@ class FeeScheduleEvidence:
     source_fee_amount: Decimal = ZERO
 
     def __post_init__(self) -> None:
-        if not self.schedule_id or not self.liquidity_id or not self.condition_id:
-            raise ValueError("Fee schedule identifiers are required")
-        if not self.transaction_hash.startswith("0x") or len(self.transaction_hash) != 66:
+        if not self.schedule_id or not self.condition_id:
+            raise ValueError("Fee schedule and condition identifiers are required")
+        if self.transaction_hash is not None and (
+            not self.transaction_hash.startswith("0x") or len(self.transaction_hash) != 66
+        ):
             raise ValueError("Fee schedule transaction hash is invalid")
         if self.timestamp_unix < 0:
             raise ValueError("Fee schedule timestamp cannot be negative")
@@ -95,13 +101,30 @@ class FeeScheduleEvidence:
             raise ValueError("Fee evidence source shares must be positive")
         if self.source_fee_amount < ZERO:
             raise ValueError("Fee evidence amount cannot be negative")
+        if self.effective_from >= self.effective_to:
+            raise ValueError("Fee schedule effective interval must be non-empty")
+
+    @property
+    def effective_from(self) -> int:
+        return (
+            self.timestamp_unix
+            if self.effective_from_unix is None
+            else self.effective_from_unix
+        )
+
+    @property
+    def effective_to(self) -> int:
+        return self.timestamp_unix + 1 if self.effective_to_unix is None else self.effective_to_unix
+
+    def covers(self, timestamp_unix: int) -> bool:
+        return self.effective_from <= timestamp_unix < self.effective_to
 
     @classmethod
     def zero(
         cls,
         *,
-        liquidity_id: str,
-        transaction_hash: str,
+        liquidity_id: str | None,
+        transaction_hash: str | None,
         condition_id: str,
         timestamp_unix: int,
         protocol: FeeProtocol,
@@ -109,7 +132,9 @@ class FeeScheduleEvidence:
     ) -> FeeScheduleEvidence:
         payload = {
             "liquidity_id": liquidity_id,
-            "transaction_hash": transaction_hash.lower(),
+            "transaction_hash": (
+                None if transaction_hash is None else transaction_hash.lower()
+            ),
             "condition_id": condition_id.lower(),
             "timestamp_unix": timestamp_unix,
             "protocol": protocol.value,
@@ -122,7 +147,7 @@ class FeeScheduleEvidence:
         return cls(
             schedule_id=schedule_id,
             liquidity_id=liquidity_id,
-            transaction_hash=transaction_hash.lower(),
+            transaction_hash=(None if transaction_hash is None else transaction_hash.lower()),
             condition_id=condition_id.lower(),
             timestamp_unix=timestamp_unix,
             protocol=protocol,
@@ -171,7 +196,10 @@ def _unrounded_fee_value_usd(
     rate = schedule.rate * rate_multiplier
     if schedule.formula == FeeFormula.ZERO or rate == ZERO:
         return ZERO
-    if schedule.formula == FeeFormula.POLYMARKET_CURVE:
+    if schedule.formula in {
+        FeeFormula.POLYMARKET_CURVE,
+        FeeFormula.V1_OUTPUT_ASSET_CURVE,
+    }:
         return gross_shares * rate * (price * (ONE - price)) ** schedule.exponent
     if schedule.formula == FeeFormula.V1_MIN_PRICE_CURVE:
         return gross_shares * rate * min(price, ONE - price)
@@ -225,8 +253,13 @@ def apply_polymarket_fee(
         )
 
     if schedule.protocol == FeeProtocol.CLOB_V1 and side_value == "BUY":
+        raw_outcome_fee = (
+            raw_value
+            if schedule.formula == FeeFormula.V1_OUTPUT_ASSET_CURVE
+            else raw_value / price_value
+        )
         fee_shares = _round(
-            raw_value / price_value,
+            raw_outcome_fee,
             schedule.outcome_rounding_decimals,
             schedule.rounding,
         )
@@ -261,7 +294,7 @@ def apply_polymarket_fee(
 
 
 class FeeScheduleBook:
-    """Immutable fail-closed lookup from causal liquidity IDs to fee evidence."""
+    """Immutable fail-closed lookup from exact events or condition-time intervals."""
 
     def __init__(
         self,
@@ -272,17 +305,37 @@ class FeeScheduleBook:
         if len(manifest_sha256) != 64:
             raise ValueError("Fee schedule manifest SHA-256 is invalid")
         bound: dict[str, FeeScheduleEvidence] = {}
+        by_condition: dict[str, list[FeeScheduleEvidence]] = {}
+        schedule_ids: set[str] = set()
         for schedule in schedules:
-            if schedule.liquidity_id in bound:
-                raise ValueError(f"Fee schedule liquidity ID repeats: {schedule.liquidity_id}")
-            bound[schedule.liquidity_id] = schedule
-        if not bound:
+            if schedule.schedule_id in schedule_ids:
+                raise ValueError(f"Fee schedule ID repeats: {schedule.schedule_id}")
+            schedule_ids.add(schedule.schedule_id)
+            if schedule.liquidity_id is not None:
+                if schedule.liquidity_id in bound:
+                    raise ValueError(
+                        f"Fee schedule liquidity ID repeats: {schedule.liquidity_id}"
+                    )
+                bound[schedule.liquidity_id] = schedule
+            by_condition.setdefault(schedule.condition_id, []).append(schedule)
+        if not schedule_ids:
             raise ValueError("Fee schedule book cannot be empty")
+        for condition_id, rows in by_condition.items():
+            rows.sort(key=lambda row: (row.effective_from, row.effective_to, row.schedule_id))
+            for previous, current in pairwise(rows):
+                if previous.effective_to > current.effective_from:
+                    raise ValueError(
+                        f"Fee schedule intervals overlap for condition: {condition_id}"
+                    )
         self._schedules = bound
+        self._schedules_by_condition = {
+            condition_id: tuple(rows) for condition_id, rows in by_condition.items()
+        }
+        self._schedule_count = len(schedule_ids)
         self.manifest_sha256 = manifest_sha256
 
     def __len__(self) -> int:
-        return len(self._schedules)
+        return self._schedule_count
 
     def schedule_for(
         self,
@@ -293,14 +346,31 @@ class FeeScheduleBook:
         transaction_hash: str | None = None,
     ) -> FeeScheduleEvidence:
         schedule = self._schedules.get(liquidity_id)
+        exact = schedule is not None
+        if schedule is None and condition_id is not None and timestamp_unix is not None:
+            schedule = next(
+                (
+                    candidate
+                    for candidate in self._schedules_by_condition.get(condition_id.lower(), ())
+                    if candidate.effective_from_unix is not None
+                    and candidate.effective_to_unix is not None
+                    and candidate.covers(timestamp_unix)
+                ),
+                None,
+            )
         if schedule is None:
-            raise KeyError(f"Polymarket fee schedule is unqualified: {liquidity_id}")
+            raise KeyError(
+                "Polymarket fee schedule is unqualified: "
+                f"{liquidity_id}@{condition_id}:{timestamp_unix}"
+            )
         if condition_id is not None and schedule.condition_id != condition_id.lower():
             raise RuntimeError("Fee schedule condition binding changed")
-        if timestamp_unix is not None and schedule.timestamp_unix != timestamp_unix:
+        if timestamp_unix is not None and not schedule.covers(timestamp_unix):
             raise RuntimeError("Fee schedule timestamp binding changed")
         if (
-            transaction_hash is not None
+            exact
+            and transaction_hash is not None
+            and schedule.transaction_hash is not None
             and schedule.transaction_hash != transaction_hash.lower()
         ):
             raise RuntimeError("Fee schedule transaction binding changed")

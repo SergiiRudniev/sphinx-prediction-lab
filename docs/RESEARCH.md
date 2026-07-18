@@ -1574,6 +1574,30 @@ historical receipt-derived schedule artifact for every liquidity event that can
 fill an H012/H014/H015 order; real-fee baselines cannot start before that artifact
 is complete.
 
+**Historical receipt qualification.** On-chain smoke qualification exposed two
+distinct V1 operator settlement curves that the gross exchange contract alone
+cannot represent. Before the category rollout, a crypto receipt for 1,590.06
+shares at 0.59 retained 23.260830 outcome shares, matching the rate-0.25,
+exponent-2 curve applied directly in the output asset up to constituent-fill
+rounding. After the rollout, a 200-share BUY at 0.04 retained 13.824 shares,
+matching a rate-0.072 exponent-1 USD curve converted back to BUY outcome shares.
+V1 post-rollout operator amounts settle at five decimals; V2 remains five-
+decimal collateral settlement. H016 now models both V1 formulas explicitly and
+selects between them from the contemporaneous active-taker receipt, never from
+the present category label. March 30 and March 31 are separate registered
+boundaries because the category announcement and `feeSchedule` source-of-truth
+change were dated separately.
+
+The resumable Schedule Corpus builder joins 76,410 unique historical orders and
+47,350 unique fill-liquidity events from the H012/H014/H015 proxy trajectories,
+then verifies all 122,367 source IDs against the 47.25-million-row causal tape.
+It groups schedules only within one condition and one registered fee epoch,
+prefers algebraically unambiguous single-public-fill transactions, stores up to
+five independent receipt candidates, and recursively splits oversized Polygon
+RPC batches. The closed-test plan contains 36,581 schedule intervals for 33,279
+conditions. Full receipt collection and qualification are now resumable through
+an SQLite cache and a `PAUSE` sentinel; unresolved formulas remain fail-closed.
+
 **Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
 rounding, creation-time rollout rules and the cutover boundary must pass
 regression tests. Per-fill fee audit must reconcile exactly to cash and token

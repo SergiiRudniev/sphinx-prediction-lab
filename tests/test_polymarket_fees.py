@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -144,6 +145,41 @@ def test_v1_buy_deducts_outcome_and_sell_deducts_collateral() -> None:
     assert sell.collateral_fee_usd == Decimal("1.000000")
 
 
+@pytest.mark.parametrize(
+    ("shares", "price", "expected_fee_shares"),
+    [
+        ("150", "0.50", "2.343750"),
+        # The aggregate active-taker receipt settles 0.000002 lower after its
+        # constituent maker-fill rounding; one simulated public fill uses this value.
+        ("1590.06", "0.59", "23.260832"),
+    ],
+)
+def test_v1_operator_curve_reconciles_onchain_fee_refunds(
+    shares: str,
+    price: str,
+    expected_fee_shares: str,
+) -> None:
+    historical_crypto = _schedule(
+        protocol=FeeProtocol.CLOB_V1,
+        formula=FeeFormula.V1_OUTPUT_ASSET_CURVE,
+        rate="0.25",
+        exponent=2,
+        rounding=FeeRounding.DOWN,
+    )
+
+    fee = apply_polymarket_fee(
+        historical_crypto,
+        side="BUY",
+        liquidity_role=LiquidityRole.TAKER,
+        gross_shares=shares,
+        price=price,
+    )
+
+    assert fee.fee_asset == FeeAsset.OUTCOME
+    assert fee.outcome_fee_shares == Decimal(expected_fee_shares)
+    assert fee.fee_value_usd == Decimal(expected_fee_shares) * Decimal(price)
+
+
 def test_rate_stress_and_fail_closed_book() -> None:
     schedule = _schedule()
     book = FeeScheduleBook([schedule], manifest_sha256="d" * 64)
@@ -160,3 +196,28 @@ def test_rate_stress_and_fail_closed_book() -> None:
     assert stressed.collateral_fee_usd == Decimal("3.50000")
     with pytest.raises(KeyError, match="unqualified"):
         book.schedule_for("unknown")
+
+
+def test_condition_time_interval_qualifies_unseen_liquidity() -> None:
+    schedule = replace(
+        _schedule(),
+        liquidity_id="source-liquidity",
+        effective_from_unix=90,
+        effective_to_unix=110,
+    )
+    book = FeeScheduleBook([schedule], manifest_sha256="e" * 64)
+
+    resolved = book.schedule_for(
+        "unseen-fill",
+        condition_id="0x" + "c" * 64,
+        timestamp_unix=105,
+        transaction_hash="0x" + "f" * 64,
+    )
+
+    assert resolved.schedule_id == schedule.schedule_id
+    with pytest.raises(KeyError, match="unqualified"):
+        book.schedule_for(
+            "outside",
+            condition_id="0x" + "c" * 64,
+            timestamp_unix=110,
+        )
