@@ -449,7 +449,15 @@ class ReplaySimulator:
                 raise RuntimeError("Protocol fee quote unexpectedly used flat mode")
             if candidate * price + fee.collateral_fee_usd <= total_cost_usd:
                 return candidate
-            candidate = min(candidate, (total_cost_usd - fee.collateral_fee_usd) / price)
+            next_candidate = min(
+                candidate,
+                (total_cost_usd - fee.collateral_fee_usd) / price,
+            )
+            if next_candidate >= candidate:
+                # Decimal division can round up by one context ULP. Preserve the
+                # monotone affordability search instead of repeating that boundary.
+                next_candidate = candidate.next_minus()
+            candidate = next_candidate
         raise RuntimeError("Protocol-fee affordability did not converge")
 
     def _reserved_shares(self, token_id: str) -> Decimal:

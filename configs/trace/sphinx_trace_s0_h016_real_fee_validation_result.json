@@ -1,0 +1,116 @@
+{
+  "id": "sphinx-trace-s0-h016-real-fee-validation-result",
+  "version": "1.0.0-partial-result",
+  "status": "one_x_baselines_complete_stress_and_retraining_pending",
+  "research_id": "SPH-T-H016",
+  "completed_at": "2026-07-18T13:47:43Z",
+  "fee_schedule": {
+    "id": "sphinx-h016-polymarket-fee-schedule-validation-v2",
+    "manifest_sha256": "3fe07cad9f3890407d37ad77d6b5cec700143be8576b7eb4e2d1e116122553cc",
+    "data_sha256": "777620802492ebbe5c4da38d8477cbfcc4d14b033b963bc50dad93786bf240ed",
+    "intervals": 163707,
+    "conditions": 153006,
+    "target_liquidity_and_decision_evidence_ids": 854610,
+    "receipt_proofs": 162839,
+    "market_trade_proofs": 308,
+    "market_info_proofs": 8,
+    "unresolved_intervals": 0,
+    "protocol_counts": {
+      "clob-v1": 163707
+    },
+    "formula_counts": {
+      "polymarket_curve": 86427,
+      "v1_output_asset_curve": 34268,
+      "zero": 43012
+    }
+  },
+  "one_x_real_fee_replays": {
+    "H012-v2": {
+      "net_profit_usd": 950.2291063185216,
+      "return_on_initial_cash": 0.09502291063185217,
+      "maximum_drawdown": 0.061537297133897856,
+      "profit_factor": 1.5269979890243426,
+      "resolved_calls": 38682,
+      "call_precision": 0.8995139858332041,
+      "fills": 10291,
+      "total_fees_usd": 2.841144544198033,
+      "active_weeks": 40,
+      "active_week_mean_usd": 23.755727657963053,
+      "active_week_median_usd": 10.647268761719715,
+      "active_week_positive_fraction": 0.7,
+      "active_week_minimum_usd": -433.7949433822432,
+      "weekly_bootstrap_lower_95pct_usd": -7.634813074782093,
+      "component_bootstrap_lower_mean_profit_usd": 0.03667873918115048,
+      "result_sha256": "a4c363b8105de2f6259e74a47a4c59a4915df99e5e07c64e979fb93cb3c8889a",
+      "audit_manifest_sha256": "0f0a8126ff559afbd7ecf9a937df5acd61f97b879f2ad03af5d00e6341658deb",
+      "profit_evaluation_sha256": "367125a2269340f27a91fd56cd9de3556d4438050cb770f12efb06065bd56dc9"
+    },
+    "H014-epoch0": {
+      "net_profit_usd": 1186.5307626689923,
+      "return_on_initial_cash": 0.11865307626689924,
+      "maximum_drawdown": 0.058156250818921,
+      "profit_factor": 1.1890263767411182,
+      "resolved_calls": 76359,
+      "call_precision": 0.9040322686258332,
+      "fills": 45655,
+      "total_fees_usd": 95.44234348195258,
+      "active_weeks": 40,
+      "active_week_mean_usd": 29.663269066724798,
+      "active_week_median_usd": 10.410703702023966,
+      "active_week_positive_fraction": 0.675,
+      "active_week_minimum_usd": -350.93757198285857,
+      "weekly_bootstrap_lower_95pct_usd": 0.3028612329407437,
+      "component_bootstrap_lower_mean_profit_usd": -0.000756788237606583,
+      "result_sha256": "8d28c229a00a67deb7b679585b4e5277c88ab65f9dba29d3699c3d80e3ae882c",
+      "audit_manifest_sha256": "45aa9f53745720af928197a06728854e7a3196395da690b2a137ae65a1bfed87",
+      "profit_evaluation_sha256": "98a889d723282a0c4f7696bf2a7fef902265f36ff27ea4a775f2991e4d5beafa"
+    },
+    "H015-selected": {
+      "net_profit_usd": 1186.5307626689923,
+      "return_on_initial_cash": 0.11865307626689924,
+      "maximum_drawdown": 0.058156250818921,
+      "profit_factor": 1.1890263767411182,
+      "resolved_calls": 76359,
+      "call_precision": 0.9040322686258332,
+      "fills": 45655,
+      "total_fees_usd": 95.44234348195258,
+      "weekly_bootstrap_lower_95pct_usd": 0.3028612329407437,
+      "component_bootstrap_lower_mean_profit_usd": -0.000756788237606583,
+      "result_sha256": "ece096df9126223e3041710a8f17b88246b3d7c6b05a5671173f8a5a8ad87e80",
+      "audit_manifest_sha256": "baf32d1facab1dc303d1c99e14da4973e1145c4c63619c82a47baa55cc259211",
+      "profit_evaluation_sha256": "33339f37e8950769cf9ab68afcc647604fe87f8f070cebddda29b8eae28fff13"
+    }
+  },
+  "fee_audit": {
+    "all_fills_have_schedule_protocol_role_asset_and_fee_quantities": true,
+    "H012_fill_fee_sum_matches_result": true,
+    "H014_fill_fee_sum_matches_result": true,
+    "H015_fill_fee_sum_matches_result": true,
+    "fee_sum_tolerance_usd": 1e-12
+  },
+  "identity_replication_control": {
+    "model_tensors_identical": true,
+    "H014_and_H015_daily_audit_shards_compared": 365,
+    "byte_mismatched_daily_audit_shards": 0,
+    "economic_metrics_identical": true,
+    "passed": true
+  },
+  "gates": {
+    "one_x_real_fee_baselines_complete": true,
+    "per_fill_fee_audit_reconciled": true,
+    "identity_replication_passed": true,
+    "H012_weekly_lower_positive": false,
+    "H014_weekly_lower_positive": true,
+    "H014_component_lower_positive": false,
+    "one_point_five_x_stress_complete": false,
+    "two_x_stress_complete": false,
+    "fee_dependent_targets_rebuilt": false,
+    "fee_dependent_policy_retrained": false,
+    "all_pass": false
+  },
+  "decision": "continue_H016_cost_stress_then_register_real_fee_tail_aware_training_hypothesis",
+  "promotion_allowed": false,
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "Receipt-qualified platform fees on a development trade-tape liquidity proxy; not historical orderbook, untouched-test or paper-forward profit evidence."
+}

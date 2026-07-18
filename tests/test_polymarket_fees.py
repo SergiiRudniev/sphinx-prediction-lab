@@ -231,6 +231,8 @@ def test_artifact_requires_hash_bound_receipt_proof_coverage(tmp_path: Path) -> 
     schedule = _schedule()
     data_path = tmp_path / "schedules.jsonl.zst"
     proof_path = tmp_path / "source-receipts.jsonl.zst"
+    market_info_path = tmp_path / "source-market-info.jsonl.zst"
+    market_trade_path = tmp_path / "source-market-trades.jsonl.zst"
     write_jsonl_zst(data_path, [fee_schedule_payload(schedule)])
     write_jsonl_zst(
         proof_path,
@@ -244,6 +246,8 @@ def test_artifact_requires_hash_bound_receipt_proof_coverage(tmp_path: Path) -> 
             }
         ],
     )
+    write_jsonl_zst(market_info_path, [])
+    write_jsonl_zst(market_trade_path, [])
     manifest = {
         "record_type": "h016_fee_schedule_manifest",
         "valid": True,
@@ -253,6 +257,12 @@ def test_artifact_requires_hash_bound_receipt_proof_coverage(tmp_path: Path) -> 
         "receipt_proof_path": proof_path.name,
         "receipt_proof_sha256": sha256_file(proof_path),
         "receipt_proof_rows": 1,
+        "market_info_path": market_info_path.name,
+        "market_info_sha256": sha256_file(market_info_path),
+        "market_info_rows": 0,
+        "market_trade_path": market_trade_path.name,
+        "market_trade_sha256": sha256_file(market_trade_path),
+        "market_trade_rows": 0,
         "test_labels_opened": False,
         "test_rows_consumed": 0,
     }

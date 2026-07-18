@@ -245,6 +245,29 @@ def test_affordable_fill_rebases_only_decimal_fee_dust() -> None:
     assert simulator.cash_usd == Decimal("0")
 
 
+def test_protocol_fee_affordability_steps_below_decimal_division_round_up() -> None:
+    book = FeeScheduleBook(
+        [_fee_schedule("evidence", 1, protocol=FeeProtocol.CLOB_V1)],
+        manifest_sha256="f" * 64,
+    )
+    simulator = ReplaySimulator(
+        SimulationRules(fee_bps=Decimal("0")),
+        fee_schedule_book=book,
+    )
+    budget = Decimal("0.007299270072992700729927007299")
+
+    shares = simulator.buy_shares_for_total_cost(
+        total_cost_usd=budget,
+        price=Decimal("0.02"),
+        evidence_liquidity_id="evidence",
+        condition_id="condition",
+        timestamp_unix=1,
+    )
+
+    assert shares * Decimal("0.02") <= budget
+    assert shares.next_plus() * Decimal("0.02") > budget
+
+
 def test_decimal_reservations_ignore_set_iteration_order() -> None:
     rules = SimulationRules(initial_cash_usd=Decimal("2e28"), fee_bps=Decimal("0"))
     simulator = ReplaySimulator(rules)
