@@ -435,22 +435,122 @@ class FeeScheduleBook:
             != "official_changelog_pre_2026_01_05_no_platform_taker_fees"
         }
         proof_schedule_ids: set[str] = set()
+        proof_identities: set[tuple[str, str]] = set()
+        proof_counts: dict[str, int] = {}
         proof_rows = 0
         for proof in iter_jsonl_zst(proof_path):
             proof_rows += 1
             schedule_id = str(proof.get("schedule_id") or "")
+            transaction_hash = str(proof.get("transaction_hash") or "").lower()
+            identity = (schedule_id, transaction_hash)
             if (
                 proof.get("record_type") != "h016_fee_receipt_proof"
                 or proof.get("status") != "0x1"
-                or schedule_id in proof_schedule_ids
+                or len(transaction_hash) != 66
+                or not transaction_hash.startswith("0x")
+                or identity in proof_identities
             ):
                 raise RuntimeError("H016 fee receipt proof row changed")
+            proof_identities.add(identity)
             proof_schedule_ids.add(schedule_id)
+            proof_counts[schedule_id] = proof_counts.get(schedule_id, 0) + 1
         if (
             proof_rows != int(payload.get("receipt_proof_rows", -1))
             or proof_schedule_ids != receipt_schedule_ids
         ):
             raise RuntimeError("H016 fee receipt proof coverage changed")
+        if any(
+            proof_counts.get(schedule.schedule_id, 0) < 2
+            for schedule in schedules
+            if "receipt_consensus" in schedule.source
+        ):
+            raise RuntimeError("H016 fee receipt consensus proof coverage changed")
+        market_info_path = directory / str(payload.get("market_info_path") or "")
+        if (
+            not market_info_path.is_file()
+            or payload.get("market_info_sha256") != sha256_file(market_info_path)
+        ):
+            raise RuntimeError("H016 fee market-info proof contract changed")
+        expected_market_info_conditions = {
+            schedule.condition_id
+            for schedule in schedules
+            if "clob_market_info" in schedule.source
+        }
+        market_info_conditions: set[str] = set()
+        market_info_rows = 0
+        for proof in iter_jsonl_zst(market_info_path):
+            market_info_rows += 1
+            condition_id = str(proof.get("condition_id") or "").lower()
+            market_payload = proof.get("payload")
+            market_payload_sha256 = (
+                hashlib.sha256(
+                    json.dumps(
+                        market_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest()
+                if isinstance(market_payload, dict)
+                else ""
+            )
+            market_condition_id = (
+                str(market_payload.get("c", "")).lower()
+                if isinstance(market_payload, dict)
+                else ""
+            )
+            if (
+                proof.get("record_type") != "h016_fee_market_info_proof"
+                or condition_id in market_info_conditions
+                or proof.get("payload_sha256") != market_payload_sha256
+                or market_condition_id != condition_id
+            ):
+                raise RuntimeError("H016 fee market-info proof row changed")
+            market_info_conditions.add(condition_id)
+        if (
+            market_info_rows != int(payload.get("market_info_rows", -1))
+            or market_info_conditions != expected_market_info_conditions
+        ):
+            raise RuntimeError("H016 fee market-info proof coverage changed")
+        market_trade_path = directory / str(payload.get("market_trade_path") or "")
+        if (
+            not market_trade_path.is_file()
+            or payload.get("market_trade_sha256") != sha256_file(market_trade_path)
+        ):
+            raise RuntimeError("H016 fee market-trade proof contract changed")
+        expected_market_trade_schedules = {
+            schedule.schedule_id
+            for schedule in schedules
+            if "market_wide_trade" in schedule.source
+        }
+        market_trade_schedules: set[str] = set()
+        market_trade_rows = 0
+        for proof in iter_jsonl_zst(market_trade_path):
+            market_trade_rows += 1
+            schedule_id = str(proof.get("schedule_id") or "")
+            trade_row = proof.get("row")
+            row_sha256 = (
+                hashlib.sha256(
+                    json.dumps(
+                        trade_row,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest()
+                if isinstance(trade_row, dict)
+                else ""
+            )
+            if (
+                proof.get("record_type") != "h016_fee_market_trade_proof"
+                or schedule_id in market_trade_schedules
+                or proof.get("row_sha256") != row_sha256
+            ):
+                raise RuntimeError("H016 fee market-trade proof row changed")
+            market_trade_schedules.add(schedule_id)
+        if (
+            market_trade_rows != int(payload.get("market_trade_rows", -1))
+            or market_trade_schedules != expected_market_trade_schedules
+        ):
+            raise RuntimeError("H016 fee market-trade proof coverage changed")
         return cls(schedules, manifest_sha256=sha256_file(manifest_path))
 
 

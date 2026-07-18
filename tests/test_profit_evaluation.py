@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
 import pytest
-from scripts.evaluate_h010_profit import _verify_replay_binding
+from scripts.evaluate_h010_profit import (
+    _canonical_component_profit_values,
+    _verify_replay_binding,
+)
 
 from sphinx_corpus.io import atomic_json, sha256_file, write_jsonl_zst
 from sphinx_trace.profit_evaluation import (
@@ -82,3 +86,30 @@ def test_loss_or_insufficient_breadth_fails_profit_gates() -> None:
     assert gates["all_pass"] is False
     assert gates["minimum_calls"] is False
     assert gates["minimum_components"] is False
+
+
+def test_component_bootstrap_input_is_order_invariant() -> None:
+    components = {
+        "condition-c": "component-b",
+        "condition-a": "component-a",
+        "condition-b": "component-a",
+    }
+    profits = {
+        "condition-c": Decimal("3"),
+        "condition-a": Decimal("-1"),
+        "condition-b": Decimal("2"),
+    }
+    forward = _canonical_component_profit_values(
+        set(components), components, profits
+    )
+    reverse = _canonical_component_profit_values(
+        set(reversed(tuple(components))),
+        dict(reversed(tuple(components.items()))),
+        dict(reversed(tuple(profits.items()))),
+    )
+
+    assert forward.tolist() == [1.0, 3.0]
+    assert np.array_equal(forward, reverse)
+    assert independent_component_bootstrap(
+        forward, replicates=500, seed=17
+    ) == independent_component_bootstrap(reverse, replicates=500, seed=17)

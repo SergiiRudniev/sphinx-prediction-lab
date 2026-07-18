@@ -39,6 +39,21 @@ def _implementation_digest() -> str:
     return digest.hexdigest()
 
 
+def _canonical_component_profit_values(
+    called: set[str],
+    condition_components: dict[str, str],
+    condition_profit: dict[str, Decimal],
+) -> np.ndarray:
+    """Aggregate called-condition profit in a process-independent order."""
+
+    component_profit: defaultdict[str, Decimal] = defaultdict(Decimal)
+    for condition_id in sorted(called):
+        component_profit[condition_components[condition_id]] += condition_profit[condition_id]
+    return np.asarray(
+        [component_profit[key] for key in sorted(component_profit)], dtype=np.float64
+    )
+
+
 def _verify_replay_binding(replay_dir: Path, replay: dict[str, Any], audit: dict[str, Any]) -> None:
     manifest_path = replay_dir / "manifest.json"
     if replay.get("audit_manifest_sha256") != sha256_file(manifest_path):
@@ -117,14 +132,13 @@ def evaluate(
         or not called <= condition_profit.keys()
     ):
         raise RuntimeError("H010 profit audit cannot settle every called condition")
-    component_profit: defaultdict[str, Decimal] = defaultdict(Decimal)
-    for condition_id in called:
-        component_profit[condition_components[condition_id]] += condition_profit[condition_id]
     settings = config["bootstrap"]
     weekly_values = np.asarray(
         [float(row["net_profit_usd"]) for row in replay["weeks"]], dtype=np.float64
     )
-    component_values = np.asarray(list(component_profit.values()), dtype=np.float64)
+    component_values = _canonical_component_profit_values(
+        called, condition_components, condition_profit
+    )
     weekly = moving_block_bootstrap_mean(
         weekly_values,
         replicates=int(settings["replicates"]),

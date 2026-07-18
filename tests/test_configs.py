@@ -269,6 +269,28 @@ def test_h016_real_fee_qualification_is_fail_closed_and_supersedes_flat_proxy() 
     assert h015["promotion_allowed"] is False
     assert h015["test_labels_opened"] is False
 
+    result = load_json(
+        ROOT
+        / "configs"
+        / "trace"
+        / "sphinx_trace_s0_h016_real_fee_validation_result.json"
+    )
+    assert result["research_id"] == "SPH-T-H016"
+    assert result["fee_schedule"]["unresolved_intervals"] == 0
+    assert result["fee_schedule"]["conditions"] == 153006
+    assert result["fee_audit"][
+        "all_fills_have_schedule_protocol_role_asset_and_fee_quantities"
+    ]
+    assert result["identity_replication_control"]["passed"] is True
+    assert result["identity_replication_control"][
+        "byte_mismatched_daily_audit_shards"
+    ] == 0
+    assert result["gates"]["H014_weekly_lower_positive"] is True
+    assert result["gates"]["H014_component_lower_positive"] is False
+    assert result["gates"]["all_pass"] is False
+    assert result["promotion_allowed"] is False
+    assert result["test_labels_opened"] is False
+
 
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")

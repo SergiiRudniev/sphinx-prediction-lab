@@ -1481,7 +1481,7 @@ replication test are now mandatory in H016. H015 is rejected for promotion.
 
 ## SPH-T-H016: Protocol-Exact Polymarket Fees
 
-**Status:** `in progress; deterministic reductions and protocol fee engine implemented; historical schedule artifact pending`
+**Status:** `in progress; exact schedule and 1.0x baselines qualified; 1.5x/2.0x stress and fee-dependent retraining pending`
 
 **Registered:** 2026-07-18, while the pre-registered H015 fresh replay was still
 running and before its result was observed. The replay is allowed to finish only
@@ -1548,9 +1548,9 @@ Decimal accumulation. Daily full-position validation, checkpoint serialization
 and resume-time aggregate reconstruction also use canonical token/order order.
 The regression suite forces identical positive Decimal reservations through two
 opposite set iteration orders at a 28-digit precision boundary that previously
-produced different available cash; both now return exactly the same state. All
-159 tests pass. Fresh-process full replay identity remains an H016 acceptance
-gate and will be checked together with the real-fee baselines.
+produced different available cash; both now return exactly the same state.
+Fresh-process full replay identity remains an H016 acceptance gate and is checked
+together with the real-fee baselines below.
 
 **Protocol fee engine.** The simulator now has an immutable, manifest-bound and
 fail-closed fee-schedule book keyed by the causal liquidity event. It implements
@@ -1567,12 +1567,10 @@ outcome-share fee, USD fee value, protocol, schedule ID, fee asset and explicit
 taker role. BUY sizing solves against the active protocol fee instead of the old
 flat-bps denominator. Legacy proxy replay remains available only when no H016
 schedule artifact is supplied, so prior results remain reproducible and cannot
-silently acquire a real-cost label. The complete 168-test suite passes, including
-cash/position reconciliation vectors for V1 and V2 and fail-closed schedule and
-checkpoint binding. The remaining blocking work is to construct the immutable
-historical receipt-derived schedule artifact for every liquidity event that can
-fill an H012/H014/H015 order; real-fee baselines cannot start before that artifact
-is complete.
+silently acquire a real-cost label. The complete regression suite includes cash/
+position reconciliation vectors for V1 and V2, fail-closed schedule binding and
+the Decimal affordability boundary that previously rejected a valid all-cash
+fill by one terminal digit. All 183 tests pass.
 
 **Historical receipt qualification.** On-chain smoke qualification exposed two
 distinct V1 operator settlement curves that the gross exchange contract alone
@@ -1588,15 +1586,50 @@ the present category label. March 30 and March 31 are separate registered
 boundaries because the category announcement and `feeSchedule` source-of-truth
 change were dated separately.
 
-The resumable Schedule Corpus builder joins 76,410 unique historical orders and
-47,350 unique fill-liquidity events from the H012/H014/H015 proxy trajectories,
-then verifies all 122,367 source IDs against the 47.25-million-row causal tape.
-It groups schedules only within one condition and one registered fee epoch,
-prefers algebraically unambiguous single-public-fill transactions, stores up to
-five independent receipt candidates, and recursively splits oversized Polygon
-RPC batches. The closed-test plan contains 36,581 schedule intervals for 33,279
-conditions. Full receipt collection and qualification are now resumable through
-an SQLite cache and a `PAUSE` sentinel; unresolved formulas remain fail-closed.
+The completed validation Schedule Corpus covers all 809,614 decisions, including
+SKIP states, so a future policy cannot select a validation market outside the
+qualified fee universe. It contains 163,707 non-overlapping condition-time
+intervals over all 153,006 validation conditions and binds 854,610 liquidity or
+decision-evidence IDs. Evidence consists of 162,839 Polygon receipt proofs, 308
+market-wide trade/receipt proofs and eight receipt-reconciled market-info proofs.
+No interval is unresolved. The compressed schedule data digest is
+`77762080...40ed`; the manifest digest is `3fe07cad...3cc`.
+
+The qualified formulas are 86,427 generalized Polymarket USD curves, 34,268 V1
+output-asset curves and 43,012 zero-fee intervals. All validation intervals are
+CLOB V1 because the last validation decision precedes the V2 cutover. The
+builder never infers a positive tariff from category alone: 120,456 intervals
+come from direct positive active-taker receipts, 42,067 from direct zero-fee
+receipts, 868 from the dated official pre-fee boundary, 308 from market-wide
+trade receipts and eight from receipt-reconciled market metadata. Receipt cache,
+pause/resume state and large artifacts remain on `E:`; only code and immutable
+result contracts are committed.
+
+**Real-fee 1.0x baselines.** H012-v2 completes all 809,614 validation decisions
+with 38,682 resolved calls and 10,291 fills. It earns `$950.229106` after
+`$2.841145` execution-time fee value, for `9.5023%` return, `6.1537%` maximum
+drawdown, `1.5270` profit factor and `89.9514%` call precision. Across the 40
+non-zero activity weeks its mean is `$23.76`, median `$10.65`, positive fraction
+`70.0%` and worst week `-$433.79`. Its registered moving-block weekly lower 95%
+bound is `-$7.63`, so H012 still fails weekly robustness.
+
+H014 earns `$1,186.530763` after `$95.442343` execution-time fee value, for
+`11.8653%` return, `5.8156%` maximum drawdown, `1.1890` profit factor and
+`90.4032%` precision over 76,359 resolved calls and 45,655 fills. Its 40 active
+weeks average `$29.66`, have a `$10.41` median, are positive `67.5%` of the time
+and have a `-$350.94` worst week. The weekly moving-block lower 95% bound is
+`+$0.30`, but the independent-component lower mean bound remains slightly
+negative at `-$0.000757`; H014 is therefore the current real-fee development
+leader, not a promoted model.
+
+Every replay fill has schedule ID, protocol, taker role, fee asset, collateral
+fee, outcome-share fee and position-share fields. Summing `fee_usd` directly
+over the audit reproduces each result total within `1e-12`. H014 and the selected
+H015 checkpoint have identical model tensors; their independently generated 365
+daily compressed audit shards are byte-identical and every economic metric is
+equal. The H015 identity-replication control now passes. Component bootstrap
+inputs are also sorted canonically after this comparison exposed a second
+process-order dependency in the evaluator.
 
 **Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
 rounding, creation-time rollout rules and the cutover boundary must pass
