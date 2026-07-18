@@ -617,7 +617,7 @@ masked, but cannot claim the temporal-graph variant.
 
 ## SPH-T-H010: Stateful Polymarket Simulator
 
-**Status:** `bounded event adapter implemented; full development replay pending`
+**Status:** `bounded adapter and audit sink implemented; full replay pending`
 
 **Registered:** 2026-07-17, before simulator or model-profit results were
 observed.
@@ -669,12 +669,17 @@ one equity point for every unchanged portfolio mark. It keeps a monotonic source
 cursor, counts consumed liquidity, retains marks only for exposed or fillable
 tokens and records equity only when portfolio value can change. Prediction and
 liquidity retention remain available for small audit runs. Exact adapter plus
-simulator restoration is hash-stable in unit replay; an append-only disk audit
-sink is still required before the full development run.
+simulator restoration is hash-stable in unit replay. The append-only disk audit
+stores compact decision, order, fill and resolution records in immutable atomic
+daily Zstandard shards. Each decision points back to its exact feature date and
+row instead of duplicating 128 inputs, while retaining action logits, physical
+mask, portfolio state, prediction memory, catalog outcomes and the causal-input
+digest. Shard receipts bind source, policy and implementation hashes; their
+ordered hashes form a verified replay manifest.
 
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
-the adapter, add the append-only audit sink and run the first development-only
-trade-tape replay with test physically closed.
+the adapter and run the first development-only trade-tape replay with test
+physically closed.
 
 **Evidence boundary.** H010 mechanics do not establish historical depth,
 executable fills, model quality, profit, untouched-test, paper-forward or
