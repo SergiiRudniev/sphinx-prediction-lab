@@ -95,7 +95,10 @@ def load_policy_decisions(
             if (
                 timestamp != int(example["decision_time_unix"])
                 or market_state_id != int(example["market_state_id"])
-                or component_state_id != int(example["component_state_id"])
+                or (
+                    "component_state_id" in example
+                    and component_state_id != int(example["component_state_id"])
+                )
             ):
                 raise RuntimeError(f"H012 decision metadata changed at {date}:{row}")
             decision_id = str(example["decision_id"])

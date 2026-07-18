@@ -38,7 +38,6 @@ def _pack(root: Path) -> Path:
                 "condition_id": "CONDITION",
                 "component_id": "component",
                 "market_state_id": 3,
-                "component_state_id": 5,
             },
             {
                 "decision_id": "test",
@@ -85,6 +84,7 @@ def test_policy_decisions_keep_test_closed_and_bind_full_state(tmp_path: Path) -
 
     assert set(decisions) == {"trade"}
     assert ref.condition_id == "condition"
+    assert ref.component_state_id == 5
     assert loaded.normalized[-1] == 12.0
     assert loaded.market_probability_outcome0 == pytest.approx(0.65)
     assert len(loaded.feature_sha256) == 64
