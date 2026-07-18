@@ -12,12 +12,18 @@ from typing import Any
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
+DECIMAL_RELATIVE_TOLERANCE = Decimal("1e-18")
 
 
 def decimal(value: Decimal | float | int | str) -> Decimal:
     """Convert external numbers without importing their binary float error."""
 
     return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def _materially_different(actual: Decimal, expected: Decimal) -> bool:
+    tolerance = DECIMAL_RELATIVE_TOLERANCE * max(ONE, abs(expected))
+    return abs(actual - expected) > tolerance
 
 
 class OrderSide(StrEnum):
@@ -280,14 +286,10 @@ class ReplaySimulator:
         expected_index: dict[str, set[str]] = {}
         for position in self.positions.values():
             expected_index.setdefault(position.condition_id, set()).add(position.token_id)
-        def materially_changed(actual: Decimal, expected: Decimal) -> bool:
-            tolerance = Decimal("1e-18") * max(ONE, abs(expected))
-            return abs(actual - expected) > tolerance
-
         mismatches: list[str] = []
-        if materially_changed(self._total_cost_basis_usd, cost_basis):
+        if _materially_different(self._total_cost_basis_usd, cost_basis):
             mismatches.append(f"cost_basis={self._total_cost_basis_usd}!={cost_basis}")
-        if materially_changed(self._marked_exposure_usd, exposure):
+        if _materially_different(self._marked_exposure_usd, exposure):
             mismatches.append(f"exposure={self._marked_exposure_usd}!={exposure}")
         if peak != self._peak_equity_usd:
             mismatches.append(f"peak={self._peak_equity_usd}!={peak}")
@@ -504,6 +506,22 @@ class ReplaySimulator:
                 continue
             notional = shares * price
             fee = notional * self.rules.fee_rate
+            if order.side == OrderSide.BUY and notional + fee > self.cash_usd:
+                total_cost = notional + fee
+                if _materially_different(total_cost, self.cash_usd):
+                    raise RuntimeError(
+                        "Affordable fill materially exceeds cash: "
+                        f"cost={total_cost}, cash={self.cash_usd}, shares={shares}, "
+                        f"price={price}"
+                    )
+                if notional > self.cash_usd:
+                    shares = shares.next_minus()
+                    notional = shares * price
+                    fee = notional * self.rules.fee_rate
+                else:
+                    # Decimal division and the separately rounded fee can differ by one
+                    # terminal digit. Rebase only that bounded arithmetic dust.
+                    fee = self.cash_usd - notional
             fill_id = _stable_hash(
                 {
                     "order_id": order.order_id,
