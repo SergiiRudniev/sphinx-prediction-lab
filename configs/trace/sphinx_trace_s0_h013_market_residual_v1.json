@@ -8,24 +8,25 @@
         "h011_market_only_result": "sphinx-trace-s0-h011-50m-market-only",
         "validation_calibrated_delta_vs_market": 0.004382344016710837,
         "calibration_calibrated_delta_vs_market": -0.005680769181490686,
-        "interpretation": "direct_outcome_learning_was_not_temporally_stable_against_the_market_anchor"
+        "interpretation": "direct_outcome_learning_was_not_temporally_stable_against_the_market_anchor",
+        "evidence_status": "diagnostic_only_after_later_post_close_audit_withdrew_the_source_run"
     },
     "dependencies": {
         "feature_pack": {
-            "id": "sphinx-trace-s0-h011-pack-v1",
-            "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+            "id": "sphinx-trace-s0-h011-qualified-pack-v1",
+            "sha256": "426afc3ce1a7a04f7bbcde4049d3797edb254b53120a04d722e12032aaf75110"
         },
         "model": {
             "id": "sphinx-trace-s0-h011-model-v1",
             "sha256": "d9797557fa2a5e42d7a209b755e54fb497a065d722188c2dd26d0616fb0162ea"
         },
         "training": {
-            "id": "sphinx-trace-s0-h011-train-v1",
-            "sha256": "78ef7de7e69ba9a62e3368b0db82d3e88f19e47e759e140954a2fb9366f1e571"
+            "id": "sphinx-trace-s0-h011-train-v2",
+            "sha256": "ae07e23bb394f76c16a1bee1651dcd5095b7d5bc8ff242d7d412f536a3dc969a"
         },
         "calibration": {
-            "id": "sphinx-trace-s0-h011-calibration-v1",
-            "sha256": "f9ec6f9febc9d277dccf04d7a72765036cd7c8b1142f7dc735e5f5f72795fe34"
+            "id": "sphinx-trace-s0-h011-calibration-v2",
+            "sha256": "eea353b1a6d586c0bdf4223cb09af544f992043584ae5050b3f2f272b3728770"
         }
     },
     "hypothesis": "zero_initialized_market_logit_residual_improves_temporal_stability_and_exposes_incremental_wallet_signal",
@@ -55,7 +56,7 @@
     },
     "evaluation": {
         "validation_and_calibration_both_required": true,
-        "component_bootstrap_config": "sphinx-trace-s0-h011-calibration-v1",
+        "component_bootstrap_config": "sphinx-trace-s0-h011-calibration-v2",
         "promotion_requires_upper_95pct_delta_vs_market_below_zero_on_validation": true,
         "promotion_requires_upper_95pct_delta_vs_market_below_zero_on_calibration": true,
         "compare_against_direct_H011_matched_variant": true

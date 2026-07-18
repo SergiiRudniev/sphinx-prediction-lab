@@ -43,7 +43,7 @@ from sphinx_trace.model_h013 import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TRAINING_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_train_v1.json"
+DEFAULT_TRAINING_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_train_v2.json"
 DEFAULT_MODEL_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_model_v1.json"
 DEFAULT_RESIDUAL_CONFIG = (
     ROOT / "configs" / "trace" / "sphinx_trace_s0_h013_market_residual_v1.json"

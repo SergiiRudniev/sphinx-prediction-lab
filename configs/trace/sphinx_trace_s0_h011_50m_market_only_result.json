@@ -5,7 +5,7 @@
     "candidate_id": "50m",
     "variant_id": "h011_market_only",
     "seed": 17,
-    "status": "not_promoted_temporally_inconsistent_vs_market",
+    "status": "withdrawn_post_close_label_contamination",
     "parameters": 50248198,
     "best_epoch": 1,
     "epochs_completed": 5,
@@ -57,6 +57,11 @@
         "calibration_upper_95pct_below_zero": true,
         "temporally_consistent_market_outperformance": false,
         "test_opened": false
+    },
+    "qualification": {
+        "evidence_status": "diagnostic_only_not_eligible_for_model_selection",
+        "global_development_rows_at_or_after_close_in_source_pack": 4040,
+        "replacement_pack": "sphinx-trace-s0-h011-qualified-pack-v1"
     },
     "evidence_boundary": "This candidate measures development outcome prediction only. It does not establish selective CALL quality, simulator profit, untouched-test performance, executable profit or paper-forward performance."
 }

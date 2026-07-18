@@ -694,7 +694,7 @@ production evidence.
 
 ## SPH-T-H011: Uncapped Causal Flow Campaign
 
-**Status:** `full causal pack verified; first 50M outcome training in progress`
+**Status:** `strictly pre-close qualified pack verified; wallet training pending restart`
 
 **Registered:** 2026-07-17, before full-corpus model metrics were observed.
 
@@ -832,9 +832,28 @@ Market-only is therefore retained as a control and not promoted. The matched
 uncapped-wallet-flow run started immediately under the same seed, source and
 training contract.
 
-**Next action.** Complete the active 50M market-only run, then train the matched
-uncapped-wallet-flow and causal resolved-performance variants on the identical
-verified pack. Finish the quota-aware actor context in parallel and add its
+**Post-result timing audit and withdrawal.** A subsequently registered horizon
+audit joined every labeled feature row to the same catalog `closed_at` used by
+the causal resolution ledger. It found 4,040 development decisions at or after
+public close: 852 train, 2,112 validation and 1,076 calibration. The maximum lag
+was 46,722 seconds. Although this is only 0.14% of labeled rows and cannot explain
+the broad result by itself, zero leakage is the contract. The market-only result
+above is therefore retained as diagnostic history but withdrawn from model
+selection. The active wallet run was paused atomically at epoch 2, shard 198,
+batch 4 before opening any test data.
+
+**Qualified pack.** A source-bound derivative view preserves all 176,119,673
+stream rows, 4,483,489 decisions and immutable feature tensors through 3,288
+NTFS hardlinks, while rebuilding only daily label masks. It removed exactly the
+4,040 ineligible rows, leaving 1,397,374 train, 809,614 validation and 578,176
+calibration labels. A second full horizon audit reports zero labeled decisions
+at or after close, zero missing close times and zero test labels. New training
+and calibration v2 contracts depend on this qualified view; old checkpoints
+cannot resume under the new source digest.
+
+**Next action.** Restart the 50M uncapped-wallet-flow and matched market-only
+controls from scratch on the qualified pack, then train causal resolved-
+performance. Finish the quota-aware actor context in parallel and add its
 matched variant; keep the Polygon graph variant blocked until its source is
 complete.
 
@@ -903,6 +922,11 @@ inconsistency was measured and before any wallet-variant result was observed.
 **Trigger.** Direct 50M outcome learning was worse than market on validation but
 better on calibration. Relearning the full probability can discard a strong
 causal prior and lets small regime shifts dominate the network output.
+
+The later horizon audit withdrew that source run from evidentiary model
+selection. H013 remains a registered architectural hypothesis motivated by the
+market anchor, but its triggering metrics are diagnostic only; every H013 run
+must use the strictly pre-close qualified pack.
 
 **Hypothesis.** Start the terminal logit exactly at the contemporaneous market
 logit and make the network learn only an additive residual. Initialize the
