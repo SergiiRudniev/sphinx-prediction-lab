@@ -355,11 +355,31 @@ def _actor_schedule(actor_dir: Path | None) -> ActorSchedule:
         return ActorSchedule({}, None, None, False, None)
     manifest_path = actor_dir / "manifest.json"
     manifest = _load_object(manifest_path)
+    tasks = manifest.get("tasks")
+    expected = int(manifest.get("expected_task_count", -1))
+    if (
+        manifest.get("complete") is not True
+        or not isinstance(tasks, list)
+        or expected <= 0
+        or int(manifest.get("task_count", -1)) != expected
+        or len(tasks) != expected
+    ):
+        raise RuntimeError("Actor context is not complete for its declared source window")
     schedule: defaultdict[str, list[Path]] = defaultdict(list)
-    for task in manifest.get("tasks", []):
+    task_ids: set[str] = set()
+    task_paths: set[Path] = set()
+    for task in tasks:
         if not isinstance(task, dict):
             raise RuntimeError("Actor manifest task is not an object")
-        schedule[str(task["window_end_exclusive"])[:10]].append(actor_dir / str(task["path"]))
+        task_id = str(task["task_id"])
+        task_path = actor_dir / str(task["path"])
+        if task_id in task_ids or task_path in task_paths:
+            raise RuntimeError("Actor context manifest repeats a task")
+        if not task_path.is_file() or task.get("sha256") != sha256_file(task_path):
+            raise RuntimeError(f"Actor context task changed: {task_id}")
+        task_ids.add(task_id)
+        task_paths.add(task_path)
+        schedule[str(task["window_end_exclusive"])[:10]].append(task_path)
     first = min(schedule) if schedule else None
     return ActorSchedule(
         by_available_date={key: tuple(sorted(value)) for key, value in schedule.items()},

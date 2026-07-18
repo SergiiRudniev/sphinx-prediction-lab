@@ -1,0 +1,34 @@
+{
+  "id": "sphinx-trace-h011-actor-context-v3-result",
+  "version": "3.0.0-result",
+  "status": "complete_declared_window",
+  "research_id": "SPH-T-H011",
+  "completed_at": "2026-07-18T01:13:13.095429Z",
+  "window": {
+    "start": "2025-07-16T00:00:00Z",
+    "end_exclusive": "2026-01-06T00:00:00Z",
+    "later_h009_window_covered": false
+  },
+  "scope": {
+    "rows": 2016833,
+    "bytes": 136967269,
+    "tasks": 451,
+    "expected_tasks": 451,
+    "partitions": 32,
+    "adaptive_leaf_partition_counts": [32, 64, 128],
+    "hard_actor_cap": null,
+    "partition_limit": null
+  },
+  "source": {
+    "manifest_sha256": "a5739886cbfe44ba62510dbd1a2e0cb73f55160974d1bbc4703100ea07d83c06",
+    "task_receipts_sha256": "9b6f13bd281046f204b9a13a846cb0e2c9810a2bdb9f5d9b217638092f4a5366"
+  },
+  "causality": {
+    "monthly_delta_available_only_after_window_end": true,
+    "masked_before_first_available_at": true,
+    "masked_after_declared_end_exclusive": true,
+    "test_labels_opened": false
+  },
+  "next_action": "build_hash_verified_availability_masked_actor_feature_pack_and_matched_h013_residual",
+  "evidence_boundary": "Public actor aggregates only; no funding-transfer graph, insider attribution, model lift, simulator profit or later-window coverage."
+}
