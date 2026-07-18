@@ -24,6 +24,8 @@
     },
     "feature_pack_manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86",
     "encoding_manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3",
+    "development_tape_manifest_sha256": "2b81546da6f8821f8c2c3b6e7e4927ea5dd18471821460a90b0e28985d845b1b",
+    "development_conditions_receipt_sha256": "0d73fa5dc057298d3fb7520e68aba160b3fda86c48855c9c0e3e4d6001407570",
     "behavior_replays": [
       {
         "id": "H012-v2",
@@ -59,6 +61,9 @@
   },
   "partition": {
     "reuse_H012_whole_component_time_partition": true,
+    "fit_component_fraction": 0.7,
+    "fit_rows_expected": 1204402,
+    "selection_rows_expected": 414826,
     "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf",
     "components_cross_blocks": false,
     "calibration_used_for_training_or_selection": false

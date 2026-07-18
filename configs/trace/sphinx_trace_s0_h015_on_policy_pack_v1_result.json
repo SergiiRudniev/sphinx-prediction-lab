@@ -1,0 +1,54 @@
+{
+  "id": "sphinx-trace-s0-h015-on-policy-pack-v1-result",
+  "version": "1.0.0-result",
+  "status": "complete",
+  "research_id": "SPH-T-H015",
+  "dataset_id": "sphinx-h015-on-policy-portfolio-advantage-pack-v1",
+  "rows": 1619228,
+  "fit_rows": 1204402,
+  "selection_rows": 414826,
+  "fit_components": 74370,
+  "selection_components": 31874,
+  "behavior_policies": 2,
+  "days_per_behavior": 365,
+  "shards": 730,
+  "files": 13142,
+  "bytes": 247536941,
+  "behavior_economics": [
+    {
+      "id": "H012-v2",
+      "rows": 809614,
+      "calls": 38702,
+      "orders": 36590,
+      "fills": 10223,
+      "filled_decisions": 4538,
+      "executed_cost_usd": "32967.78684990587093255729169",
+      "realized_pnl_usd": "568.8282097917376261416290393"
+    },
+    {
+      "id": "H014-epoch0",
+      "rows": 809614,
+      "calls": 76444,
+      "orders": 72751,
+      "fills": 44735,
+      "filled_decisions": 12999,
+      "executed_cost_usd": "118991.4976586276988646561259",
+      "realized_pnl_usd": "71.14330229197518998408895278"
+    }
+  ],
+  "source_reproduction": {
+    "H012_net_profit_matches_exact_replay": true,
+    "H014_net_profit_matches_exact_replay": true,
+    "teacher_action_used_as_imitation_label": false,
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "manifest_sha256": "9b5f6414d826fde6bc0fd3ff49c3de59a227aabbf39f80ee6bca602f9c3e2e89",
+  "contract_sha256": "4793aee9b48d6f4ac6969764ec4c1cb3c358c8cb2da32e88438eb286f94e71da",
+  "implementation_sha256": "b0ff92e85569d895232800667124930112c0c0640cbd7338481db3f3f0b51fcb",
+  "config_sha256": "def76797f51e984f7df295fc187433e36764723a56e9caaac007ac071f95e9eb",
+  "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf",
+  "valid": true,
+  "evidence_boundary": "The pack reproduces logged exact-replay economics and causal policy states. It is not model-quality, untouched-test, historical-orderbook or forward-profit evidence."
+}
