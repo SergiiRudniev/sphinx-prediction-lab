@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from contextlib import nullcontext
 from dataclasses import dataclass
 from decimal import Decimal
@@ -47,31 +48,38 @@ class _EncodedPolicyCore(nn.Module):
     def __init__(self, model: SphinxTraceS0H012) -> None:
         super().__init__()
         self.model = model
+        self.market_width = model.width
+        self.portfolio_start = self.market_width
+        self.memory_start = self.portfolio_start + 9
+        self.previous_action_index = self.memory_start + 7
+        self.physical_mask_start = self.previous_action_index + 1
+        self.input_width = self.physical_mask_start + len(H012_ACTIONS)
 
-    def forward(
-        self,
-        market_latent: Tensor,
-        terminal_outcome_logit: Tensor,
-        uncertainty_log_scale: Tensor,
-        portfolio_features: Tensor,
-        prediction_memory_features: Tensor,
-        previous_action_ids: Tensor,
-        physical_action_mask: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def forward(self, packed_inputs: Tensor) -> Tensor:
+        market_latent = packed_inputs[:, : self.market_width]
+        portfolio_features = packed_inputs[:, self.portfolio_start : self.memory_start]
+        prediction_memory_features = packed_inputs[
+            :, self.memory_start : self.previous_action_index
+        ]
+        previous_action_ids = packed_inputs[:, self.previous_action_index].long()
+        physical_action_mask = packed_inputs[:, self.physical_mask_start :].bool()
+        unused_outcome = packed_inputs[:, 0] * 0.0
         output = self.model._forward_from_market_encoding_unchecked(
             market_latent,
-            terminal_outcome_logit,
-            uncertainty_log_scale,
+            unused_outcome,
+            unused_outcome,
             portfolio_features,
             prediction_memory_features,
             previous_action_ids,
             physical_action_mask=physical_action_mask,
         )
-        return (
-            output["action_logits"],
-            output["position_size_beta_alpha"],
-            output["position_size_beta_beta"],
-            output["state_value"],
+        return torch.cat(
+            (
+                output["action_logits"],
+                output["position_size_beta_alpha"].unsqueeze(1),
+                output["position_size_beta_beta"].unsqueeze(1),
+            ),
+            dim=1,
         )
 
 
@@ -96,8 +104,11 @@ class H012PolicyRuntime:
         self.device = device
         self.encoding_store = encoding_store
         encoded_policy: nn.Module | None = None
+        self.encoded_input_width = 0
         if encoding_store is not None:
-            encoded_policy = _EncodedPolicyCore(self.model).to(device).eval()
+            core = _EncodedPolicyCore(self.model).to(device).eval()
+            self.encoded_input_width = core.input_width
+            encoded_policy = core
             if device.type == "cuda":
                 encoded_policy = cast(
                     nn.Module,
@@ -124,10 +135,6 @@ class H012PolicyRuntime:
             ref.condition_id, ref.timestamp_unix
         )
         physical = adapter.physical_action_mask(ref.condition_id)
-        portfolio_tensor = torch.tensor([portfolio], dtype=torch.float32, device=self.device)
-        memory_tensor = torch.tensor([memory], dtype=torch.float32, device=self.device)
-        previous_tensor = torch.tensor([previous_action_id], dtype=torch.long, device=self.device)
-        physical_tensor = torch.tensor([physical], dtype=torch.bool, device=self.device)
         autocast = (
             torch.autocast(device_type="cuda", dtype=torch.bfloat16)
             if self.device.type == "cuda"
@@ -135,6 +142,16 @@ class H012PolicyRuntime:
         )
         with autocast:
             if self.encoding_store is None:
+                portfolio_tensor = torch.tensor(
+                    [portfolio], dtype=torch.float32, device=self.device
+                )
+                memory_tensor = torch.tensor([memory], dtype=torch.float32, device=self.device)
+                previous_tensor = torch.tensor(
+                    [previous_action_id], dtype=torch.long, device=self.device
+                )
+                physical_tensor = torch.tensor(
+                    [physical], dtype=torch.bool, device=self.device
+                )
                 features = (
                     torch.from_numpy(np.asarray(loaded.normalized, dtype=np.float32))
                     .to(self.device)
@@ -155,46 +172,39 @@ class H012PolicyRuntime:
                     market_group_mask=self.group_mask.unsqueeze(0),
                     physical_action_mask=physical_tensor,
                 )
+                logits_tensor = output["action_logits"][0].float()
+                logits = tuple(float(value) for value in logits_tensor.cpu().tolist())
+                alpha = float(output["position_size_beta_alpha"][0].float())
+                beta = float(output["position_size_beta_beta"][0].float())
+                probability = float(torch.sigmoid(output["terminal_outcome_logit"][0].float()))
             else:
                 if self.encoded_policy is None:
                     raise RuntimeError("H012 cached encoding has no compiled policy core")
                 encoded = self.encoding_store.load(ref)
-                market_latent = (
-                    torch.from_numpy(encoded.market_latent).to(self.device).unsqueeze(0)
-                )
-                terminal_logit = torch.tensor(
-                    [encoded.terminal_outcome_logit],
-                    dtype=torch.float32,
-                    device=self.device,
-                )
-                uncertainty = torch.tensor(
-                    [encoded.uncertainty_log_scale],
-                    dtype=torch.float32,
-                    device=self.device,
-                )
-                action_logits, size_alpha, size_beta, state_value = self.encoded_policy(
-                    market_latent,
-                    terminal_logit,
-                    uncertainty,
-                    portfolio_tensor,
-                    memory_tensor,
-                    previous_tensor,
-                    physical_tensor,
-                )
-                output = {
-                    "action_logits": action_logits,
-                    "position_size_beta_alpha": size_alpha,
-                    "position_size_beta_beta": size_beta,
-                    "state_value": state_value,
-                    "terminal_outcome_logit": terminal_logit,
-                    "outcome_uncertainty_log_scale": uncertainty,
-                }
-        logits = output["action_logits"][0].float()
-        action_id = int(logits.argmax())
-        alpha = float(output["position_size_beta_alpha"][0].float())
-        beta = float(output["position_size_beta_beta"][0].float())
+                packed = np.empty(self.encoded_input_width, dtype=np.float32)
+                market_stop = len(encoded.market_latent)
+                portfolio_stop = market_stop + len(portfolio)
+                memory_stop = portfolio_stop + len(memory)
+                physical_start = memory_stop + 1
+                packed[:market_stop] = encoded.market_latent
+                packed[market_stop:portfolio_stop] = portfolio
+                packed[portfolio_stop:memory_stop] = memory
+                packed[memory_stop] = previous_action_id
+                packed[physical_start:] = physical
+                packed_tensor = torch.from_numpy(packed).to(self.device).unsqueeze(0)
+                encoded_output = self.encoded_policy(packed_tensor)
+                values = tuple(float(value) for value in encoded_output[0].float().cpu().tolist())
+                logits = values[: len(H012_ACTIONS)]
+                alpha = values[-2]
+                beta = values[-1]
+                terminal = encoded.terminal_outcome_logit
+                if terminal >= 0.0:
+                    probability = 1.0 / (1.0 + math.exp(-terminal))
+                else:
+                    exponential = math.exp(terminal)
+                    probability = exponential / (1.0 + exponential)
+        action_id = max(range(len(logits)), key=logits.__getitem__)
         size = alpha / max(alpha + beta, 1e-8)
-        probability = float(torch.sigmoid(output["terminal_outcome_logit"][0].float()))
         input_sha256 = policy_input_digest(
             loaded.feature_sha256,
             loaded.market_probability_outcome0,
@@ -223,7 +233,7 @@ class H012PolicyRuntime:
             prediction_memory_features=memory,
             previous_action_id=previous_action_id,
             physical_action_mask=physical,
-            action_logits=tuple(float(value) for value in logits.cpu().tolist()),
+            action_logits=logits,
             size_alpha=alpha,
             size_beta=beta,
         )

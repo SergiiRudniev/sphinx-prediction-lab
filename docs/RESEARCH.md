@@ -1100,8 +1100,13 @@ layers with full-graph reduced-overhead CUDA execution. On the same GPU, the
 policy-only benchmark improved from 339.99 to 3,555.84 decisions/second
 (`10.46x`). Public model entry points retain their shape, categorical-range and
 physical-mask validation; only source-validated replay uses the unchecked tensor
-core. The paused trajectory remains non-evidence and will not be resumed across
-the changed implementation digest.
+core. A second runtime pass packed the 512-wide latent, portfolio, memory,
+previous action and physical mask into one CPU-to-GPU tensor and returned logits
+plus both size parameters in one synchronization. The complete inference and
+audit-object construction benchmark, including feature/input digests and
+`Decimal` policy output, reached 1,903.39 decisions/second. The paused
+trajectories remain non-evidence and will not be resumed across changed
+implementation digests.
 
 **Next action.** Materialize and verify the registered market-encoding cache,
 then restart H012-v2 epoch 3 from day zero through exact H010 validation. If it
