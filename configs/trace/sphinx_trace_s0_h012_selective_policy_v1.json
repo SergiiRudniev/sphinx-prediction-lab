@@ -4,7 +4,7 @@
   "status": "registered",
   "research_id": "SPH-T-H012",
   "registered_at": "2026-07-17T23:43:30Z",
-  "objective": "learn_portfolio_aware_CALL_YES_CALL_NO_SKIP_and_sizing_for_maximum_net_profit_after_costs",
+  "objective": "learn_portfolio_aware_outcome_0_outcome_1_SKIP_and_sizing_for_maximum_net_profit_after_costs",
   "dependencies": {
     "simulator": {
       "id": "sphinx-trace-simulator-h010-v1",
@@ -46,7 +46,6 @@
       "pending_order_count_log1p"
     ],
     "prediction_memory_inputs": [
-      "previous_action",
       "previous_probability",
       "previous_size_fraction",
       "seconds_since_prediction_log1p",
@@ -55,10 +54,21 @@
       "average_entry_price",
       "current_mark"
     ],
+    "previous_action_categorical": true,
     "current_balance_visible_to_model": true
   },
   "policy": {
-    "actions": ["CALL_YES", "CALL_NO", "SKIP", "UPDATE", "HOLD", "REDUCE", "CLOSE"],
+    "actions": [
+      "CALL_OUTCOME_0",
+      "CALL_OUTCOME_1",
+      "SKIP",
+      "UPDATE",
+      "HOLD",
+      "REDUCE",
+      "CLOSE"
+    ],
+    "display_action_uses_catalog_outcome_label": true,
+    "yes_no_markets_map_outcome_indices_to_yes_no": true,
     "call_or_skip": "learned_categorical_output_not_fixed_threshold",
     "side": "learned_yes_no_output",
     "size": "learned_beta_fraction_of_current_available_equity",
