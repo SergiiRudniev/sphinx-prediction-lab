@@ -1034,9 +1034,22 @@ does not impose a CALL count, confidence threshold or fixed production stake;
 SKIP remains the zero-utility action and the model must learn a positive value to
 beat it.
 
-**Next action.** Train the registered counterfactual-action-value warm-start,
-then send only its selected checkpoint through the exact H010 stateful replay
-without opening test.
+**H012-v2 static result.** The same 64,583,696-parameter policy trained for seven
+epochs and 1,293.61 seconds. Counterfactual action-value regression selected
+epoch 3 rather than the safe all-SKIP anchor. On 207,413 later-validation rows it
+made 2,893 calls (1.395%), achieved 76.08% side precision and positive mean
+chosen log utility `+0.00000412` at a learned mean balance fraction of 0.436%.
+The untouched development calibration block remained positive: 10,310 calls
+(1.783%), 79.45% precision and `+0.00000338` mean chosen log utility at 0.436%
+mean size. Fit, selection and calibration are all positive under the registered
+static entry-cost proxy. This is the first H012 candidate eligible for exact
+H010 replay, not a profit promotion: repeated calls, shared cash, fills,
+liquidity, exits and component dependence are not represented by the static
+metric.
+
+**Next action.** Send H012-v2 epoch 3 through exact H010 validation and
+calibration replay, then apply weekly and independent-component profit bootstrap
+and registered cost stress without opening test.
 
 **Evidence boundary.** Trade-tape development profit cannot establish historical
 orderbook executability, untouched-test performance, paper-forward profit,

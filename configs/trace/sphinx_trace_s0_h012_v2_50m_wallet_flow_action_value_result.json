@@ -1,0 +1,50 @@
+{
+  "id": "sphinx-trace-s0-h012-v2-50m-wallet-flow-action-value-result",
+  "version": "2.0.0-result",
+  "status": "complete_selected_for_exact_replay",
+  "research_id": "SPH-T-H012",
+  "completed_at": "2026-07-18T03:18:25.440308Z",
+  "candidate_id": "50m",
+  "outcome_variant_id": "h013_uncapped_wallet_flow_residual",
+  "parameters": 64583696,
+  "source": {
+    "result_sha256": "ea75b913dcdf193f2cf323bdbb3d5f599d29331aa216ee253c33ca6e246cfe8a",
+    "contract_sha256": "43992f6f27591ce82775cb868d03d42034e1b8a440d97513664aca9fdf683ac1",
+    "source_digest": "ee5401aff84ae155699dd6e1bff00450b45a88463e0bce1f6dee239558ca0634",
+    "outcome_result_sha256": "b6bf2e5e64b00f4ff10b178749e41e84a8b6c52b0cd16c5aff1863732abcd0c5"
+  },
+  "training": {
+    "best_epoch": 3,
+    "epochs_completed": 7,
+    "elapsed_seconds": 1293.6135138999962,
+    "fit_rows": 602201,
+    "selection_rows": 207413,
+    "calibration_rows": 578176,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "fit": {
+    "calls": 32969,
+    "call_rate": 0.05474750124958278,
+    "call_precision": 0.9090964239133732,
+    "chosen_log_utility": 0.00002328312722536966,
+    "mean_size": 0.004371279836278952
+  },
+  "selection": {
+    "calls": 2893,
+    "call_rate": 0.013948016758833824,
+    "call_precision": 0.7608019357068787,
+    "chosen_log_utility": 0.000004119608131281832,
+    "mean_size": 0.0043636000453342065
+  },
+  "calibration": {
+    "calls": 10310,
+    "call_rate": 0.01783194044719947,
+    "call_precision": 0.7944713870029098,
+    "chosen_log_utility": 0.0000033755729441070455,
+    "mean_size": 0.004364573965151364
+  },
+  "decision": "send_best_epoch_3_to_exact_H010_validation_then_calibration_replay",
+  "promotion_allowed": false,
+  "evidence_boundary": "Positive static development action-value utility on selection and calibration; exact shared-portfolio replay, cost stress, test and paper-forward evidence remain required."
+}
