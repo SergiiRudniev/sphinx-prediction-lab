@@ -1352,7 +1352,7 @@ orderbook executability or forward profit.
 
 ## SPH-T-H015: On-Policy Portfolio Advantage Aggregation
 
-**Status:** `registered; corpus and trainer pending`
+**Status:** `source-bound corpus complete; trainer pending`
 
 **Registered:** 2026-07-18, after the complete H014 exact replay and bootstrap
 were observed, before any H015 corpus, training or replay metric existed.
@@ -1392,3 +1392,25 @@ remain profitable under registered cost stress before calibration can open.
 
 **Evidence boundary.** Iterative development replay is not untouched-test,
 historical-orderbook executable or paper-forward profit evidence.
+
+**Completed corpus.** The source-bound H015 pack contains 1,619,228 decision
+states: all 809,614 validation decisions from each H012-v2 and H014-epoch0
+trajectory. Its 730 daily behavior shards preserve the exact portfolio state,
+prediction memory, physical action mask and common frozen market encoding, and
+add market identity, logged action, execution fraction, fill cost and marginal
+fill-to-resolution PnL. The whole-component split remains 1,204,402 fit and
+414,826 selection rows across 74,370 and 31,874 components respectively.
+
+The independent attribution audit joined 36,590 H012 orders/10,223 fills and
+72,751 H014 orders/44,735 fills. Summed decision PnL reproduces the source exact
+replays at Decimal precision: `+$568.828209791737626...` and
+`+$71.143302291975189...`. Only 4,538 H012 decisions and 12,999 H014 decisions
+received fills, directly exposing the execution-selection failure that terminal
+outcome supervision alone cannot represent. The behavior action is stored only
+to select its action-value regression target; it is not an imitation label.
+
+The 247,536,941-byte artifact is bound by manifest
+`9b5f6414d826fde6bc0fd3ff49c3de59a227aabbf39f80ee6bca602f9c3e2e89`
+and contract
+`4793aee9b48d6f4ac6969764ec4c1cb3c358c8cb2da32e88438eb286f94e71da`.
+Calibration and test consumption remain zero.

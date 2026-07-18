@@ -205,6 +205,18 @@ def test_h014_exact_result_rejects_promotion_and_h015_is_pre_registered() -> Non
     assert h015["architecture"]["fixed_bet_size"] is None
     assert h015["architecture"]["fixed_portfolio_limit"] is None
 
+    pack = load_json(
+        ROOT / "configs" / "trace" / "sphinx_trace_s0_h015_on_policy_pack_v1_result.json"
+    )
+    assert pack["valid"] is True
+    assert pack["rows"] == 1_619_228
+    assert pack["fit_rows"] == 1_204_402
+    assert pack["selection_rows"] == 414_826
+    assert pack["source_reproduction"]["H012_net_profit_matches_exact_replay"] is True
+    assert pack["source_reproduction"]["H014_net_profit_matches_exact_replay"] is True
+    assert pack["source_reproduction"]["teacher_action_used_as_imitation_label"] is False
+    assert pack["source_reproduction"]["test_labels_opened"] is False
+
 
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
