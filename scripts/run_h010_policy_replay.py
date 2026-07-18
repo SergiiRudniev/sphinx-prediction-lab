@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import time
 from collections import Counter
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
@@ -74,7 +75,15 @@ def _atomic_torch_save(path: Path, payload: dict[str, Any]) -> None:
     torch.save(payload, temporary)
     with temporary.open("rb+") as handle:
         os.fsync(handle.fileno())
-    os.replace(temporary, path)
+    last_error: PermissionError | None = None
+    for attempt in range(8):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            time.sleep(min(1.0, 0.025 * (2**attempt)))
+    raise PermissionError(f"Could not atomically replace {path}: {last_error}")
 
 
 def _rules(config: dict[str, Any], cost_multiplier: float) -> SimulationRules:

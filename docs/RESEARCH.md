@@ -944,7 +944,7 @@ paper-forward performance, insider attribution or production readiness.
 
 ## SPH-T-H012: Portfolio-Aware Selective Policy
 
-**Status:** `H012-v2 selected for exact development replay; validation incomplete`
+**Status:** `H012-v2 exact validation complete; profitable but rejected by robustness gates`
 
 **Registered:** 2026-07-17, before full H011 outcome or profit metrics were
 observed.
@@ -1125,12 +1125,33 @@ bit-identical features; 100,000 state reads completed in 0.300 seconds
 to the already-declared `orjson` dependency; the same 94,997-row tape shard
 improved from 0.324 to 0.153 seconds while preserving row objects and order.
 
-**Next action.** Materialize and verify the registered market-encoding cache,
-then restart H012-v2 epoch 3 from day zero through exact H010 validation. If it
-passes weekly profit and drawdown gates, run calibration, independent-component
-bootstrap, baselines and registered cost stress without opening test. If it
-fails, use its causal action/state audit to register the next policy-training
-hypothesis rather than tuning a fixed CALL threshold.
+**Completed exact validation result.** H012-v2 processed all 809,614 qualified
+validation decisions and ended with `$10,568.83` from `$10,000`, for net profit
+`+$568.83` (`+5.688%`) after `$326.41` in fees. It made 38,702 resolved calls
+over 11,628 conditions, all on outcome 1, with 34,813 correct calls (`89.95%`
+precision). Maximum drawdown was `6.682%` and profit factor was `1.278`. All
+positions were resolved and no test row or test label was consumed.
+
+The path is not robust enough for promotion. Across 53 reported weeks, mean
+profit was `+$10.73`, but only `50.94%` were positive; the worst week lost
+`$495.69`. The registered four-week circular block bootstrap gave a 95% interval
+of [`-$14.83`, `+$37.36`] for mean weekly profit. Across 6,772 independent
+called components, the equal-component mean was `+$0.0840`, but its 95%
+interval was [`-$0.0188`, `+$0.1981`]. Both required lower-positive gates fail.
+The result is therefore rejected for promotion despite positive aggregate PnL.
+
+Exact replay also confirms the distribution-shift trigger: the static selection
+view called on `1.395%` of rows, while sequential replay called on `4.780%`.
+Portfolio and prediction-memory tokens were trained only at their synthetic
+initial state, so their real trajectory moved the learned policy substantially
+off its training distribution. The immutable 1,009,433-row action/state audit is
+now a source-bound teacher for H014; no fixed CALL threshold will be tuned from
+this path.
+
+**Next action.** Build H014 on the exact H012 replay states, fit only the original
+early validation component block, select on the disjoint late block and rerun
+the exact simulator. Keep calibration and test closed until H014 passes both
+registered validation bootstrap gates and improves on H012.
 
 **Evidence boundary.** Trade-tape development profit cannot establish historical
 orderbook executability, untouched-test performance, paper-forward profit,
@@ -1215,3 +1236,51 @@ the wider wallet-attention hypothesis.
 
 **Evidence boundary.** H013 development lift cannot establish selective-call
 profit, untouched-test performance, executable profit or paper-forward profit.
+
+## SPH-T-H014: Replay-State Policy Distillation
+
+**Status:** `registered; corpus and resumable trainer pending`
+
+**Registered:** 2026-07-18, after the complete H012-v2 exact validation and
+bootstrap results were observed, before any H014 corpus, training or profit
+metric existed.
+
+**Trigger.** H012-v2 earned `+$568.83`, but its weekly and independent-component
+bootstrap lower bounds were negative. Its exact replay CALL rate was `4.780%`,
+more than three times the `1.395%` static selection rate. The market backbone was
+trained causally, but the portfolio and prediction-memory fusion had seen only
+synthetic initial states during optimization.
+
+**Hypothesis.** Initialize from H012-v2 and train the state-dependent policy on
+the exact causal portfolio, prediction-memory, previous-action and physical-mask
+states it actually encountered. Preserve the immutable market latent and the
+learned `CALL_OUTCOME_0`, `CALL_OUTCOME_1`, `SKIP` and balance-dependent size
+outputs. Correcting state-distribution shift should reduce wrong clustered calls
+and improve weekly risk-adjusted profit without a confidence threshold, edge
+threshold, frequency target or fixed stake.
+
+**Controlled construction.** Materialize one source-bound row for each of the
+809,614 validation decisions in the H012 audit. Bind each row to the exact
+qualified-pack row, cached market encoding, terminal outcome, causal market
+price, component and timestamp. The recorded H012 action is provenance only and
+is not a training target. Counterfactual CALL-0, CALL-1 and zero SKIP utilities
+remain the targets. Freeze the market/outcome backbone and train the portfolio
+encoder, memory encoder, previous-action embedding, fusion blocks, action head,
+size heads and value head.
+
+Reuse the exact whole-component chronological partition registered for H012:
+602,201 early fit rows and 207,413 disjoint late selection rows are expected.
+Calibration and test are excluded from corpus construction, optimization and
+selection. Checkpoints bind every source manifest, implementation file,
+partition, optimizer, scheduler and RNG state and support exact pause/resume.
+
+**Acceptance.** H014 must first improve static selection utility, then beat the
+H012 exact replay in the same H010 simulator. Promotion still requires positive
+lower 95% weekly and independent-component profit bounds, at least 1,000 calls
+and 1,000 independent components, positive profit at registered cost stress,
+and later untouched calibration, test and paper-forward evidence.
+
+**Evidence boundary.** Logged-state counterfactual training is off-policy
+development evidence. Only a fresh exact replay can measure its shared-cash,
+liquidity and recurrent behavior, and neither can establish historical
+orderbook executability or forward profit.
