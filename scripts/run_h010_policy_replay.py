@@ -127,7 +127,8 @@ def _resolution_record(
     condition_id: str,
     timestamp_unix: int,
     payouts: tuple[Any, Any],
-    pnl: Any,
+    terminal_pnl: Any,
+    total_condition_pnl: Any,
 ) -> dict[str, Any]:
     return {
         "schema_version": "1.0.0",
@@ -135,7 +136,8 @@ def _resolution_record(
         "condition_id": condition_id,
         "timestamp_unix": timestamp_unix,
         "payouts": [str(value) for value in payouts],
-        "realized_pnl_usd": str(pnl),
+        "terminal_realized_pnl_usd": str(terminal_pnl),
+        "total_condition_realized_pnl_usd": str(total_condition_pnl),
     }
 
 
@@ -302,8 +304,15 @@ def replay(
             ):
                 break
             pnl = adapter.resolve(row.condition_id, row.timestamp_unix, row.payouts)
+            total_condition_pnl = adapter.simulator.pop_condition_realized_pnl(row.condition_id)
             records.append(
-                _resolution_record(row.condition_id, row.timestamp_unix, row.payouts, pnl)
+                _resolution_record(
+                    row.condition_id,
+                    row.timestamp_unix,
+                    row.payouts,
+                    pnl,
+                    total_condition_pnl,
+                )
             )
             winning_side = 0 if row.payouts[0] > row.payouts[1] else 1
             sides = pending_call_sides.pop(row.condition_id, [])

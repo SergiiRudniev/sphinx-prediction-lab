@@ -87,6 +87,7 @@ def test_partial_fill_latency_self_fill_guard_resolution_and_resume() -> None:
     )
     assert pnl == Decimal("4.8490")
     assert restored.cash_usd == Decimal("104.8490")
+    assert restored.pop_condition_realized_pnl("condition") == Decimal("4.8490")
     assert restored.metrics()["net_profit_usd"] == pytest.approx(4.849)
 
 
