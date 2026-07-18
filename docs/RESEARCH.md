@@ -1068,7 +1068,7 @@ full-period replay, rather than static metrics or this partial path, must decide
 the hypothesis.
 
 **Source-bound encoding-cache registration.** Before observing a completed
-replay result, H012 registered a semantics-preserving throughput optimization.
+replay result, H012 registered a no-feature-removal throughput optimization.
 The fine-tuned market backbone is independent of sequential portfolio state, so
 its 512-wide latent, terminal logit and uncertainty output are computed once for
 all 1,387,790 qualified validation/calibration decisions in large GPU batches.
@@ -1079,6 +1079,29 @@ test contract. Sequential replay still recomputes the portfolio token,
 prediction memory, physical action mask, policy fusion, position size and every
 simulator transition in event-time order. A full-forward versus cached-forward
 identity test protects the decomposition.
+
+The complete cache contains 1,387,790 rows: 809,614 validation and 578,176
+calibration decisions across 365 source-bound daily shards, with zero test rows.
+It built on the RTX 5070 in 160.35 seconds. A real-checkpoint GPU audit sampled
+42 rows across the time range. Cached and batch-one paths chose the same action
+on all 42. Because BF16 matrix kernels can select different accumulation paths
+at batch 4,096 and batch one, the comparison is not bitwise: maximum observed
+absolute differences were `0.01283` in the 512-wide latent, `0.0078125` in the
+terminal logit and `0.0002441` in an action logit. Float32 storage adds no second
+quantization step, but the cache is still a fixed canonical inference
+microbatch, not proof of bitwise batch-shape invariance. This numerical boundary
+must remain visible in promotion evidence.
+
+The first cached replay reached day 183 before a deliberate throughput pause.
+It showed that two device-to-host input-validation synchronizations and eager
+batch-one policy fusion had become the new bottleneck. H012 split validation
+from a tensor-only trusted replay core and compiled only the four stateful fusion
+layers with full-graph reduced-overhead CUDA execution. On the same GPU, the
+policy-only benchmark improved from 339.99 to 3,555.84 decisions/second
+(`10.46x`). Public model entry points retain their shape, categorical-range and
+physical-mask validation; only source-validated replay uses the unchecked tensor
+core. The paused trajectory remains non-evidence and will not be resumed across
+the changed implementation digest.
 
 **Next action.** Materialize and verify the registered market-encoding cache,
 then restart H012-v2 epoch 3 from day zero through exact H010 validation. If it
