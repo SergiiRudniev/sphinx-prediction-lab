@@ -926,6 +926,22 @@ but cannot impose confidence, edge, category, correlation or position-count
 limits. Debug output retains market-group attention, policy attention, portfolio
 and prediction-memory tokens for group ablation and attribution audits.
 
+H012 now accepts either a direct H011 backbone or the market-anchored H013
+wrapper. In the latter case the contemporaneous market probability is a required
+input and the policy receives the selected anchor-plus-residual terminal logit;
+the residual signal can no longer be silently lost at the outcome-to-policy
+boundary.
+
+Before any H012 profit result was observed, a two-stage optimization contract was
+registered. Stage one vectorizes a learned CALL-outcome-0/CALL-outcome-1/SKIP and
+beta-size warm start on the early validation component-time block. It maximizes
+realized log growth after the registered adverse tick and fee, with no confidence
+threshold, edge threshold, fixed size, call bonus or skip penalty. Whole
+components are assigned to disjoint chronological fit and selection blocks.
+Stage two remains recurrent clipped policy-gradient fine-tuning against exact
+H010 state transitions and cost stress. Warm-start utility is diagnostic and
+cannot replace replay profit evidence.
+
 **Next action.** Complete the H011 outcome ablations, implement the H009/H010
 event-time adapter and train the first portfolio-aware selective policy without
 opening test.
