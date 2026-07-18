@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import Any
 
 from sphinx_trace.model_h012 import H012_ACTIONS
+from sphinx_trace.polymarket_fees import FeeScheduleBook
 from sphinx_trace.simulator import (
     ONE,
     ZERO,
@@ -193,6 +194,11 @@ class H010ReplayAdapter:
                 price=price,
                 shares=shares,
                 observed_side=observed_side,
+                transaction_hash=(
+                    None
+                    if payload.get("transaction_hash") is None
+                    else str(payload["transaction_hash"]).lower()
+                ),
             )
         )
         reference_prices = {
@@ -280,7 +286,13 @@ class H010ReplayAdapter:
             max(ZERO, target_cost - current_cost),
             self.simulator.available_cash_usd(),
         )
-        requested_shares = additional_cost / (limit_price * (ONE + self.simulator.rules.fee_rate))
+        requested_shares = self.simulator.buy_shares_for_total_cost(
+            total_cost_usd=additional_cost,
+            price=limit_price,
+            evidence_liquidity_id=call.evidence_trade_id,
+            condition_id=call.condition_id,
+            timestamp_unix=call.timestamp_unix,
+        )
         if requested_shares <= ZERO:
             return None
         index = contract.outcome_index(token_id)
@@ -491,12 +503,16 @@ class H010ReplayAdapter:
         contracts: dict[str, BinaryMarketContract],
         *,
         source_sha256: str,
+        fee_schedule_book: FeeScheduleBook | None = None,
     ) -> H010ReplayAdapter:
         cursor_value = dict(payload["cursor"])
         if str(cursor_value["source_sha256"]) != source_sha256:
             raise ValueError("Replay checkpoint belongs to another source")
         adapter = cls(
-            ReplaySimulator.from_snapshot(dict(payload["simulator"])),
+            ReplaySimulator.from_snapshot(
+                dict(payload["simulator"]),
+                fee_schedule_book=fee_schedule_book,
+            ),
             contracts,
             source_sha256=source_sha256,
         )

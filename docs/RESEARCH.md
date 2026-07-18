@@ -1481,7 +1481,7 @@ replication test are now mandatory in H016. H015 is rejected for promotion.
 
 ## SPH-T-H016: Protocol-Exact Polymarket Fees
 
-**Status:** `registered; deterministic reductions repaired; fee implementation pending`
+**Status:** `in progress; deterministic reductions and protocol fee engine implemented; historical schedule artifact pending`
 
 **Registered:** 2026-07-18, while the pre-registered H015 fresh replay was still
 running and before its result was observed. The replay is allowed to finish only
@@ -1551,6 +1551,28 @@ opposite set iteration orders at a 28-digit precision boundary that previously
 produced different available cash; both now return exactly the same state. All
 159 tests pass. Fresh-process full replay identity remains an H016 acceptance
 gate and will be checked together with the real-fee baselines.
+
+**Protocol fee engine.** The simulator now has an immutable, manifest-bound and
+fail-closed fee-schedule book keyed by the causal liquidity event. It implements
+the generalized V2 price curve, taker-only role handling, five-decimal half-up
+rounding and rate stress. It separately implements the V1 symmetric minimum-
+price curve with integer-style downward rounding. A V1 BUY deducts the fee from
+received outcome shares without spending extra collateral; V1 SELL and both V2
+sides settle the fee in collateral. Orders reserve cash against their evidence
+event's schedule, exact fills rebind to the later transaction/condition/time,
+and checkpoint resume rejects a missing or changed schedule manifest.
+
+Per-fill audit rows now preserve gross shares, position shares, collateral fee,
+outcome-share fee, USD fee value, protocol, schedule ID, fee asset and explicit
+taker role. BUY sizing solves against the active protocol fee instead of the old
+flat-bps denominator. Legacy proxy replay remains available only when no H016
+schedule artifact is supplied, so prior results remain reproducible and cannot
+silently acquire a real-cost label. The complete 168-test suite passes, including
+cash/position reconciliation vectors for V1 and V2 and fail-closed schedule and
+checkpoint binding. The remaining blocking work is to construct the immutable
+historical receipt-derived schedule artifact for every liquidity event that can
+fill an H012/H014/H015 order; real-fee baselines cannot start before that artifact
+is complete.
 
 **Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
 rounding, creation-time rollout rules and the cutover boundary must pass
