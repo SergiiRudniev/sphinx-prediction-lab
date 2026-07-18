@@ -1,0 +1,57 @@
+{
+  "id": "sphinx-trace-s0-h015-portfolio-advantage-seed17-result",
+  "version": "1.0.0-result",
+  "status": "complete_exact_replay_pending",
+  "research_id": "SPH-T-H015",
+  "valid": true,
+  "seed": 17,
+  "parameters": 64583696,
+  "trainable_parameters": 14335498,
+  "epochs_completed": 3,
+  "elapsed_seconds": 307.88113500000327,
+  "best_epoch": -1,
+  "selected_checkpoint": "unchanged_H014_epoch0_initialization",
+  "selected_model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81",
+  "H014_model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81",
+  "selection": {
+    "rows": 414826,
+    "calls": 19372,
+    "call_precision": 0.8745096014866818,
+    "equal_market_call_precision": 0.9560415012959925,
+    "equal_market_call_rate": 0.061933983949488985,
+    "equal_market_mean_chosen_counterfactual_utility": -0.0000015344531944181974,
+    "mean_size": 0.003936160658608418,
+    "logged_execution_action_value_loss": 0.0000010077411459058907
+  },
+  "trained_epoch_selection_scores": [
+    -0.00000520486301100117,
+    -0.0000030121077702577788,
+    -0.000008987694792762478
+  ],
+  "weighting": {
+    "fit_markets_per_behavior": 105753,
+    "selection_markets_per_behavior": 47253,
+    "fit_rows_per_behavior": 602201,
+    "selection_rows_per_behavior": 207413,
+    "equal_market_total_weight": true,
+    "equal_behavior_policy_total_weight": true
+  },
+  "numerical_qualification": {
+    "first_trajectory_infinite_loss_rejected": true,
+    "masked_counterfactual_action_fix_fresh_run": true,
+    "selected_loss_finite": true
+  },
+  "result_sha256": "c60eb725a68ba64825143d0a508c1861b38d20b484b433d0f2b11e40bfbdd8a9",
+  "best_model_sha256": "0b13e026948a86cd0470f563cf16d12e6e24de4ced00b943be008c45845fd751",
+  "checkpoint_sha256": "511ff062f60f6e0bf6bfc374cee261a8b6f33d401483fd770f866a9eb79d9638",
+  "contract_sha256": "f947dd172f7c0c81f2df31b57cea4989e05ce2db47d6286bbf62f038930dac6f",
+  "implementation_sha256": "650bc4c4903cd4326267ff2011f05242e4a34d0d1a318a503ba668d290f3731f",
+  "state_manifest_sha256": "9b5f6414d826fde6bc0fd3ff49c3de59a227aabbf39f80ee6bca602f9c3e2e89",
+  "market_backbone_frozen": true,
+  "exact_replay_required": true,
+  "promotion_allowed": false,
+  "calibration_rows_consumed": 0,
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "Static selection rejected every trained epoch and retained the tensor-identical H014 initialization. Fresh exact replay is still required; no model improvement or forward profit is established."
+}
