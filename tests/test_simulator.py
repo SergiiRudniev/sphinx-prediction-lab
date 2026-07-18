@@ -168,6 +168,39 @@ def test_cash_share_constraints_sell_and_duplicate_liquidity_guard() -> None:
         simulator.cancel_order(buy.order_id, 5)
 
 
+def test_affordable_fill_rebases_only_decimal_fee_dust() -> None:
+    simulator = ReplaySimulator(
+        SimulationRules(
+            initial_cash_usd=Decimal("1"),
+            available_share_fraction=Decimal("1"),
+            duplicate_liquidity_haircut=Decimal("1"),
+            adverse_price_ticks=0,
+            fee_bps=Decimal("100"),
+        )
+    )
+    order = simulator.place_order(
+        decision_id="cash-boundary",
+        component_id="component",
+        condition_id="condition",
+        token_id="yes-token",
+        outcome="YES",
+        side=OrderSide.BUY,
+        submitted_at_unix=1,
+        requested_shares="2",
+        limit_price="0.016",
+    )
+    simulator.cash_usd = Decimal("0.02")
+
+    fills = simulator.process_liquidity(
+        _event("cash-boundary-fill", 3, price="0.016", shares="10")
+    )
+
+    assert len(fills) == 1
+    assert order.status == OrderStatus.PARTIAL
+    assert fills[0].notional_usd + fills[0].fee_usd == Decimal("0.02")
+    assert simulator.cash_usd == Decimal("0")
+
+
 def test_unfilled_order_expires_without_invented_liquidity() -> None:
     simulator = ReplaySimulator(
         SimulationRules(

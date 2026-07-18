@@ -1309,6 +1309,17 @@ epoch-0 checkpoint preserves the frozen market-backbone digest and is selected
 for a fresh exact H010 validation replay. This logged-state result is not profit
 evidence because H014 will create a different recurrent portfolio trajectory.
 
+**First exact-replay attempt invalidated.** H014 created a much denser recurrent
+path than its logged-state evaluation. The run stopped on development day 223
+before producing a result when an affordable BUY fill exceeded remaining cash
+by bounded `Decimal` division/fee-rounding dust. H010 already capped shares by
+cash and reserved every pending order, so this was not a strategy overdraft.
+The simulator now distinguishes material overspend from relative `1e-18`
+arithmetic dust, rebases only the separately rounded fee at that boundary and
+retains a hard failure for any material excess. A regression test reproduces the
+cash-boundary fill. The partial trajectory is invalid and will not be used as
+profit evidence or resumed across the changed implementation digest.
+
 **Acceptance.** H014 must first improve static selection utility, then beat the
 H012 exact replay in the same H010 simulator. Promotion still requires positive
 lower 95% weekly and independent-component profit bounds, at least 1,000 calls
