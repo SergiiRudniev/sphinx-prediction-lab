@@ -50,6 +50,7 @@ IMPLEMENTATION_PATHS = (
     ROOT / "src" / "sphinx_trace" / "model_h011.py",
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
     ROOT / "src" / "sphinx_trace" / "model_h013.py",
+    ROOT / "src" / "sphinx_corpus" / "io.py",
 )
 
 

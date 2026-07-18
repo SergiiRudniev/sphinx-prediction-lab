@@ -79,6 +79,11 @@ def test_partial_fill_latency_self_fill_guard_resolution_and_resume() -> None:
     assert restored.orders[order.order_id].status == OrderStatus.FILLED
     assert restored.positions["yes-token"].shares == Decimal("10.0")
     assert restored.cash_usd == Decimal("94.8490")
+    assert restored.total_cost_basis_usd() == Decimal("5.1510")
+    assert restored.marked_exposure_usd() == Decimal("5.00")
+    assert restored.positions_for_condition("condition") == (
+        restored.positions["yes-token"],
+    )
 
     pnl = restored.resolve(
         condition_id="condition",
@@ -154,6 +159,8 @@ def test_cash_share_constraints_sell_and_duplicate_liquidity_guard() -> None:
     assert sell.status == OrderStatus.FILLED
     assert simulator.positions["yes-token"].shares == Decimal("5")
     assert simulator.realized_pnl_usd == Decimal("0.3550")
+    assert simulator.total_cost_basis_usd() == Decimal("2.0705")
+    assert simulator.marked_exposure_usd() == Decimal("2.50")
 
     with pytest.raises(ValueError, match="replayed twice"):
         simulator.process_liquidity(_event("sell-fill", 6, price="0.50", shares="100"))

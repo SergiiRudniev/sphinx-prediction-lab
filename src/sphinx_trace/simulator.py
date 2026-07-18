@@ -177,6 +177,9 @@ class ReplaySimulator:
         self._open_order_ids_by_condition: dict[str, set[str]] = {}
         self._expiry_heap: list[tuple[int, str]] = []
         self.positions: dict[str, SimulatedPosition] = {}
+        self._position_token_ids_by_condition: dict[str, set[str]] = {}
+        self._total_cost_basis_usd = ZERO
+        self._marked_exposure_usd = ZERO
         self.fills: list[SimulatedFill] = []
         self.predictions: list[PredictionRecord] = []
         self.prediction_count = 0
@@ -185,6 +188,8 @@ class ReplaySimulator:
         self.last_liquidity_id: str | None = None
         self.last_marks: dict[str, Decimal] = {}
         self.equity_curve: list[tuple[int, Decimal]] = [(0, rules.initial_cash_usd)]
+        self._prior_equity_peak_usd = ZERO
+        self._peak_equity_usd = rules.initial_cash_usd
         self.realized_pnl_usd = ZERO
         self.condition_realized_pnl_usd: dict[str, Decimal] = {}
         self.total_fees_usd = ZERO
@@ -239,6 +244,49 @@ class ReplaySimulator:
 
     def pending_order_count(self) -> int:
         return len(self._open_order_ids)
+
+    def positions_for_condition(self, condition_id: str) -> tuple[SimulatedPosition, ...]:
+        return tuple(
+            self.positions[token_id]
+            for token_id in sorted(self._position_token_ids_by_condition.get(condition_id, ()))
+        )
+
+    def total_cost_basis_usd(self) -> Decimal:
+        return self._total_cost_basis_usd
+
+    def peak_equity_usd(self) -> Decimal:
+        return self._peak_equity_usd
+
+    def _validate_portfolio_aggregates(self) -> None:
+        cost_basis = sum(
+            (position.cost_basis_usd for position in self.positions.values()), ZERO
+        )
+        exposure = sum(
+            (
+                position.shares
+                * self.last_marks.get(position.token_id, position.average_price)
+                for position in self.positions.values()
+            ),
+            ZERO,
+        )
+        peak = max(
+            (value for _, value in self.equity_curve),
+            default=self.rules.initial_cash_usd,
+        )
+        condition_index = {
+            condition_id: set(token_ids)
+            for condition_id, token_ids in self._position_token_ids_by_condition.items()
+        }
+        expected_index: dict[str, set[str]] = {}
+        for position in self.positions.values():
+            expected_index.setdefault(position.condition_id, set()).add(position.token_id)
+        if (
+            cost_basis != self._total_cost_basis_usd
+            or exposure != self._marked_exposure_usd
+            or peak != self._peak_equity_usd
+            or condition_index != expected_index
+        ):
+            raise RuntimeError("Simulator incremental portfolio aggregates drifted")
 
     def _reserved_cash(self) -> Decimal:
         return sum(
@@ -409,7 +457,12 @@ class ReplaySimulator:
             ),
             key=lambda order: (order.submitted_at_unix, order.order_id),
         )
-        if had_position or candidates:
+        if had_position:
+            position = self.positions[event.token_id]
+            previous_mark = self.last_marks.get(event.token_id, position.average_price)
+            self._marked_exposure_usd += position.shares * (event.price - previous_mark)
+            self.last_marks[event.token_id] = event.price
+        elif candidates:
             self.last_marks[event.token_id] = event.price
         for order in candidates:
             if available <= ZERO:
@@ -424,8 +477,11 @@ class ReplaySimulator:
                 unit_cost = price * (ONE + self.rules.fee_rate)
                 shares = min(shares, self.cash_usd / unit_cost if unit_cost else ZERO)
             else:
-                position = self.positions.get(order.token_id)
-                shares = min(shares, position.shares if position is not None else ZERO)
+                available_position = self.positions.get(order.token_id)
+                shares = min(
+                    shares,
+                    available_position.shares if available_position is not None else ZERO,
+                )
             if shares <= ZERO:
                 continue
             notional = shares * price
@@ -463,12 +519,20 @@ class ReplaySimulator:
             if total_cost > self.cash_usd:
                 raise RuntimeError("Fill would spend unavailable cash")
             self.cash_usd -= total_cost
-            buy_position = self.positions.setdefault(
-                order.token_id,
-                SimulatedPosition(order.condition_id, order.token_id, order.outcome),
-            )
+            buy_position = self.positions.get(order.token_id)
+            if buy_position is None:
+                buy_position = SimulatedPosition(
+                    order.condition_id, order.token_id, order.outcome
+                )
+                self.positions[order.token_id] = buy_position
+                self._position_token_ids_by_condition.setdefault(
+                    order.condition_id, set()
+                ).add(order.token_id)
             buy_position.shares += fill.shares
             buy_position.cost_basis_usd += total_cost
+            self._total_cost_basis_usd += total_cost
+            mark = self.last_marks.get(order.token_id, fill.price)
+            self._marked_exposure_usd += fill.shares * mark
         else:
             sell_position = self.positions.get(order.token_id)
             if sell_position is None or fill.shares > sell_position.shares:
@@ -476,8 +540,11 @@ class ReplaySimulator:
             allocated_cost = sell_position.cost_basis_usd * fill.shares / sell_position.shares
             proceeds = fill.notional_usd - fill.fee_usd
             pnl = proceeds - allocated_cost
+            mark = self.last_marks.get(order.token_id, sell_position.average_price)
             sell_position.shares -= fill.shares
             sell_position.cost_basis_usd -= allocated_cost
+            self._total_cost_basis_usd -= allocated_cost
+            self._marked_exposure_usd -= fill.shares * mark
             self.cash_usd += proceeds
             self.realized_pnl_usd += pnl
             self.condition_realized_pnl_usd[order.condition_id] = (
@@ -487,6 +554,10 @@ class ReplaySimulator:
             if sell_position.shares == ZERO:
                 del self.positions[order.token_id]
                 self.last_marks.pop(order.token_id, None)
+                tokens = self._position_token_ids_by_condition[order.condition_id]
+                tokens.remove(order.token_id)
+                if not tokens:
+                    del self._position_token_ids_by_condition[order.condition_id]
         self.total_fees_usd += fill.fee_usd
         self.fills.append(fill)
         order.filled_shares += fill.shares
@@ -510,9 +581,8 @@ class ReplaySimulator:
             order.status = OrderStatus.CANCELLED
             self._untrack_open(order)
         resolution_pnl = ZERO
-        for token_id, position in list(self.positions.items()):
-            if position.condition_id != condition_id:
-                continue
+        for token_id in sorted(self._position_token_ids_by_condition.get(condition_id, ())):
+            position = self.positions[token_id]
             payout_rate = decimal(token_payouts.get(token_id, ZERO))
             if not ZERO <= payout_rate <= ONE:
                 raise ValueError("Terminal payout must be between zero and one")
@@ -525,8 +595,12 @@ class ReplaySimulator:
             )
             self.closed_pnls.append(pnl)
             resolution_pnl += pnl
+            mark = self.last_marks.get(token_id, position.average_price)
+            self._marked_exposure_usd -= position.shares * mark
+            self._total_cost_basis_usd -= position.cost_basis_usd
             del self.positions[token_id]
             self.last_marks.pop(token_id, None)
+        self._position_token_ids_by_condition.pop(condition_id, None)
         self._record_equity(timestamp_unix)
         return resolution_pnl
 
@@ -548,30 +622,22 @@ class ReplaySimulator:
     def marked_exposure_usd(self) -> Decimal:
         """Return current marked value of all open outcome-token positions."""
 
-        return sum(
-            (
-                position.shares * self.last_marks.get(position.token_id, position.average_price)
-                for position in self.positions.values()
-            ),
-            ZERO,
-        )
+        return self._marked_exposure_usd
 
     def _equity(self) -> Decimal:
-        marked_positions = sum(
-            (
-                position.shares * self.last_marks.get(position.token_id, position.average_price)
-                for position in self.positions.values()
-            ),
-            ZERO,
-        )
-        return self.cash_usd + marked_positions
+        return self.cash_usd + self._marked_exposure_usd
 
     def _record_equity(self, timestamp_unix: int) -> None:
         equity = self._equity()
         if self.equity_curve and self.equity_curve[-1][0] == timestamp_unix:
             self.equity_curve[-1] = (timestamp_unix, equity)
         else:
+            if self.equity_curve:
+                self._prior_equity_peak_usd = max(
+                    self._prior_equity_peak_usd, self.equity_curve[-1][1]
+                )
             self.equity_curve.append((timestamp_unix, equity))
+        self._peak_equity_usd = max(self._prior_equity_peak_usd, equity)
 
     def metrics(self) -> dict[str, Any]:
         equity = self._equity()
@@ -641,6 +707,7 @@ class ReplaySimulator:
         return {"orders": len(removable), "fills": fills, "closed_pnls": closed}
 
     def snapshot(self) -> dict[str, Any]:
+        self._validate_portfolio_aggregates()
         rules = _decimal_dict(asdict(self.rules))
         orders = [_decimal_dict(asdict(order)) for order in self.orders.values()]
         positions = [_decimal_dict(asdict(position)) for position in self.positions.values()]
@@ -661,6 +728,12 @@ class ReplaySimulator:
             "processed_liquidity_count": self.processed_liquidity_count,
             "last_liquidity_id": self.last_liquidity_id,
             "last_marks": {key: str(value) for key, value in sorted(self.last_marks.items())},
+            "portfolio_aggregates": {
+                "total_cost_basis_usd": str(self._total_cost_basis_usd),
+                "marked_exposure_usd": str(self._marked_exposure_usd),
+                "prior_equity_peak_usd": str(self._prior_equity_peak_usd),
+                "peak_equity_usd": str(self._peak_equity_usd),
+            },
             "equity_curve": [[timestamp, str(value)] for timestamp, value in self.equity_curve],
             "realized_pnl_usd": str(self.realized_pnl_usd),
             "condition_realized_pnl_usd": {
@@ -705,12 +778,16 @@ class ReplaySimulator:
             if order.status in OPEN_ORDER_STATUSES:
                 simulator._track_open(order)
         simulator.positions = {}
+        simulator._position_token_ids_by_condition = {}
         for row_value in payload["positions"]:
             row = dict(row_value)
             row["shares"] = decimal(row["shares"])
             row["cost_basis_usd"] = decimal(row["cost_basis_usd"])
             position = SimulatedPosition(**row)
             simulator.positions[position.token_id] = position
+            simulator._position_token_ids_by_condition.setdefault(
+                position.condition_id, set()
+            ).add(position.token_id)
         simulator.fills = []
         for row_value in payload["fills"]:
             row = dict(row_value)
@@ -737,6 +814,45 @@ class ReplaySimulator:
         simulator.equity_curve = [
             (int(timestamp), decimal(value)) for timestamp, value in payload["equity_curve"]
         ]
+        simulator._total_cost_basis_usd = sum(
+            (position.cost_basis_usd for position in simulator.positions.values()), ZERO
+        )
+        simulator._marked_exposure_usd = sum(
+            (
+                position.shares
+                * simulator.last_marks.get(position.token_id, position.average_price)
+                for position in simulator.positions.values()
+            ),
+            ZERO,
+        )
+        simulator._prior_equity_peak_usd = max(
+            (value for _, value in simulator.equity_curve[:-1]),
+            default=ZERO,
+        )
+        simulator._peak_equity_usd = max(
+            simulator._prior_equity_peak_usd,
+            simulator.equity_curve[-1][1]
+            if simulator.equity_curve
+            else simulator.rules.initial_cash_usd,
+        )
+        if not simulator.equity_curve:
+            simulator._peak_equity_usd = max(
+                simulator._peak_equity_usd,
+                simulator.rules.initial_cash_usd,
+            )
+        aggregates = payload.get("portfolio_aggregates")
+        aggregate_fields = (
+            ("total_cost_basis_usd", "_total_cost_basis_usd"),
+            ("marked_exposure_usd", "_marked_exposure_usd"),
+            ("prior_equity_peak_usd", "_prior_equity_peak_usd"),
+            ("peak_equity_usd", "_peak_equity_usd"),
+        )
+        if isinstance(aggregates, dict):
+            for key, attribute in aggregate_fields:
+                restored = decimal(aggregates[key])
+                if restored != getattr(simulator, attribute):
+                    raise RuntimeError("Simulator portfolio aggregates changed across resume")
+                setattr(simulator, attribute, restored)
         simulator.realized_pnl_usd = decimal(payload["realized_pnl_usd"])
         simulator.condition_realized_pnl_usd = {
             key: decimal(value)

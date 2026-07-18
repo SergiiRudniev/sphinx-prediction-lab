@@ -1108,6 +1108,20 @@ audit-object construction benchmark, including feature/input digests and
 trajectories remain non-evidence and will not be resumed across changed
 implementation digests.
 
+A profile of the first dense replay state then identified an algorithmic, not
+GPU, bottleneck. With 426 open positions and 169,786 recorded equity points,
+`portfolio_features()` rescanned every position and the full equity curve for
+every new decision. One profiled day spent 14.97 seconds on 677 portfolio-state
+reads and executed more than 110 million peak-equity generator steps. H010 now
+maintains cost basis, marked exposure, peak equity and condition-to-position
+membership incrementally on every fill, mark, sale and resolution. Every daily
+snapshot still performs a full independent recomputation and refuses to save if
+any aggregate or index has drifted. Restoring the profiled state produced
+bit-identical features; 100,000 state reads completed in 0.300 seconds
+(`333,826/s`). The shared Zstandard reader also moved from standard-library JSON
+to the already-declared `orjson` dependency; the same 94,997-row tape shard
+improved from 0.324 to 0.153 seconds while preserving row objects and order.
+
 **Next action.** Materialize and verify the registered market-encoding cache,
 then restart H012-v2 epoch 3 from day zero through exact H010 validation. If it
 passes weekly profit and drawdown gates, run calibration, independent-component

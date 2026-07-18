@@ -367,14 +367,7 @@ class H010ReplayAdapter:
             self.simulator.cancel_order(order.order_id, timestamp_unix)
 
     def _condition_positions(self, condition_id: str) -> list[SimulatedPosition]:
-        return sorted(
-            (
-                position
-                for position in self.simulator.positions.values()
-                if position.condition_id == condition_id
-            ),
-            key=lambda row: row.token_id,
-        )
+        return list(self.simulator.positions_for_condition(condition_id))
 
     def physical_action_mask(self, condition_id: str) -> tuple[bool, ...]:
         if condition_id in self.resolved_conditions:
@@ -397,11 +390,8 @@ class H010ReplayAdapter:
         initial = self.simulator.rules.initial_cash_usd
         equity = self.simulator.equity_usd()
         exposure = self.simulator.marked_exposure_usd()
-        cost_basis = sum(
-            (position.cost_basis_usd for position in self.simulator.positions.values()),
-            ZERO,
-        )
-        peak = max((value for _, value in self.simulator.equity_curve), default=initial)
+        cost_basis = self.simulator.total_cost_basis_usd()
+        peak = self.simulator.peak_equity_usd()
         drawdown = (peak - equity) / peak if peak > ZERO else ZERO
         pending = self.simulator.pending_order_count()
         return (

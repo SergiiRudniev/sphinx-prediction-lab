@@ -12,6 +12,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+import orjson
 import zstandard
 
 
@@ -88,12 +89,12 @@ def iter_jsonl_zst(path: Path) -> Iterator[dict[str, Any]]:
             buffered = lines.pop()
             for line in lines:
                 if line:
-                    value = json.loads(line)
+                    value = orjson.loads(line)
                     if not isinstance(value, dict):
                         raise TypeError(f"Expected JSONL object in {path}")
                     yield value
         if buffered:
-            value = json.loads(buffered)
+            value = orjson.loads(buffered)
             if not isinstance(value, dict):
                 raise TypeError(f"Expected JSONL object in {path}")
             yield value
