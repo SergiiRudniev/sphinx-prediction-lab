@@ -280,13 +280,31 @@ class ReplaySimulator:
         expected_index: dict[str, set[str]] = {}
         for position in self.positions.values():
             expected_index.setdefault(position.condition_id, set()).add(position.token_id)
-        if (
-            cost_basis != self._total_cost_basis_usd
-            or exposure != self._marked_exposure_usd
-            or peak != self._peak_equity_usd
-            or condition_index != expected_index
-        ):
-            raise RuntimeError("Simulator incremental portfolio aggregates drifted")
+        def materially_changed(actual: Decimal, expected: Decimal) -> bool:
+            tolerance = Decimal("1e-18") * max(ONE, abs(expected))
+            return abs(actual - expected) > tolerance
+
+        mismatches: list[str] = []
+        if materially_changed(self._total_cost_basis_usd, cost_basis):
+            mismatches.append(f"cost_basis={self._total_cost_basis_usd}!={cost_basis}")
+        if materially_changed(self._marked_exposure_usd, exposure):
+            mismatches.append(f"exposure={self._marked_exposure_usd}!={exposure}")
+        if peak != self._peak_equity_usd:
+            mismatches.append(f"peak={self._peak_equity_usd}!={peak}")
+        if condition_index != expected_index:
+            mismatches.append("condition_index")
+        if mismatches:
+            raise RuntimeError(
+                "Simulator incremental portfolio aggregates drifted: " + ", ".join(mismatches)
+            )
+        # Rebase harmless Decimal associativity dust to the exact full-scan state daily.
+        self._total_cost_basis_usd = cost_basis
+        self._marked_exposure_usd = exposure
+        self._prior_equity_peak_usd = max(
+            (value for _, value in self.equity_curve[:-1]),
+            default=ZERO,
+        )
+        self._peak_equity_usd = peak
 
     def _reserved_cash(self) -> Decimal:
         return sum(

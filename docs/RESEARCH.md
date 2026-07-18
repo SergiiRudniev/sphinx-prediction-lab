@@ -1115,8 +1115,11 @@ every new decision. One profiled day spent 14.97 seconds on 677 portfolio-state
 reads and executed more than 110 million peak-equity generator steps. H010 now
 maintains cost basis, marked exposure, peak equity and condition-to-position
 membership incrementally on every fill, mark, sale and resolution. Every daily
-snapshot still performs a full independent recomputation and refuses to save if
-any aggregate or index has drifted. Restoring the profiled state produced
+snapshot still performs a full independent recomputation, rebases Decimal
+associativity dust below a relative `1e-18`, and refuses to save if any aggregate
+or index differs materially. The first invariant smoke run correctly stopped on
+`1e-25`-scale addition-order dust before a checkpoint existed; the bounded
+rebase was then registered and a clean daily snapshot passed. Restoring the profiled state produced
 bit-identical features; 100,000 state reads completed in 0.300 seconds
 (`333,826/s`). The shared Zstandard reader also moved from standard-library JSON
 to the already-declared `orjson` dependency; the same 94,997-row tape shard
