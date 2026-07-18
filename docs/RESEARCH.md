@@ -665,7 +665,7 @@ production evidence.
 
 ## SPH-T-H011: Uncapped Causal Flow Campaign
 
-**Status:** `full H009 input ready; feature/model engineering in progress`
+**Status:** `full causal pack verified; first 50M outcome training in progress`
 
 **Registered:** 2026-07-17, before full-corpus model metrics were observed.
 
@@ -743,6 +743,26 @@ still fail the build. Daily receipts and checkpoints are now bound to a digest
 of the builder, feature, kernel and source-index implementations so a resume
 cannot mix code versions. This rule was frozen before training metrics.
 
+**Full feature-pack result.** The resolution-backed build processed all 365
+H009 days and exactly 176,119,673 Ledger rows into 4,483,489 causal decision
+examples. It retained all 1,368,360 wallet states, 1,189,164 market states and
+530,974 component states without a hard wallet, market or trade cap. The build
+reported zero non-finite features, zero dropped trades and eight finite source-
+price anomalies handled by the registered clamp-and-count rule. Test labels
+remained physically unopened and the resolved-wallet schedule was complete and
+unmasked.
+
+An exact cached replay reproduced the recurrent checkpoint, train-only
+normalization and every daily feature-shard digest. The manifest reports
+`previous_comparable_manifest_found=true` and
+`output_hashes_match_previous=true`; its checkpoint digest is
+`8a8edd3d267b46a0f17addb7c50ac6e5947a7b692fc05f79423021c393b12a96`
+and its daily-receipt digest is
+`e87f7fe5eeb120e863d720fc43e9e49dda4c34da3939ae51942d95dd06af8239`.
+The first complete build took 1,155.72 seconds and the verification replay took
+452.72 seconds. These receipts qualify the training input, not model quality or
+profit.
+
 **Resolved-performance result.** The complete causal ledger read exactly
 141,033,306 selected source trades across 51,683 scope groups, excluded 363,279
 post-resolution rows and emitted 30,058,318 wallet/market resolution updates in
@@ -759,10 +779,10 @@ failures are no longer retried unchanged. The collector recognizes the quota
 reset time, checkpoints the adaptive leaf plan and waits without discarding
 completed actors. This changes query shape only; no actor is capped or sampled.
 
-**Next action.** Run and replay the complete resolution-backed feature pack,
-then train the matched 50M market-only, uncapped-wallet-flow and causal resolved-
-performance variants. Finish the quota-aware actor context in parallel and add
-its matched variant; keep the Polygon graph variant blocked until its source is
+**Next action.** Complete the active 50M market-only run, then train the matched
+uncapped-wallet-flow and causal resolved-performance variants on the identical
+verified pack. Finish the quota-aware actor context in parallel and add its
+matched variant; keep the Polygon graph variant blocked until its source is
 complete.
 
 **Evidence boundary.** H011 validation and conservative trade-tape replay cannot
