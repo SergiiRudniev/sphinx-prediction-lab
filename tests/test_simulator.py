@@ -9,8 +9,18 @@ from sphinx_trace.simulator import (
     OrderSide,
     OrderStatus,
     ReplaySimulator,
+    SimulatedOrder,
     SimulationRules,
 )
+
+
+class _IterationOrderedSet(set[str]):
+    def __init__(self, values: list[str]) -> None:
+        super().__init__(values)
+        self._values = tuple(values)
+
+    def __iter__(self):  # type: ignore[override]
+        return iter(self._values)
 
 
 def _event(
@@ -199,6 +209,38 @@ def test_affordable_fill_rebases_only_decimal_fee_dust() -> None:
     assert order.status == OrderStatus.PARTIAL
     assert fills[0].notional_usd + fills[0].fee_usd == Decimal("0.02")
     assert simulator.cash_usd == Decimal("0")
+
+
+def test_decimal_reservations_ignore_set_iteration_order() -> None:
+    rules = SimulationRules(initial_cash_usd=Decimal("2e28"), fee_bps=Decimal("0"))
+    simulator = ReplaySimulator(rules)
+    reservations = {
+        "a": Decimal("1e28"),
+        "b": Decimal("6"),
+        "c": Decimal("6"),
+    }
+    for order_id, shares in reservations.items():
+        simulator.orders[order_id] = SimulatedOrder(
+            order_id=order_id,
+            decision_id=f"decision-{order_id}",
+            component_id="component",
+            condition_id="condition",
+            token_id="token",
+            outcome="Yes",
+            side=OrderSide.BUY,
+            submitted_at_unix=0,
+            eligible_at_unix=0,
+            expires_at_unix=60,
+            requested_shares=shares,
+            limit_price=Decimal("1"),
+        )
+
+    simulator._open_order_ids = _IterationOrderedSet(["a", "b", "c"])
+    forward = simulator.available_cash_usd()
+    simulator._open_order_ids = _IterationOrderedSet(["b", "c", "a"])
+    reordered = simulator.available_cash_usd()
+
+    assert forward == reordered
 
 
 def test_unfilled_order_expires_without_invented_liquidity() -> None:
