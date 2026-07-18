@@ -38,6 +38,7 @@
 - [ ] Qualify point-in-time execution with historical orderbook depth.
 - [x] Implement the uncapped H011 recurrent feature kernel and 50M/100M/150M backbones.
 - [x] Build and hash-replay the full causal wallet-resolution context.
+- [x] Build and hash-replay the full 176,119,673-row H011 feature pack.
 - [ ] Train market, wallet and graph encoders.
 - [ ] Run matched cross-attention ablations.
 - [ ] Calibrate probability, flow, edge and uncertainty heads.
