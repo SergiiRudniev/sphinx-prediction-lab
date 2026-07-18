@@ -70,7 +70,7 @@
     "display_action_uses_catalog_outcome_label": true,
     "yes_no_markets_map_outcome_indices_to_yes_no": true,
     "call_or_skip": "learned_categorical_output_not_fixed_threshold",
-    "side": "learned_yes_no_output",
+    "side": "learned_catalog_outcome_index_output",
     "size": "learned_beta_fraction_of_current_available_equity",
     "multiple_concurrent_positions": true,
     "prediction_revision": true,
