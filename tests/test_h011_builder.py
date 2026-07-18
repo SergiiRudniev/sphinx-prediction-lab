@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -7,10 +8,11 @@ import pytest
 from scripts.build_h011_feature_pack import (
     RecurrentState,
     StaticIndex,
+    _actor_schedule,
     _process_day,
 )
 
-from sphinx_corpus.io import write_jsonl_zst
+from sphinx_corpus.io import sha256_file, write_jsonl_zst
 from sphinx_trace.h011_kernel import python_h011_kernel
 
 
@@ -73,6 +75,35 @@ def _trade(
         "outcome_index": outcome,
         "side": "BUY" if outcome == 0 else "SELL",
     }
+
+
+def test_actor_schedule_requires_complete_hash_bound_tasks(tmp_path: Path) -> None:
+    task = tmp_path / "tasks" / "actor.jsonl.zst"
+    write_jsonl_zst(task, [{"wallet": "0xa"}])
+    manifest = {
+        "complete": True,
+        "expected_task_count": 1,
+        "task_count": 1,
+        "end_exclusive": "2026-01-06T00:00:00Z",
+        "tasks": [
+            {
+                "task_id": "task",
+                "path": "tasks/actor.jsonl.zst",
+                "sha256": sha256_file(task),
+                "window_end_exclusive": "2025-08-01T00:00:00Z",
+            }
+        ],
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    schedule = _actor_schedule(tmp_path)
+
+    assert schedule.complete is True
+    assert schedule.enabled_on("2025-08-01") is True
+    assert schedule.enabled_on("2026-01-06") is False
+    task.write_bytes(b"changed")
+    with pytest.raises(RuntimeError, match="task changed"):
+        _actor_schedule(tmp_path)
 
 
 def test_day_builder_aligns_exact_cursor_and_emits_post_trade_state(tmp_path: Path) -> None:
