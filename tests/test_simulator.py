@@ -256,3 +256,35 @@ def test_compacted_audit_history_preserves_metrics_and_checkpoint() -> None:
     assert simulator.metrics() == before
     assert restored.metrics() == before
     assert restored.checkpoint_sha256() == simulator.checkpoint_sha256()
+
+
+def test_compaction_discards_stale_expiry_entries() -> None:
+    simulator = ReplaySimulator(
+        SimulationRules(
+            initial_cash_usd=Decimal("100"),
+            maximum_fill_wait_seconds=100,
+            available_share_fraction=Decimal("1"),
+            duplicate_liquidity_haircut=Decimal("1"),
+            adverse_price_ticks=0,
+            fee_bps=Decimal("0"),
+        )
+    )
+    order = simulator.place_order(
+        decision_id="buy",
+        component_id="component",
+        condition_id="condition",
+        token_id="yes-token",
+        outcome="YES",
+        side=OrderSide.BUY,
+        submitted_at_unix=1,
+        requested_shares="10",
+        limit_price="0.5",
+    )
+    simulator.process_liquidity(_event("fill", 3, price="0.4", shares="100"))
+
+    simulator.compact_history()
+    simulator.process_liquidity(_event("after-expiry", 200))
+
+    assert order.status == OrderStatus.FILLED
+    assert simulator.orders == {}
+    assert simulator.current_time_unix == 200
