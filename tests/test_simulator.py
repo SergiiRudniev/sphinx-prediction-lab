@@ -185,3 +185,36 @@ def test_unfilled_order_expires_without_invented_liquidity() -> None:
     assert order.status == OrderStatus.EXPIRED
     assert simulator.fills == []
     assert simulator.cash_usd == Decimal("10000")
+
+
+def test_streaming_retention_stays_bounded_on_irrelevant_tape() -> None:
+    simulator = ReplaySimulator(
+        SimulationRules(
+            retain_processed_liquidity_ids=False,
+            retain_prediction_records=False,
+        )
+    )
+    simulator.record_prediction(
+        decision_id="skip",
+        timestamp_unix=1,
+        action="SKIP",
+        probability="0.5",
+        size_fraction="0",
+        input_sha256="ab" * 32,
+    )
+    for timestamp in range(2, 102):
+        simulator.process_liquidity(_event(f"event-{timestamp}", timestamp))
+
+    assert simulator.predictions == []
+    assert simulator.prediction_count == 1
+    assert simulator.processed_liquidity_ids == set()
+    assert simulator.processed_liquidity_count == 100
+    assert simulator.last_liquidity_id == "event-101"
+    assert simulator.last_marks == {}
+    assert simulator.equity_curve == [(0, Decimal("10000"))]
+    assert simulator.metrics()["liquidity_events"] == 100
+
+    restored = ReplaySimulator.from_snapshot(simulator.snapshot())
+    assert restored.checkpoint_sha256() == simulator.checkpoint_sha256()
+    assert restored.prediction_count == 1
+    assert restored.processed_liquidity_count == 100
