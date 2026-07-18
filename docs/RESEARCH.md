@@ -754,6 +754,14 @@ cliff, falling to 498 examples/s at 11.60 GiB. The first run therefore uses batc
 512. These are synthetic compute measurements, not full-pack training time or
 model quality.
 
+**Calibration protocol.** Before the first full 50M result was opened, H011
+registered a positive affine-logit Platt transform fitted on validation only.
+Calibration remains a disjoint development audit. Outcome lift is paired against
+the contemporaneous market probability per row, averaged equally within each
+connected event component and measured with 5,000 deterministic component
+bootstrap replicates. Promotion requires the upper 95% component-bootstrap
+log-loss delta below zero; test arrays remain forbidden.
+
 **Determinism preflight.** A full-scale one-day build allocated all 1,368,360
 wallet states, 1,189,164 market states and 530,974 component states, processed
 69,380 source trades and materialized 4,256 exact decisions without non-finite

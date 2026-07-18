@@ -1,0 +1,47 @@
+{
+    "id": "sphinx-trace-s0-h011-calibration-v1",
+    "version": "1.0.0-registered",
+    "status": "registered",
+    "research_id": "SPH-T-H011",
+    "registered_at": "2026-07-18T00:29:00Z",
+    "dependencies": {
+        "feature_pack": {
+            "id": "sphinx-trace-s0-h011-pack-v1",
+            "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+        },
+        "model": {
+            "id": "sphinx-trace-s0-h011-model-v1",
+            "sha256": "d9797557fa2a5e42d7a209b755e54fb497a065d722188c2dd26d0616fb0162ea"
+        },
+        "training": {
+            "id": "sphinx-trace-s0-h011-train-v1",
+            "sha256": "78ef7de7e69ba9a62e3368b0db82d3e88f19e47e759e140954a2fb9366f1e571"
+        }
+    },
+    "fit_split": "validation",
+    "development_audit_split": "calibration",
+    "test_opened": false,
+    "method": {
+        "id": "positive_affine_logit_platt",
+        "initial_slope": 1.0,
+        "initial_intercept": 0.0,
+        "minimum_slope": 0.01,
+        "maximum_slope": 100.0,
+        "ridge": 0.000001,
+        "maximum_iterations": 100,
+        "tolerance": 0.000000001,
+        "line_search_steps": 24
+    },
+    "component_bootstrap": {
+        "unit": "equal_weight_connected_event_component_mean_loss_delta",
+        "replicates": 5000,
+        "seed": 17011,
+        "confidence": 0.95
+    },
+    "acceptance": {
+        "primary": "calibration_log_loss_delta_vs_market",
+        "promotion_requires_upper_95pct_component_bootstrap_bound_below_zero": true,
+        "test_opening_allowed": false
+    },
+    "evidence_boundary": "Development calibration can establish held-out component-level outcome lift but cannot establish simulator profit, untouched-test performance, executable profit or paper-forward performance."
+}
