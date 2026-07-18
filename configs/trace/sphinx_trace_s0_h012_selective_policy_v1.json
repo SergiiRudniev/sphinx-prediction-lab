@@ -11,16 +11,16 @@
       "sha256": "9378e2efda75695fd2c8d95f8d8069c14bb8e3cdf2d318c19923fb5d2dfefee6"
     },
     "feature_pack": {
-      "id": "sphinx-trace-s0-h011-pack-v1",
-      "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+      "id": "sphinx-trace-s0-h011-qualified-pack-v1",
+      "sha256": "426afc3ce1a7a04f7bbcde4049d3797edb254b53120a04d722e12032aaf75110"
     },
     "outcome_model": {
       "id": "sphinx-trace-s0-h011-model-v1",
       "sha256": "d9797557fa2a5e42d7a209b755e54fb497a065d722188c2dd26d0616fb0162ea"
     },
     "outcome_training": {
-      "id": "sphinx-trace-s0-h011-train-v1",
-      "sha256": "78ef7de7e69ba9a62e3368b0db82d3e88f19e47e759e140954a2fb9366f1e571"
+      "id": "sphinx-trace-s0-h011-train-v2",
+      "sha256": "ae07e23bb394f76c16a1bee1651dcd5095b7d5bc8ff242d7d412f536a3dc969a"
     }
   },
   "causal_data": {

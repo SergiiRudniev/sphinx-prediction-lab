@@ -15,7 +15,7 @@ from sphinx_corpus.io import atomic_json, now_utc, sha256_file
 from sphinx_trace.config import load_json
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_calibration_v1.json"
+DEFAULT_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_calibration_v2.json"
 
 
 def _load_object(path: Path) -> dict[str, Any]:
