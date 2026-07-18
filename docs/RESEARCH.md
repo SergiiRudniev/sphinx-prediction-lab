@@ -736,6 +736,15 @@ resolution, then compacted from live state. Baseline outperformance and cost
 stress remain separate mandatory gates; a positive point estimate cannot promote
 a policy.
 
+**Full development tape result.** H010 scanned all 176,119,673 immutable H009
+trade rows across 365 daily shards and retained 47,252,399 events from the first
+qualified decision through public close for every development market. The tape
+contains 288,350 resolved binary conditions: 153,006 validation and 135,344
+calibration, linked to 809,614 and 578,176 qualified decisions respectively. Its
+compressed payload is 4,713,675,472 bytes. Independent condition-loader checks
+recovered both exact split counts from the source-bound artifact. The manifest is
+valid, test rows consumed are zero and test labels remain unopened.
+
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
 the adapter and run the first development-only trade-tape replay with test
 physically closed.
