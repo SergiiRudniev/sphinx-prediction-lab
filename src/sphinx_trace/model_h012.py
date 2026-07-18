@@ -191,7 +191,37 @@ class SphinxTraceS0H012(nn.Module):
             raise ValueError("H012 previous_action_ids must be an integer tensor")
         if bool(((previous_action_ids < 0) | (previous_action_ids >= H012_ACTION_COUNT)).any()):
             raise ValueError("H012 previous_action_ids contains an unknown action")
+        if physical_action_mask is not None:
+            if physical_action_mask.shape != (batch, H012_ACTION_COUNT):
+                raise ValueError("H012 physical_action_mask must have shape [batch, actions]")
+            if bool((~physical_action_mask.bool().any(dim=1)).any()):
+                raise ValueError("H012 physical_action_mask must permit at least one action")
+        return self._forward_from_market_encoding_unchecked(
+            market_latent,
+            terminal_outcome_logit,
+            uncertainty_log_scale,
+            portfolio_features,
+            prediction_memory_features,
+            previous_action_ids,
+            physical_action_mask=physical_action_mask,
+            return_debug=return_debug,
+        )
 
+    def _forward_from_market_encoding_unchecked(
+        self,
+        market_latent: Tensor,
+        terminal_outcome_logit: Tensor,
+        uncertainty_log_scale: Tensor,
+        portfolio_features: Tensor,
+        prediction_memory_features: Tensor,
+        previous_action_ids: Tensor,
+        *,
+        physical_action_mask: Tensor | None = None,
+        return_debug: bool = False,
+    ) -> dict[str, Tensor]:
+        """Tensor-only policy core for source-validated sequential replay."""
+
+        batch = market_latent.shape[0]
         portfolio_token = self.portfolio_encoder(portfolio_features)
         memory_token = self.memory_norm(
             self.memory_encoder(prediction_memory_features)
@@ -216,11 +246,7 @@ class SphinxTraceS0H012(nn.Module):
         policy_state = self.final_norm(hidden[:, : self.fusion_latents]).mean(dim=1)
         action_logits = self.action(policy_state)
         if physical_action_mask is not None:
-            if physical_action_mask.shape != action_logits.shape:
-                raise ValueError("H012 physical_action_mask must have shape [batch, actions]")
             action_mask = physical_action_mask.bool()
-            if bool((~action_mask.any(dim=1)).any()):
-                raise ValueError("H012 physical_action_mask must permit at least one action")
             action_logits = action_logits.masked_fill(
                 ~action_mask,
                 torch.finfo(action_logits.dtype).min,

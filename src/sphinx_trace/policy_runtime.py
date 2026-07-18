@@ -5,10 +5,11 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import cast
 
 import numpy as np
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from sphinx_trace.model_h012 import H012_ACTIONS, SphinxTraceS0H012
 from sphinx_trace.policy_decisions import (
@@ -40,6 +41,40 @@ class PolicyInference:
     size_beta: float
 
 
+class _EncodedPolicyCore(nn.Module):
+    """Compile the small stateful policy graph without the cached outcome backbone."""
+
+    def __init__(self, model: SphinxTraceS0H012) -> None:
+        super().__init__()
+        self.model = model
+
+    def forward(
+        self,
+        market_latent: Tensor,
+        terminal_outcome_logit: Tensor,
+        uncertainty_log_scale: Tensor,
+        portfolio_features: Tensor,
+        prediction_memory_features: Tensor,
+        previous_action_ids: Tensor,
+        physical_action_mask: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        output = self.model._forward_from_market_encoding_unchecked(
+            market_latent,
+            terminal_outcome_logit,
+            uncertainty_log_scale,
+            portfolio_features,
+            prediction_memory_features,
+            previous_action_ids,
+            physical_action_mask=physical_action_mask,
+        )
+        return (
+            output["action_logits"],
+            output["position_size_beta_alpha"],
+            output["position_size_beta_beta"],
+            output["state_value"],
+        )
+
+
 class H012PolicyRuntime:
     """Infer one action after its exact evidence trade has entered H010 state."""
 
@@ -60,6 +95,20 @@ class H012PolicyRuntime:
         self.group_mask = group_mask.to(device)
         self.device = device
         self.encoding_store = encoding_store
+        encoded_policy: nn.Module | None = None
+        if encoding_store is not None:
+            encoded_policy = _EncodedPolicyCore(self.model).to(device).eval()
+            if device.type == "cuda":
+                encoded_policy = cast(
+                    nn.Module,
+                    torch.compile(
+                        encoded_policy,
+                        mode="reduce-overhead",
+                        fullgraph=True,
+                        dynamic=False,
+                    ),
+                )
+        self.encoded_policy = encoded_policy
 
     @torch.inference_mode()
     def infer(
@@ -107,6 +156,8 @@ class H012PolicyRuntime:
                     physical_action_mask=physical_tensor,
                 )
             else:
+                if self.encoded_policy is None:
+                    raise RuntimeError("H012 cached encoding has no compiled policy core")
                 encoded = self.encoding_store.load(ref)
                 market_latent = (
                     torch.from_numpy(encoded.market_latent).to(self.device).unsqueeze(0)
@@ -121,15 +172,23 @@ class H012PolicyRuntime:
                     dtype=torch.float32,
                     device=self.device,
                 )
-                output = self.model.forward_from_market_encoding(
+                action_logits, size_alpha, size_beta, state_value = self.encoded_policy(
                     market_latent,
                     terminal_logit,
                     uncertainty,
                     portfolio_tensor,
                     memory_tensor,
                     previous_tensor,
-                    physical_action_mask=physical_tensor,
+                    physical_tensor,
                 )
+                output = {
+                    "action_logits": action_logits,
+                    "position_size_beta_alpha": size_alpha,
+                    "position_size_beta_beta": size_beta,
+                    "state_value": state_value,
+                    "terminal_outcome_logit": terminal_logit,
+                    "outcome_uncertainty_log_scale": uncertainty,
+                }
         logits = output["action_logits"][0].float()
         action_id = int(logits.argmax())
         alpha = float(output["position_size_beta_alpha"][0].float())
