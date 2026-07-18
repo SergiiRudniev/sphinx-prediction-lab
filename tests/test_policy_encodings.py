@@ -130,3 +130,33 @@ def test_policy_encoding_store_rejects_policy_or_array_tampering(tmp_path: Path)
     store = PolicyEncodingStore(cache, pack, policy, shards)
     with pytest.raises(RuntimeError, match="file changed"):
         store.load(_ref(2))
+
+
+def test_policy_encoding_store_allows_a_frozen_state_only_descendant(tmp_path: Path) -> None:
+    cache, pack, policy, shards = _cache(tmp_path)
+    source_policy_sha256 = sha256_file(policy / "result.json")
+    atomic_json(
+        policy / "result.json",
+        {
+            "valid": True,
+            "test_labels_opened": False,
+            "test_rows_consumed": 0,
+            "market_encoding_policy_result_sha256": source_policy_sha256,
+            "market_backbone_frozen": True,
+        },
+    )
+
+    store = PolicyEncodingStore(cache, pack, policy, shards)
+
+    assert store.load(_ref(2)).terminal_outcome_logit == pytest.approx(0.2)
+
+    result = {
+        "valid": True,
+        "test_labels_opened": False,
+        "test_rows_consumed": 0,
+        "market_encoding_policy_result_sha256": source_policy_sha256,
+        "market_backbone_frozen": False,
+    }
+    atomic_json(policy / "result.json", result)
+    with pytest.raises(RuntimeError, match="contract changed"):
+        PolicyEncodingStore(cache, pack, policy, shards)

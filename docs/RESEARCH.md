@@ -1239,7 +1239,7 @@ profit, untouched-test performance, executable profit or paper-forward profit.
 
 ## SPH-T-H014: Replay-State Policy Distillation
 
-**Status:** `registered; corpus and resumable trainer pending`
+**Status:** `replay-state corpus complete; resumable trainer implemented; training pending`
 
 **Registered:** 2026-07-18, after the complete H012-v2 exact validation and
 bootstrap results were observed, before any H014 corpus, training or profit
@@ -1273,6 +1273,25 @@ Reuse the exact whole-component chronological partition registered for H012:
 Calibration and test are excluded from corpus construction, optimization and
 selection. Checkpoints bind every source manifest, implementation file,
 partition, optimizer, scheduler and RNG state and support exact pause/resume.
+
+**Replay-state corpus result.** The source-bound pack contains all 809,614 exact
+validation decisions across 365 daily shards and occupies 92,416,562 bytes.
+Construction took 50.50 seconds. Every row joins its original qualified feature
+row to the corresponding immutable 512-wide market encoding and stores the exact
+nine-field portfolio state, seven-field prediction memory, previous action and
+seven-action physical mask. The teacher action is deliberately absent. The
+original partition was reproduced exactly: 602,201 fit rows over 74,370
+components and 207,413 selection rows over 31,874 components, with partition
+digest `d3c2c16b...5608f3bf`. Calibration and test consumption are both zero.
+
+The H014 trainer starts from the complete H012-v2 checkpoint, freezes and hashes
+the market/outcome backbone, and optimizes only the state encoders, recurrent
+fusion, action, beta-size and value heads. Batches join cached market latents to
+logged causal states by source-row identity and refuse offset drift. Selection
+uses learned counterfactual economic utility only, with no CALL-count target.
+The initial H012 checkpoint is stored as epoch `-1`, so training cannot silently
+replace it with a worse static selection candidate. Model, optimizer, scheduler,
+all RNG states and sources are atomically checkpointed for exact pause/resume.
 
 **Acceptance.** H014 must first improve static selection utility, then beat the
 H012 exact replay in the same H010 simulator. Promotion still requires positive
