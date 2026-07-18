@@ -21,6 +21,7 @@ from sphinx_trace.config import load_json
 from sphinx_trace.development_tape import load_tape_conditions
 from sphinx_trace.policy_checkpoint import load_policy_checkpoint
 from sphinx_trace.policy_decisions import PolicyFeatureStore, load_policy_decisions
+from sphinx_trace.policy_encodings import PolicyEncodingStore
 from sphinx_trace.policy_runtime import H012PolicyRuntime, PolicyInference
 from sphinx_trace.replay_audit import (
     build_audit_manifest,
@@ -45,6 +46,10 @@ IMPLEMENTATION_PATHS = (
     ROOT / "src" / "sphinx_trace" / "policy_decisions.py",
     ROOT / "src" / "sphinx_trace" / "policy_runtime.py",
     ROOT / "src" / "sphinx_trace" / "policy_checkpoint.py",
+    ROOT / "src" / "sphinx_trace" / "policy_encodings.py",
+    ROOT / "src" / "sphinx_trace" / "model_h011.py",
+    ROOT / "src" / "sphinx_trace" / "model_h012.py",
+    ROOT / "src" / "sphinx_trace" / "model_h013.py",
 )
 
 
@@ -203,6 +208,7 @@ def replay(
     policy_dir: Path,
     output_dir: Path,
     *,
+    encoding_cache_dir: Path | None = None,
     split: str,
     cost_multiplier: float,
 ) -> dict[str, Any]:
@@ -242,20 +248,36 @@ def replay(
         feature_clip=12.0,
         cache_shards=8,
     )
+    encoding_store = (
+        PolicyEncodingStore(
+            encoding_cache_dir,
+            pack_dir,
+            policy_dir,
+            shards,
+            cache_shards=8,
+        )
+        if encoding_cache_dir is not None
+        else None
+    )
     runtime = H012PolicyRuntime(
         checkpoint.model,
         feature_store,
         checkpoint.feature_mask,
         checkpoint.group_mask,
         device,
+        encoding_store=encoding_store,
     )
     source_sha256 = sha256_file(tape_manifest_path)
     policy_sha256 = sha256_file(policy_dir / "result.json")
+    encoding_manifest_sha256 = (
+        encoding_store.manifest_sha256 if encoding_store is not None else None
+    )
     implementation_sha256 = _implementation_digest()
     contract_payload = (
         f"simulator:{sha256_file(simulator_config_path)}\n"
         f"policy_config:{sha256_file(policy_config_path)}\n"
         f"source:{source_sha256}\npolicy:{policy_sha256}\n"
+        f"encoding_cache:{encoding_manifest_sha256 or 'none'}\n"
         f"implementation:{implementation_sha256}\nsplit:{split}\n"
         f"cost_multiplier:{cost_multiplier}\n"
     )
@@ -468,6 +490,7 @@ def replay(
         "contract_sha256": contract_sha256,
         "source_sha256": source_sha256,
         "policy_sha256": policy_sha256,
+        "encoding_manifest_sha256": encoding_manifest_sha256,
         "implementation_sha256": implementation_sha256,
         "metrics": metrics,
         "actions": dict(sorted(action_counts.items())),
@@ -511,6 +534,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--pack-dir", type=Path, required=True)
     value.add_argument("--outcome-dir", type=Path, required=True)
     value.add_argument("--policy-dir", type=Path, required=True)
+    value.add_argument("--encoding-cache-dir", type=Path)
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--split", choices=("validation", "calibration"), required=True)
     value.add_argument("--cost-multiplier", type=float, default=1.0)
@@ -529,6 +553,9 @@ def main() -> None:
         args.outcome_dir.resolve(),
         args.policy_dir.resolve(),
         args.output_dir.resolve(),
+        encoding_cache_dir=(
+            args.encoding_cache_dir.resolve() if args.encoding_cache_dir is not None else None
+        ),
         split=args.split,
         cost_multiplier=args.cost_multiplier,
     )

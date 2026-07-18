@@ -944,7 +944,7 @@ paper-forward performance, insider attribution or production readiness.
 
 ## SPH-T-H012: Portfolio-Aware Selective Policy
 
-**Status:** `policy backbone implemented; replay and training pending H011 evidence`
+**Status:** `H012-v2 selected for exact development replay; validation incomplete`
 
 **Registered:** 2026-07-17, before full H011 outcome or profit metrics were
 observed.
@@ -1047,9 +1047,45 @@ H010 replay, not a profit promotion: repeated calls, shared cash, fills,
 liquidity, exits and component dependence are not represented by the static
 metric.
 
-**Next action.** Send H012-v2 epoch 3 through exact H010 validation and
-calibration replay, then apply weekly and independent-component profit bootstrap
-and registered cost stress without opening test.
+**Exact-replay implementation audit.** The first replay attempt was invalidated
+before policy inference because the qualified example JSON does not duplicate
+every canonical `component_state_id`; the loader now reads the bound numeric
+array and only verifies an optional JSON duplicate. A second attempt exposed a
+simulator compaction defect: expired order IDs remained in the expiry heap after
+their order records had been compacted. The simulator now discards stale heap
+entries and rebuilds the heap from open orders at every history compaction, with
+a regression test. Neither failed attempt is profit evidence.
+
+The corrected batch-one replay was deliberately stopped after development day
+182 because repeatedly executing the complete 64.6M-parameter market backbone
+for each decision made the audit needlessly slow. Its checkpoint at 2026-01-13
+had equity `$10,148.83` from `$10,000`, observed maximum drawdown `2.264%`,
+16,278 `CALL_OUTCOME_1`, 2,837 `SKIP`, 3,260 resolved calls and 3,110 correct
+calls. This trajectory is explicitly incomplete and non-promotable. It also
+revealed an important distribution shift: sequential portfolio and prediction
+memory caused far more calls than the static initial-state evaluation. Exact
+full-period replay, rather than static metrics or this partial path, must decide
+the hypothesis.
+
+**Source-bound encoding-cache registration.** Before observing a completed
+replay result, H012 registered a semantics-preserving throughput optimization.
+The fine-tuned market backbone is independent of sequential portfolio state, so
+its 512-wide latent, terminal logit and uncertainty output are computed once for
+all 1,387,790 qualified validation/calibration decisions in large GPU batches.
+Float32 retains the actual mixed-precision output without an additional latent
+quantization step. Daily arrays bind source row indices, the qualified-pack
+manifest and receipt, selected policy result, implementation digest and closed-
+test contract. Sequential replay still recomputes the portfolio token,
+prediction memory, physical action mask, policy fusion, position size and every
+simulator transition in event-time order. A full-forward versus cached-forward
+identity test protects the decomposition.
+
+**Next action.** Materialize and verify the registered market-encoding cache,
+then restart H012-v2 epoch 3 from day zero through exact H010 validation. If it
+passes weekly profit and drawdown gates, run calibration, independent-component
+bootstrap, baselines and registered cost stress without opening test. If it
+fails, use its causal action/state audit to register the next policy-training
+hypothesis rather than tuning a fixed CALL threshold.
 
 **Evidence boundary.** Trade-tape development profit cannot establish historical
 orderbook executability, untouched-test performance, paper-forward profit,

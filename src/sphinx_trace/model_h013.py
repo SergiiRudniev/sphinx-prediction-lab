@@ -48,6 +48,7 @@ class SphinxTraceS0H013(nn.Module):
         *,
         group_mask: Tensor | None = None,
         return_debug: bool = False,
+        return_latent: bool = False,
     ) -> dict[str, Tensor]:
         if market_probability.shape != (features.shape[0],):
             raise ValueError("H013 market_probability must have shape [batch]")
@@ -64,6 +65,7 @@ class SphinxTraceS0H013(nn.Module):
                 features,
                 group_mask=group_mask,
                 return_debug=return_debug,
+                return_latent=return_latent,
             ),
         )
         residual = output["terminal_outcome_logit"]

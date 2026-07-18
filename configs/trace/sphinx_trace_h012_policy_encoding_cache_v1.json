@@ -1,0 +1,40 @@
+{
+  "id": "sphinx-trace-h012-policy-encoding-cache-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H012",
+  "registered_at": "2026-07-18T05:30:00Z",
+  "objective": "precompute_source_bound_market_latents_once_then_preserve_exact_sequential_portfolio_policy_replay",
+  "scope": {
+    "included_splits": ["validation", "calibration"],
+    "test_included": false,
+    "terminal_labels_read": false,
+    "policy_checkpoint": "selected_H012_best_policy_with_fine_tuned_outcome_backbone",
+    "row_identity": "feature_pack_shard_index_and_source_row"
+  },
+  "representation": {
+    "market_latent": "float32_exact_autocast_output",
+    "terminal_outcome_logit": "float32",
+    "uncertainty_log_scale": "float32",
+    "source_row_index": "int64",
+    "cache_changes_policy_semantics": false
+  },
+  "build": {
+    "batch_size": 4096,
+    "precision": "bf16_mixed",
+    "feature_clip_after_normalization": 12.0,
+    "atomic_daily_shards": true,
+    "verified_daily_resume": true,
+    "graceful_pause_file": "PAUSE"
+  },
+  "acceptance": {
+    "all_validation_and_calibration_rows_required": true,
+    "pack_manifest_binding_required": true,
+    "policy_result_binding_required": true,
+    "daily_source_receipt_binding_required": true,
+    "non_finite_values_allowed": false,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "evidence_boundary": "The cache is an inference optimization bound to one feature pack and policy checkpoint. It is not profit, calibration, untouched-test or execution evidence."
+}

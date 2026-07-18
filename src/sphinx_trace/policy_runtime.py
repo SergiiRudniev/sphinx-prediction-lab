@@ -17,6 +17,7 @@ from sphinx_trace.policy_decisions import (
     PolicyFeatureStore,
     policy_input_digest,
 )
+from sphinx_trace.policy_encodings import PolicyEncodingStore
 from sphinx_trace.replay_h010 import (
     H010ReplayAdapter,
     PolicyCall,
@@ -49,6 +50,7 @@ class H012PolicyRuntime:
         feature_mask: Tensor,
         group_mask: Tensor,
         device: torch.device,
+        encoding_store: PolicyEncodingStore | None = None,
     ) -> None:
         if feature_mask.shape != (128,) or group_mask.shape != (6,):
             raise ValueError("H012 runtime feature/group masks have invalid shapes")
@@ -57,6 +59,7 @@ class H012PolicyRuntime:
         self.feature_mask = feature_mask.to(device)
         self.group_mask = group_mask.to(device)
         self.device = device
+        self.encoding_store = encoding_store
 
     @torch.inference_mode()
     def infer(
@@ -72,34 +75,61 @@ class H012PolicyRuntime:
             ref.condition_id, ref.timestamp_unix
         )
         physical = adapter.physical_action_mask(ref.condition_id)
-        features = (
-            torch.from_numpy(np.asarray(loaded.normalized, dtype=np.float32))
-            .to(self.device)
-            .unsqueeze(0)
-            * self.feature_mask
-        )
         portfolio_tensor = torch.tensor([portfolio], dtype=torch.float32, device=self.device)
         memory_tensor = torch.tensor([memory], dtype=torch.float32, device=self.device)
         previous_tensor = torch.tensor([previous_action_id], dtype=torch.long, device=self.device)
         physical_tensor = torch.tensor([physical], dtype=torch.bool, device=self.device)
-        market_tensor = torch.tensor(
-            [loaded.market_probability_outcome0], dtype=torch.float32, device=self.device
-        )
         autocast = (
             torch.autocast(device_type="cuda", dtype=torch.bfloat16)
             if self.device.type == "cuda"
             else nullcontext()
         )
         with autocast:
-            output = self.model(
-                features,
-                portfolio_tensor,
-                memory_tensor,
-                previous_tensor,
-                market_probability=market_tensor,
-                market_group_mask=self.group_mask.unsqueeze(0),
-                physical_action_mask=physical_tensor,
-            )
+            if self.encoding_store is None:
+                features = (
+                    torch.from_numpy(np.asarray(loaded.normalized, dtype=np.float32))
+                    .to(self.device)
+                    .unsqueeze(0)
+                    * self.feature_mask
+                )
+                market_tensor = torch.tensor(
+                    [loaded.market_probability_outcome0],
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                output = self.model(
+                    features,
+                    portfolio_tensor,
+                    memory_tensor,
+                    previous_tensor,
+                    market_probability=market_tensor,
+                    market_group_mask=self.group_mask.unsqueeze(0),
+                    physical_action_mask=physical_tensor,
+                )
+            else:
+                encoded = self.encoding_store.load(ref)
+                market_latent = (
+                    torch.from_numpy(encoded.market_latent).to(self.device).unsqueeze(0)
+                )
+                terminal_logit = torch.tensor(
+                    [encoded.terminal_outcome_logit],
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                uncertainty = torch.tensor(
+                    [encoded.uncertainty_log_scale],
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                output = self.model.forward_from_market_encoding(
+                    market_latent,
+                    terminal_logit,
+                    uncertainty,
+                    portfolio_tensor,
+                    memory_tensor,
+                    previous_tensor,
+                    physical_action_mask=physical_tensor,
+                )
         logits = output["action_logits"][0].float()
         action_id = int(logits.argmax())
         alpha = float(output["position_size_beta_alpha"][0].float())
