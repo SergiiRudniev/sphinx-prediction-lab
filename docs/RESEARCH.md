@@ -1352,7 +1352,7 @@ orderbook executability or forward profit.
 
 ## SPH-T-H015: On-Policy Portfolio Advantage Aggregation
 
-**Status:** `training complete; unchanged H014 initialization selected; exact replay pending`
+**Status:** `complete; unchanged model rejected; proxy replay failed replication and profit gates`
 
 **Registered:** 2026-07-18, after the complete H014 exact replay and bootstrap
 were observed, before any H015 corpus, training or replay metric existed.
@@ -1453,6 +1453,32 @@ is bound by contract
 `f947dd172f7c0c81f2df31b57cea4989e05ce2db47d6286bbf62f038930dac6f`;
 a fresh exact replay remains required by the registered protocol.
 
+**Fresh proxy replay.** The selected H015 checkpoint was replayed over all
+809,614 validation decisions under the registered legacy flat-100-bps cost.
+It produced 76,555 calls, 44,915 fills, 90.400% precision, `+$131.39` proxy net
+profit, 9.87% maximum drawdown and `$1,184.28` proxy fees. The lower 95% weekly
+and component profit bounds remained negative at `-$31.60` and `-$0.0468`.
+H015 therefore fails both robustness gates, trails H012 by `$437.43` and has
+higher drawdown. Under H016 these economics are additionally classified as
+`flat_fee_proxy_only`, not real-cost evidence.
+
+**Identity-control failure.** H015 selected epoch `-1`, and every one of its 266
+state-dict tensors is bit-identical to H014, so a correct deterministic replay
+must reproduce the H014 trajectory. It did not: H015 made 111 more calls and
+reported `$60.25` more proxy profit. The first action divergence occurred at
+decision `cc6ec431...` on 2026-02-23: H014 selected CALL-1 while H015 was forced
+to SKIP because both CALL actions became physically unavailable. Model logits,
+portfolio features and prediction memory were identical immediately before the
+state mask diverged.
+
+The simulator computes reserved cash and shares by reducing Python sets of order
+IDs. Set iteration order changes across processes, while finite-precision Decimal
+addition is order-dependent. Near zero available cash this changes the physical
+action mask and then cascades through the stateful trajectory. H015 consequently
+fails the identity-replication gate; its apparent improvement over H014 is not a
+model effect. Sorted deterministic reductions and a bit-identical fresh-process
+replication test are now mandatory in H016. H015 is rejected for promotion.
+
 ## SPH-T-H016: Protocol-Exact Polymarket Fees
 
 **Status:** `registered; official rules audited; implementation pending`
@@ -1497,6 +1523,25 @@ rates are recorded for regression tests, not historical imputation. Any fill
 whose applicable historical schedule cannot be established fails closed and
 rejects real-fee qualification; there is no zero-fee, category or 100-bps
 fallback.
+
+**Official implementation audit.** The research pins CLOB V1 contract commit
+`ed5c7708...`, V1 FeeModule `1a3c31c4...`, CLOB V2 contract `ccc05960...` and
+the V2 Python SDK `215fc63a...`. The V2 SDK implements the generalized schedule
+`shares * rate * (price * (1-price)) ** exponent`; the current public table is
+the exponent-one case. The V2 contract receives an absolute operator fee in
+collateral, charges it in addition to BUY collateral and deducts it from SELL
+proceeds. The V1 contract instead charges the output asset. Its FeeModule may
+refund the signed exchange fee down to the operator's intended amount, so V1
+qualification must join `OrderFilled` with `FeeRefunded` by order hash rather
+than treating the gross exchange event as the amount actually paid.
+
+The tape already retains a transaction hash for every public liquidity event.
+That permits a stronger historical source than present-day market metadata: fetch
+the contemporaneous Polygon receipt, identify the active taker event, decode any
+V1 refund and bind the resulting schedule evidence to the liquidity ID. As a
+proof vector, transaction `0x1907...c63d3` on 2026-05-15 contains a V2 taker BUY
+of 150 shares at 0.51 and an exact 2.62395 collateral fee; maker events charge
+zero. This reconciles exactly as `150 * 0.07 * 0.51 * 0.49 = 2.62395`.
 
 **Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
 rounding, creation-time rollout rules and the cutover boundary must pass

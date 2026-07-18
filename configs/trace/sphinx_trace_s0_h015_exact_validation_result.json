@@ -1,0 +1,101 @@
+{
+  "id": "sphinx-trace-s0-h015-exact-validation-result",
+  "version": "1.0.0-result",
+  "status": "complete_rejected_for_promotion",
+  "research_id": "SPH-T-H015",
+  "completed_at": "2026-07-18T07:21:29Z",
+  "candidate": {
+    "id": "sphinx-trace-s0-h015-portfolio-advantage-seed17-r2",
+    "parameters": 64583696,
+    "selected_epoch": -1,
+    "policy_result_sha256": "c60eb725a68ba64825143d0a508c1861b38d20b484b433d0f2b11e40bfbdd8a9",
+    "model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81",
+    "identical_to_H014_model_tensors": true
+  },
+  "exact_replay": {
+    "split": "validation",
+    "cost_multiplier": 1.0,
+    "cost_model": "flat_100_bps_proxy",
+    "real_cost_qualified": false,
+    "decisions": 809614,
+    "calls": 76555,
+    "skips": 733059,
+    "called_conditions": 32445,
+    "resolved_calls": 76555,
+    "correct_calls": 69206,
+    "call_precision": 0.904003657501143,
+    "initial_cash_usd": 10000.0,
+    "net_profit_usd": 131.39420382622964,
+    "return_on_initial_cash": 0.013139420382622965,
+    "maximum_drawdown": 0.09869587827476715,
+    "profit_factor": 1.01917083714552,
+    "total_fees_usd": 1184.2761226149096,
+    "orders": 72873,
+    "fills": 44915,
+    "open_positions": 0,
+    "weeks": 53,
+    "result_sha256": "c1f786d82f2970b6f8c41cf46681be82728f489fcbac0078f672e07fec7c4219",
+    "audit_manifest_sha256": "bc68757c759149e91fe70fd2854aaafbf50c93beed6ada5b9bb7094317063bfd",
+    "checkpoint_sha256": "bd8a5b52fff2efc132d481692d3a44bec1dc69d4854111cee435cd5ecb5bb95c",
+    "contract_sha256": "82573bbc363a8c3438f0d170daed19ca6d3a3a68ad7e54c5cd31fc8811e81e3f",
+    "implementation_sha256": "fc9a07531217d94766a2585228ebdd8f1a7c06c4582f8a3f722dcb120ec0e1aa"
+  },
+  "bootstrap": {
+    "replicates": 5000,
+    "weekly_block_length": 4,
+    "weekly_mean_profit_usd": 2.479135921249628,
+    "weekly_lower_95pct_usd": -31.603921455980156,
+    "weekly_upper_95pct_usd": 34.54415752710848,
+    "independent_components": 22414,
+    "component_mean_profit_usd": 0.005862148827796454,
+    "component_lower_95pct_usd": -0.046757692325582884,
+    "component_upper_95pct_usd": 0.05717304026333774,
+    "profit_evaluation_sha256": "3503c71c84469e9bbb77fe7ad233540e18329687b9e2a9d38072fad22369cc0d"
+  },
+  "identity_replication_control": {
+    "expected": "exact_H014_trajectory_because_all_266_state_dict_tensors_are_bit_identical",
+    "passed": false,
+    "H014_calls": 76444,
+    "H015_calls": 76555,
+    "call_delta": 111,
+    "H014_net_profit_usd": 71.14330229197519,
+    "net_profit_delta_usd": 60.25090153425445,
+    "first_action_divergence": {
+      "decision_id": "cc6ec431fe8b9add7a798447f77af3844145951d855372446bacb507071f6ff1",
+      "timestamp_unix": 1771857704,
+      "date": "2026-02-23",
+      "H014_action": "CALL_OUTCOME_1",
+      "H015_action": "SKIP",
+      "cause": "CALL_actions_were_physically_masked_after_available_cash_crossed_zero_under_unordered_decimal_reservation_reduction"
+    },
+    "determinism_defect": {
+      "reserved_cash_iterates_unordered_order_id_set": true,
+      "reserved_shares_iterates_unordered_order_id_set": true,
+      "decimal_reduction_order_is_not_associative_at_finite_precision": true,
+      "fresh_deterministic_replay_required": true
+    }
+  },
+  "comparison_to_H012": {
+    "net_profit_delta_usd": -437.43400596550805,
+    "fee_delta_usd": 857.8623914277227,
+    "maximum_drawdown_delta": 0.031878481949943735,
+    "call_precision_delta": 0.0044894205108065854,
+    "resolved_call_delta": 37853
+  },
+  "gates": {
+    "outperform_H012_net_profit": false,
+    "outperform_H012_maximum_drawdown": false,
+    "minimum_calls": true,
+    "minimum_independent_components": true,
+    "weekly_lower_95pct_positive": false,
+    "component_lower_95pct_positive": false,
+    "identity_replication_pass": false,
+    "real_cost_qualified": false,
+    "all_pass": false
+  },
+  "decision": "reject_H015_for_promotion_fix_determinism_and_complete_H016_protocol_exact_fee_qualification",
+  "promotion_allowed": false,
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "The H015 fresh replay is a non-replicating flat-fee development proxy. It is neither real-cost-qualified nor historical-orderbook, untouched-test or paper-forward profit evidence."
+}
