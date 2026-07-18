@@ -1,0 +1,130 @@
+{
+  "id": "sphinx-trace-s0-h015-on-policy-portfolio-advantage-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H015",
+  "registered_at": "2026-07-18T08:15:00Z",
+  "objective": "learn_execution_conditioned_incremental_portfolio_value_across_aggregated_on_policy_state_distributions",
+  "trigger": {
+    "h012_net_profit_usd": 568.8282097917377,
+    "h014_net_profit_usd": 71.14330229197519,
+    "h012_calls": 38702,
+    "h014_calls": 76444,
+    "h012_total_fees_usd": 326.41373118718684,
+    "h014_total_fees_usd": 1178.1336401844326,
+    "h014_call_precision": 0.9040866516665794,
+    "interpretation": "rowwise_terminal_utility_improved_side_precision_but_overweighted_repeated_liquid_markets_and_did_not_value_realized_execution_or_portfolio_risk"
+  },
+  "hypothesis": "aggregating_states_from_successive_exact_policies_then_learning_equal_market_counterfactual_and_realized_execution_value_will_reduce_recurrent_distribution_shift_and_concentrated_fee_heavy_calls",
+  "dependencies": {
+    "initial_policy": {
+      "id": "h014_replay_state_policy_seed17",
+      "result_sha256": "2b3a93b38d00b69776834cf82b83313a99239e8ac6605d80024b3ba3947de0d7",
+      "best_model_sha256": "303e0dcabf4ab3b67c2707dde443283734ddf74452c6908eb430c83d4202c8c7"
+    },
+    "feature_pack_manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86",
+    "encoding_manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3",
+    "behavior_replays": [
+      {
+        "id": "H012-v2",
+        "result_sha256": "71f23d1f535337bec6e64fd07a7700760a9d2cdac5c871309bebbe9f26b24e41",
+        "audit_manifest_sha256": "0fd8fd169f87dd58c538eb5204d44b5f3f0e7422ab6822c12f1a68f6f6a890e5",
+        "rows": 809614
+      },
+      {
+        "id": "H014-epoch0",
+        "result_sha256": "148e8d0b635e158f120b0fc8601af45001e6d6d9e9eba731a72110fb3c59a86c",
+        "audit_manifest_sha256": "ea9013927a4aee2c916528611dd6a48b22ca0492687f8b2e14a1ff2a29e88cb5",
+        "rows": 809614
+      }
+    ]
+  },
+  "corpus": {
+    "id": "sphinx-h015-on-policy-portfolio-advantage-pack-v1",
+    "rows_expected": 1619228,
+    "behavior_policies": 2,
+    "one_row_per_behavior_policy_decision": true,
+    "preserve_exact_policy_state": true,
+    "targets": [
+      "terminal_counterfactual_CALL0_CALL1_SKIP_log_utility",
+      "behavior_action_realized_fill_and_resolution_log_utility",
+      "behavior_action_execution_fraction"
+    ],
+    "realized_target_source": "exact_order_fill_fee_and_terminal_payout_audit",
+    "unfilled_call_realized_value": 0.0,
+    "teacher_action_used_only_for_logged_action_value_not_imitation": true,
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "partition": {
+    "reuse_H012_whole_component_time_partition": true,
+    "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf",
+    "components_cross_blocks": false,
+    "calibration_used_for_training_or_selection": false
+  },
+  "weighting": {
+    "primary": "equal_market_total_weight_within_behavior_policy",
+    "behavior_policy_total_weights_equal": true,
+    "repeated_decisions_do_not_increase_market_total_weight": true,
+    "fixed_call_frequency_target": null
+  },
+  "architecture": {
+    "initialize_from_H014_epoch0": true,
+    "freeze_market_and_outcome_backbone": true,
+    "train_state_policy_fusion_and_heads": true,
+    "parameters": 64583696,
+    "hard_wallet_count_cap": null,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_bet_size": null,
+    "fixed_portfolio_limit": null
+  },
+  "training": {
+    "counterfactual_action_value_weight": 4.0,
+    "logged_execution_action_value_weight": 2.0,
+    "policy_utility_weight": 0.1,
+    "entropy_weight": 0.0001,
+    "value_weight": 0.1,
+    "outcome_auxiliary_weight": 0.0,
+    "action_value_reference_size": 0.05,
+    "action_value_temperature": 0.05,
+    "execution_proxy": {
+      "adverse_price_ticks": 1,
+      "tick_size": 0.01,
+      "fee_bps": 100.0,
+      "minimum_entry_price": 0.01
+    },
+    "epochs": 10,
+    "early_stopping_patience": 3,
+    "batch_size": 1024,
+    "policy_learning_rate": 0.00001,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "precision": "bf16_mixed",
+    "exact_resume": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "dataset_aggregation": {
+    "fresh_exact_replay_after_each_selected_policy": true,
+    "failed_fresh_policy_states_may_be_added_to_next_registered_iteration": true,
+    "maximum_registered_iterations_before_architecture_review": 3
+  },
+  "selection": {
+    "primary_logged_metric": "equal_market_mean_chosen_counterfactual_utility",
+    "fresh_exact_H010_validation_replay_required": true,
+    "compare_to_H012_and_H014": true,
+    "calibration_remains_closed_until_validation_gates_pass": true
+  },
+  "promotion": {
+    "weekly_lower_95pct_profit_must_be_positive": true,
+    "component_lower_95pct_profit_must_be_positive": true,
+    "outperform_H012_net_profit": true,
+    "outperform_H012_maximum_drawdown": true,
+    "positive_profit_under_cost_stress": true,
+    "minimum_calls": 1000,
+    "minimum_independent_components": 1000
+  },
+  "evidence_boundary": "H015 is iterative offline on-policy development training. Fresh replay, untouched calibration/test, historical-orderbook and paper-forward evidence remain required."
+}

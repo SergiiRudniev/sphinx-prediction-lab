@@ -1239,7 +1239,7 @@ profit, untouched-test performance, executable profit or paper-forward profit.
 
 ## SPH-T-H014: Replay-State Policy Distillation
 
-**Status:** `epoch 0 selected; exact validation replay pending`
+**Status:** `exact validation complete; rejected for lower profit and failed robustness`
 
 **Registered:** 2026-07-18, after the complete H012-v2 exact validation and
 bootstrap results were observed, before any H014 corpus, training or profit
@@ -1320,6 +1320,25 @@ retains a hard failure for any material excess. A regression test reproduces the
 cash-boundary fill. The partial trajectory is invalid and will not be used as
 profit evidence or resumed across the changed implementation digest.
 
+**Completed exact validation result.** The corrected fresh replay processed all
+809,614 decisions. H014 made 76,444 resolved calls over 32,394 conditions, with
+69,112 correct calls (`90.41%` precision). Despite higher precision than H012,
+it earned only `+$71.14` (`+0.711%`) from `$10,000`, paid `$1,178.13` in fees,
+reached `10.38%` maximum drawdown and had profit factor `1.010`. H012 had earned
+`+$568.83` with `$326.41` fees and `6.68%` drawdown under the same simulator.
+
+Only `49.06%` of 53 weeks were positive; mean weekly profit was `+$1.34`, the
+worst week lost `$587.65`, and the four-week block-bootstrap 95% interval was
+[`-$33.06`, `+$34.22`]. Across 22,371 called components, equal-component mean
+profit was only `+$0.00318`, interval [`-$0.04980`, `+$0.05404`]. Both lower-
+positive gates fail and H014 does not outperform H012. The candidate is rejected
+without opening calibration or test.
+
+The failure is informative: rowwise state training increased precision by 0.46
+percentage points but nearly doubled calls, added `$851.72` in fees and ignored
+the joint cost of many correlated/repeated opportunities. One pass over H012
+states reduced but did not eliminate recurrent state-distribution shift.
+
 **Acceptance.** H014 must first improve static selection utility, then beat the
 H012 exact replay in the same H010 simulator. Promotion still requires positive
 lower 95% weekly and independent-component profit bounds, at least 1,000 calls
@@ -1330,3 +1349,46 @@ and later untouched calibration, test and paper-forward evidence.
 development evidence. Only a fresh exact replay can measure its shared-cash,
 liquidity and recurrent behavior, and neither can establish historical
 orderbook executability or forward profit.
+
+## SPH-T-H015: On-Policy Portfolio Advantage Aggregation
+
+**Status:** `registered; corpus and trainer pending`
+
+**Registered:** 2026-07-18, after the complete H014 exact replay and bootstrap
+were observed, before any H015 corpus, training or replay metric existed.
+
+**Trigger.** H014 improved side precision but converted that improvement into
+more repeated calls, five times the H012 fee burden, higher drawdown and 87.5%
+less net profit. The H014 loss weighted every decision row and supervised
+terminal standalone utility, so highly active markets could dominate fit even
+when the portfolio already carried similar risk or the order would not fill.
+
+**Hypothesis.** Aggregate exact states from both H012 and H014 so the policy sees
+successive on-policy distributions. Give every market equal total fit weight
+within each behavior policy. In addition to CALL-0/CALL-1/SKIP counterfactual
+terminal utility, regress the logged behavior action to its exact realized
+fill-, fee- and resolution-aware value. This should teach causal fillability and
+portfolio opportunity cost without a fixed CALL frequency, confidence threshold
+or exposure limit.
+
+**Controlled construction.** Build 1,619,228 state rows: one copy of every
+validation decision from each behavior replay. Join decisions to orders, fills
+and terminal payouts by immutable audit IDs. A filled BUY receives the exact
+reference-size log utility implied by realized payout versus fill cost; an
+unfilled order and SKIP receive zero logged execution value. The behavior action
+is used only to select which action-value logit receives that target, never as
+an imitation label. Whole-component fit/selection boundaries remain unchanged;
+calibration and test remain closed.
+
+Initialize from H014 epoch 0, freeze the identical market backbone and use a
+lower state-policy learning rate. Select by equal-market counterfactual utility,
+then require a fresh exact replay. A failed fresh trajectory may be added only
+through a newly registered aggregation iteration; no replay result may be
+converted into an after-the-fact CALL threshold.
+
+**Acceptance.** H015 must beat H012 in net profit and maximum drawdown, pass both
+positive lower-95% bootstrap gates, retain at least 1,000 calls/components and
+remain profitable under registered cost stress before calibration can open.
+
+**Evidence boundary.** Iterative development replay is not untouched-test,
+historical-orderbook executable or paper-forward profit evidence.
