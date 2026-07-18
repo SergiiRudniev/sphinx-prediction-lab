@@ -1352,7 +1352,7 @@ orderbook executability or forward profit.
 
 ## SPH-T-H015: On-Policy Portfolio Advantage Aggregation
 
-**Status:** `source-bound corpus and trainer complete; full training pending`
+**Status:** `training complete; unchanged H014 initialization selected; exact replay pending`
 
 **Registered:** 2026-07-18, after the complete H014 exact replay and bootstrap
 were observed, before any H015 corpus, training or replay metric existed.
@@ -1435,3 +1435,20 @@ the logged behavior action was available. Regression tests reproduce the
 sentinel case and require finite loss plus zero masked-action gradient. The
 partial trajectory is not resumed or used as evidence; a fresh output contract
 is required.
+
+**Completed training.** The corrected fresh run trained 14,335,498 policy
+parameters for three epochs over 1,204,402 fit rows before registered patience
+stopped it. Epoch selection utilities were `-5.205e-6`, `-3.012e-6` and
+`-8.988e-6`, all below the initial `-1.534e-6`. CALL rate expanded from 4.67%
+at initialization to 9.59%, 14.26% and 33.72%, while unweighted precision fell
+from 87.45% to 94.17%, 89.17% and 79.79% respectively. Higher first-epoch
+precision did not compensate its negative equal-market utility.
+
+Early stopping therefore selected epoch `-1`: the untouched H014
+initialization. An independent named-tensor digest is identical for H014 and
+the selected H015 policy:
+`a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81`.
+This is a valid negative H015 training result, not an improved model. The result
+is bound by contract
+`f947dd172f7c0c81f2df31b57cea4989e05ce2db47d6286bbf62f038930dac6f`;
+a fresh exact replay remains required by the registered protocol.

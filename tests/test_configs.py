@@ -217,6 +217,20 @@ def test_h014_exact_result_rejects_promotion_and_h015_is_pre_registered() -> Non
     assert pack["source_reproduction"]["teacher_action_used_as_imitation_label"] is False
     assert pack["source_reproduction"]["test_labels_opened"] is False
 
+    model = load_json(
+        ROOT
+        / "configs"
+        / "trace"
+        / "sphinx_trace_s0_h015_portfolio_advantage_seed17_result.json"
+    )
+    assert model["valid"] is True
+    assert model["best_epoch"] == -1
+    assert model["selected_model_tensor_sha256"] == model["H014_model_tensor_sha256"]
+    assert model["numerical_qualification"]["first_trajectory_infinite_loss_rejected"]
+    assert model["exact_replay_required"] is True
+    assert model["promotion_allowed"] is False
+    assert model["test_labels_opened"] is False
+
 
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
