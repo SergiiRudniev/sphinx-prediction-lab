@@ -1067,16 +1067,26 @@ validation does not meet the registered upper-bound-below-zero gate. The model
 is not promoted. The exact market anchor successfully prevented the severe
 degradation seen in direct wallet relearning.
 
-The matched causal-resolved-wallet-performance residual started immediately.
-It adds only performance updates that became public after registered resolution
-time and keeps actor and graph channels masked.
+**Causal resolved-performance residual result.** The matched 50,248,198-
+parameter run stopped after three stale epochs and 1,012.49 seconds. No learned
+epoch beat the exact market anchor, so the selected checkpoint remained epoch
+`-1`: zero residual, not a learned wallet-performance correction. Validation-
+fitted Platt scaling improved row-weighted log loss by `0.00000656` on validation
+and `0.00004270` on calibration, but this is calibration of the market anchor,
+not evidence for the masked causal wallet channel. Equal-component validation
+delta was `+0.00001714`, 95% interval [`-0.00000024`, `+0.00003424`]; calibration
+delta was `-0.00007468`, interval [`-0.00009290`, `-0.00005613`]. The registered
+two-block gate fails and the variant is not promoted. This rejects the present
+aggregate resolved-wallet-performance representation, not the wider actor-
+sequence hypothesis.
 
 **Acceptance.** Both validation and calibration must have component-bootstrap
 upper 95% log-loss delta below zero. Test remains closed. Passing outcome lift
 does not imply profitable selection; H010/H012 remain required.
 
-**Next action.** Finish the active direct wallet ablations and run the matched
-50M residual campaign.
+**Next action.** Test whether the selected residual representation can identify
+rare profitable subsets under H012/H010, then build the actor-sequence pack for
+the wider wallet-attention hypothesis.
 
 **Evidence boundary.** H013 development lift cannot establish selective-call
 profit, untouched-test performance, executable profit or paper-forward profit.
