@@ -1239,7 +1239,7 @@ profit, untouched-test performance, executable profit or paper-forward profit.
 
 ## SPH-T-H014: Replay-State Policy Distillation
 
-**Status:** `replay-state corpus complete; resumable trainer implemented; training pending`
+**Status:** `epoch 0 selected; exact validation replay pending`
 
 **Registered:** 2026-07-18, after the complete H012-v2 exact validation and
 bootstrap results were observed, before any H014 corpus, training or profit
@@ -1292,6 +1292,22 @@ uses learned counterfactual economic utility only, with no CALL-count target.
 The initial H012 checkpoint is stored as epoch `-1`, so training cannot silently
 replace it with a worse static selection candidate. Model, optimizer, scheduler,
 all RNG states and sources are atomically checkpointed for exact pause/resume.
+
+**First replay-state training result.** The 64,583,696-parameter model exposed
+14,335,498 trainable state-policy parameters and completed five epochs in 249.18
+seconds on the RTX 5070 before registered early stopping. Before optimization,
+the H012 checkpoint reproduced 3,048 selection calls at 77.03% precision and
+`+0.00000462` mean chosen log utility on the logged exact states. Epoch 0 was
+selected with 9,556 calls (`4.607%`), 87.35% precision, `+0.00000503` mean
+chosen log utility and a learned mean balance fraction of `0.393%`. Fit had
+72,593 calls at 90.76% precision and `+0.00002272` utility.
+
+Later epochs did not replace epoch 0. They oscillated between 10.32% and 87.11%
+selection CALL rates and all had non-positive chosen utility, demonstrating that
+lower fit loss alone does not identify a useful selective policy. The immutable
+epoch-0 checkpoint preserves the frozen market-backbone digest and is selected
+for a fresh exact H010 validation replay. This logged-state result is not profit
+evidence because H014 will create a different recurrent portfolio trajectory.
 
 **Acceptance.** H014 must first improve static selection utility, then beat the
 H012 exact replay in the same H010 simulator. Promotion still requires positive

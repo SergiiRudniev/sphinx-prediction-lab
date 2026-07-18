@@ -1,0 +1,55 @@
+{
+  "id": "sphinx-trace-s0-h014-replay-state-policy-seed17-result",
+  "version": "1.0.0-result",
+  "status": "complete_selected_for_exact_validation_replay",
+  "research_id": "SPH-T-H014",
+  "completed_at": "2026-07-18T05:36:13.649437Z",
+  "candidate_id": "h014_replay_state_policy_seed17",
+  "parameters": 64583696,
+  "trainable_parameters": 14335498,
+  "training": {
+    "best_epoch": 0,
+    "epochs_completed": 5,
+    "elapsed_seconds": 249.18366330000572,
+    "fit_rows": 602201,
+    "selection_rows": 207413,
+    "fit_components": 74370,
+    "selection_components": 31874,
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "initial_selection": {
+    "calls": 3048,
+    "call_rate": 0.014695318036960075,
+    "call_precision": 0.7703412073490814,
+    "chosen_log_utility": 0.000004622404832979947,
+    "mean_size": 0.004387244372316225
+  },
+  "selected_fit": {
+    "calls": 72593,
+    "call_rate": 0.12054612994664572,
+    "call_precision": 0.9076219470196851,
+    "chosen_log_utility": 0.000022722326897333198,
+    "mean_size": 0.0039442807806388215
+  },
+  "selected_selection": {
+    "calls": 9556,
+    "call_rate": 0.04607232912112549,
+    "call_precision": 0.8734826287149435,
+    "chosen_log_utility": 0.000005034202651220785,
+    "mean_size": 0.003933606600481212
+  },
+  "source": {
+    "result_sha256": "2b3a93b38d00b69776834cf82b83313a99239e8ac6605d80024b3ba3947de0d7",
+    "best_model_sha256": "303e0dcabf4ab3b67c2707dde443283734ddf74452c6908eb430c83d4202c8c7",
+    "contract_sha256": "a9bcdbb5738c1d9bae05755aca313faf833eb34898089de17a04ef69a3f5a272",
+    "state_manifest_sha256": "72b9802c201c23628ff93c5f6218912f7fac7e8507cc53cbefe1f84a193fc0bb",
+    "initial_policy_result_sha256": "ea75b913dcdf193f2cf323bdbb3d5f599d29331aa216ee253c33ca6e246cfe8a",
+    "market_backbone_sha256": "c120601ea987aa2f9480497caac648d5ca545c1d57dff0d998f1f49385868e34"
+  },
+  "decision": "send_best_epoch_0_to_exact_H010_validation_replay",
+  "exact_replay_required": true,
+  "promotion_allowed": false,
+  "evidence_boundary": "Positive logged replay-state counterfactual utility is selection evidence only. Shared cash, changed recurrent states, liquidity, weekly robustness and cost stress require a fresh exact replay."
+}
