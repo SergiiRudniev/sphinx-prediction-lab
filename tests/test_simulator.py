@@ -218,3 +218,40 @@ def test_streaming_retention_stays_bounded_on_irrelevant_tape() -> None:
     assert restored.checkpoint_sha256() == simulator.checkpoint_sha256()
     assert restored.prediction_count == 1
     assert restored.processed_liquidity_count == 100
+
+
+def test_compacted_audit_history_preserves_metrics_and_checkpoint() -> None:
+    simulator = ReplaySimulator(
+        SimulationRules(
+            initial_cash_usd=Decimal("100"),
+            available_share_fraction=Decimal("1"),
+            duplicate_liquidity_haircut=Decimal("1"),
+            fee_bps=Decimal("0"),
+        )
+    )
+    order = simulator.place_order(
+        decision_id="buy",
+        component_id="component",
+        condition_id="condition",
+        token_id="yes-token",
+        outcome="YES",
+        side=OrderSide.BUY,
+        submitted_at_unix=1,
+        requested_shares="10",
+        limit_price="0.5",
+    )
+    simulator.process_liquidity(_event("fill", 3, price="0.4", shares="100"))
+    simulator.resolve(condition_id="condition", timestamp_unix=10, token_payouts={"yes-token": 1})
+    before = simulator.metrics()
+
+    compacted = simulator.compact_history()
+    restored = ReplaySimulator.from_snapshot(simulator.snapshot())
+
+    assert order.status == OrderStatus.FILLED
+    assert compacted == {"orders": 1, "fills": 1, "closed_pnls": 1}
+    assert simulator.orders == {}
+    assert simulator.fills == []
+    assert simulator.closed_pnls == []
+    assert simulator.metrics() == before
+    assert restored.metrics() == before
+    assert restored.checkpoint_sha256() == simulator.checkpoint_sha256()

@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,12 @@ from sphinx_corpus.io import (
     sha256_file,
     write_jsonl_zst,
 )
-from sphinx_trace.h010_catalog import CatalogSelection, load_development_catalog
+from sphinx_trace.h010_catalog import (
+    CatalogSelection,
+    MarketResolution,
+    load_development_catalog,
+)
+from sphinx_trace.replay_h010 import BinaryMarketContract
 
 SPLIT_CODES = {2: "validation", 3: "calibration"}
 
@@ -27,6 +33,60 @@ SPLIT_CODES = {2: "validation", 3: "calibration"}
 class DevelopmentWindow:
     split: str
     first_decision_unix: int
+
+
+def load_tape_conditions(tape_dir: Path, split: str) -> CatalogSelection:
+    """Load one physically closed development split from a materialized H010 tape."""
+
+    if split not in {"validation", "calibration"}:
+        raise ValueError("H010 tape can load validation or calibration only")
+    manifest = _load_object(tape_dir / "manifest.json")
+    receipt = _load_object(tape_dir / "conditions.json")
+    conditions_path = tape_dir / "conditions.jsonl.zst"
+    if (
+        manifest.get("valid") is not True
+        or manifest.get("test_labels_opened") is not False
+        or int(manifest.get("test_rows_consumed", -1)) != 0
+        or receipt.get("test_labels_opened") is not False
+        or receipt.get("sha256") != sha256_file(conditions_path)
+        or receipt.get("conditions_digest") != manifest.get("conditions_digest")
+        or receipt.get("source_digest") != manifest.get("source_digest")
+    ):
+        raise RuntimeError("H010 tape conditions are not source-bound and closed-test")
+    contracts: dict[str, BinaryMarketContract] = {}
+    resolutions: list[MarketResolution] = []
+    for row in iter_jsonl_zst(conditions_path):
+        row_split = str(row["split"])
+        if row_split not in {"validation", "calibration"}:
+            raise RuntimeError("H010 tape condition has an unknown split")
+        if row_split != split:
+            continue
+        condition_id = str(row["condition_id"])
+        if condition_id in contracts:
+            raise RuntimeError(f"H010 tape condition repeats: {condition_id}")
+        outcomes = tuple(str(value) for value in row["outcomes"])
+        token_ids = tuple(str(value) for value in row["token_ids"])
+        payouts = tuple(Decimal(str(value)) for value in row["payouts"])
+        if len(outcomes) != 2 or len(token_ids) != 2 or len(payouts) != 2:
+            raise RuntimeError("H010 tape condition is not binary")
+        contracts[condition_id] = BinaryMarketContract(
+            condition_id,
+            str(row["component_id"]),
+            (outcomes[0], outcomes[1]),
+            (token_ids[0], token_ids[1]),
+        )
+        resolutions.append(
+            MarketResolution(
+                condition_id,
+                int(row["resolution_unix"]),
+                (payouts[0], payouts[1]),
+            )
+        )
+    expected = int(manifest.get("condition_split_counts", {}).get(split, -1))
+    if not contracts or len(contracts) != expected:
+        raise RuntimeError("H010 tape split condition count changed")
+    resolutions.sort(key=lambda row: (row.timestamp_unix, row.condition_id))
+    return CatalogSelection(contracts, tuple(resolutions), {split: len(contracts)})
 
 
 def _load_object(path: Path) -> dict[str, Any]:

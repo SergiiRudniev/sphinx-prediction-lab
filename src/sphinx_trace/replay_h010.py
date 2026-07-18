@@ -139,6 +139,32 @@ class H010ReplayAdapter:
     ) -> list[SimulatedOrder]:
         """Consume liquidity first, then calls whose features include that trade."""
 
+        reference_prices = self.observe_trade(
+            payload,
+            shard_ordinal=shard_ordinal,
+            row_ordinal=row_ordinal,
+        )
+        trade_id = str(payload["trade_id"])
+        condition_id = str(payload["condition_id"]).lower()
+        timestamp = int(payload["timestamp_unix"])
+        orders: list[SimulatedOrder] = []
+        for call in calls:
+            if call.evidence_trade_id != trade_id:
+                raise ValueError("Policy call does not match the current evidence trade")
+            if call.timestamp_unix != timestamp or call.condition_id != condition_id:
+                raise ValueError("Policy call time or market does not match its evidence")
+            orders.extend(self.apply_call(call, reference_prices))
+        return orders
+
+    def observe_trade(
+        self,
+        payload: dict[str, Any],
+        *,
+        shard_ordinal: int,
+        row_ordinal: int,
+    ) -> dict[str, Decimal]:
+        """Advance public liquidity and return causal binary reference prices."""
+
         self.cursor = self.cursor.advance(shard_ordinal, row_ordinal)
         trade_id = str(payload["trade_id"])
         condition_id = str(payload["condition_id"]).lower()
@@ -173,14 +199,7 @@ class H010ReplayAdapter:
             token_id: price,
             contract.token_ids[1 - outcome_index]: ONE - price,
         }
-        orders: list[SimulatedOrder] = []
-        for call in calls:
-            if call.evidence_trade_id != trade_id:
-                raise ValueError("Policy call does not match the current evidence trade")
-            if call.timestamp_unix != timestamp or call.condition_id != condition_id:
-                raise ValueError("Policy call time or market does not match its evidence")
-            orders.extend(self.apply_call(call, reference_prices))
-        return orders
+        return reference_prices
 
     def apply_call(
         self,
@@ -449,6 +468,7 @@ class H010ReplayAdapter:
             timestamp_unix=timestamp_unix,
             token_payouts=dict(zip(contract.token_ids, payouts, strict=True)),
         )
+        self.prediction_memory.pop(condition_id, None)
         self.resolved_conditions.add(condition_id)
         return pnl
 

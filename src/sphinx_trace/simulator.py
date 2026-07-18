@@ -188,6 +188,13 @@ class ReplaySimulator:
         self.realized_pnl_usd = ZERO
         self.total_fees_usd = ZERO
         self.closed_pnls: list[Decimal] = []
+        self.archived_order_status_counts: dict[str, int] = {
+            status.value: 0 for status in OrderStatus
+        }
+        self.archived_fill_count = 0
+        self.archived_closed_pnl_count = 0
+        self.archived_gains_usd = ZERO
+        self.archived_losses_usd = ZERO
 
     def _advance(self, timestamp_unix: int) -> None:
         if timestamp_unix < self.current_time_unix:
@@ -560,10 +567,15 @@ class ReplaySimulator:
             peak = max(peak, value)
             if peak:
                 maximum_drawdown = max(maximum_drawdown, (peak - value) / peak)
-        gains = sum((value for value in self.closed_pnls if value > ZERO), ZERO)
-        losses = -sum((value for value in self.closed_pnls if value < ZERO), ZERO)
+        gains = self.archived_gains_usd + sum(
+            (value for value in self.closed_pnls if value > ZERO), ZERO
+        )
+        losses = self.archived_losses_usd - sum(
+            (value for value in self.closed_pnls if value < ZERO), ZERO
+        )
         status_counts = {
-            status.value: sum(order.status == status for order in self.orders.values())
+            status.value: self.archived_order_status_counts[status.value]
+            + sum(order.status == status for order in self.orders.values())
             for status in OrderStatus
         }
         return {
@@ -578,13 +590,37 @@ class ReplaySimulator:
             "total_fees_usd": float(self.total_fees_usd),
             "profit_factor": float(gains / losses) if losses else None,
             "maximum_drawdown": float(maximum_drawdown),
-            "orders": len(self.orders),
-            "fills": len(self.fills),
+            "orders": sum(status_counts.values()),
+            "fills": self.archived_fill_count + len(self.fills),
             "predictions": self.prediction_count,
             "liquidity_events": self.processed_liquidity_count,
             "open_positions": len(self.positions),
             "order_status_counts": status_counts,
         }
+
+    def compact_history(self) -> dict[str, int]:
+        """Archive audited terminal history while retaining exact active state."""
+
+        removable = [
+            order_id
+            for order_id, order in self.orders.items()
+            if order.status not in OPEN_ORDER_STATUSES
+        ]
+        for order_id in removable:
+            order = self.orders.pop(order_id)
+            self.archived_order_status_counts[order.status.value] += 1
+        fills = len(self.fills)
+        self.archived_fill_count += fills
+        self.fills.clear()
+        for pnl in self.closed_pnls:
+            if pnl > ZERO:
+                self.archived_gains_usd += pnl
+            elif pnl < ZERO:
+                self.archived_losses_usd -= pnl
+        closed = len(self.closed_pnls)
+        self.archived_closed_pnl_count += closed
+        self.closed_pnls.clear()
+        return {"orders": len(removable), "fills": fills, "closed_pnls": closed}
 
     def snapshot(self) -> dict[str, Any]:
         rules = _decimal_dict(asdict(self.rules))
@@ -611,6 +647,11 @@ class ReplaySimulator:
             "realized_pnl_usd": str(self.realized_pnl_usd),
             "total_fees_usd": str(self.total_fees_usd),
             "closed_pnls": [str(value) for value in self.closed_pnls],
+            "archived_order_status_counts": dict(self.archived_order_status_counts),
+            "archived_fill_count": self.archived_fill_count,
+            "archived_closed_pnl_count": self.archived_closed_pnl_count,
+            "archived_gains_usd": str(self.archived_gains_usd),
+            "archived_losses_usd": str(self.archived_losses_usd),
         }
 
     def checkpoint_sha256(self) -> str:
@@ -678,4 +719,12 @@ class ReplaySimulator:
         simulator.realized_pnl_usd = decimal(payload["realized_pnl_usd"])
         simulator.total_fees_usd = decimal(payload["total_fees_usd"])
         simulator.closed_pnls = [decimal(value) for value in payload["closed_pnls"]]
+        simulator.archived_order_status_counts = {
+            status.value: int(payload.get("archived_order_status_counts", {}).get(status.value, 0))
+            for status in OrderStatus
+        }
+        simulator.archived_fill_count = int(payload.get("archived_fill_count", 0))
+        simulator.archived_closed_pnl_count = int(payload.get("archived_closed_pnl_count", 0))
+        simulator.archived_gains_usd = decimal(payload.get("archived_gains_usd", ZERO))
+        simulator.archived_losses_usd = decimal(payload.get("archived_losses_usd", ZERO))
         return simulator
