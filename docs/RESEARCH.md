@@ -942,6 +942,17 @@ Stage two remains recurrent clipped policy-gradient fine-tuning against exact
 H010 state transitions and cost stress. Warm-start utility is diagnostic and
 cannot replace replay profit evidence.
 
+The stage-one trainer is implemented for both direct and residual checkpoints.
+It verifies the selected outcome artifact hash, preserves the registered feature
+mask, derives the component-time partition from all qualified validation rows,
+balances fit rows by inverse square-root component frequency and keeps
+calibration out of model selection. Initial portfolio and memory state are
+explicit tensors; only physically possible initial actions are exposed. The
+50M+ policy checkpoint binds configs, outcome result, source pack, partition,
+implementation, optimizer, scheduler and all RNG states, and supports an atomic
+`PAUSE` boundary. Reported warm-start utility, CALL rate and precision remain
+diagnostic until their calls pass the stateful H010 replay.
+
 **Next action.** Complete the H011 outcome ablations, implement the H009/H010
 event-time adapter and train the first portfolio-aware selective policy without
 opening test.

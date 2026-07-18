@@ -49,6 +49,8 @@ def selective_log_utility_loss(
     labels_outcome0: Tensor,
     market_probability_outcome0: Tensor,
     config: dict[str, Any],
+    *,
+    sample_weights: Tensor | None = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Optimize learned CALL-0/CALL-1/SKIP and sizing by realized log utility."""
 
@@ -80,15 +82,27 @@ def selective_log_utility_loss(
     )
     expected_utility = (policy * log_utility).sum(dim=-1)
     entropy = -(policy * torch.log(policy.clamp_min(1e-8))).sum(dim=-1)
+    weights = (
+        torch.ones_like(expected_utility) if sample_weights is None else sample_weights.float()
+    )
+    if weights.shape != expected_utility.shape or bool((weights <= 0).any()):
+        raise ValueError("H012 utility sample weights must be aligned and positive")
+    weight_sum = weights.sum().clamp_min(1e-8)
+
+    def weighted_mean(values: Tensor) -> Tensor:
+        return (values * weights).sum() / weight_sum
+
     value_target = expected_utility.detach()
-    value_loss = F.mse_loss(output["state_value"].float(), value_target)
-    outcome_loss = F.binary_cross_entropy_with_logits(
+    value_loss = weighted_mean((output["state_value"].float() - value_target).square())
+    outcome_rows = F.binary_cross_entropy_with_logits(
         output["terminal_outcome_logit"].float(),
         label0,
+        reduction="none",
     )
+    outcome_loss = weighted_mean(outcome_rows)
     loss = (
-        -expected_utility.mean()
-        - float(config["entropy_weight"]) * entropy.mean()
+        -weighted_mean(expected_utility)
+        - float(config["entropy_weight"]) * weighted_mean(entropy)
         + float(config["value_weight"]) * value_loss
         + float(config["outcome_auxiliary_weight"]) * outcome_loss
     )
@@ -97,13 +111,17 @@ def selective_log_utility_loss(
     calls = chosen != 2
     correct = ((chosen == 0) & (label0 == 1)) | ((chosen == 1) & (label0 == 0))
     return loss, {
-        "expected_log_utility": expected_utility.mean().detach(),
+        "expected_log_utility": weighted_mean(expected_utility).detach(),
         "chosen_log_utility": chosen_utility.mean().detach(),
-        "entropy": entropy.mean().detach(),
+        "chosen_log_utility_sum": chosen_utility.sum().detach(),
+        "entropy": weighted_mean(entropy).detach(),
         "value_loss": value_loss.detach(),
         "outcome_loss": outcome_loss.detach(),
         "mean_size": size.mean().detach(),
         "call_rate": calls.float().mean().detach(),
+        "call_count": calls.sum().detach(),
+        "correct_call_count": correct[calls].sum().detach(),
+        "rows": torch.tensor(len(logits), device=logits.device),
         "call_precision": (
             correct[calls].float().mean().detach()
             if bool(calls.any())
