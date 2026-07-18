@@ -236,7 +236,9 @@ class DayPublisher:
                 continue
             files = [item for item in path.rglob("*") if item.is_file()]
             latest_mtime = max((item.stat().st_mtime for item in files), default=now)
-            if files and latest_mtime <= now - self.stable_age_seconds:
+            if files and (
+                self.stable_age_seconds <= 0 or latest_mtime <= now - self.stable_age_seconds
+            ):
                 eligible.append(path)
         return sorted(eligible)
 

@@ -682,7 +682,16 @@ test array, requires valid closed-test pack and model receipts, and joins each
 logit back to the exact feature shard and row. It verifies timestamp, market and
 component state IDs against both tensors and debug provenance before emitting a
 stable input digest bound to the train-only normalization artifact. This removes
-positional assumptions between model output and simulator input.
+positional assumptions between model output and simulator input. It additionally
+binds the model's source digest to the pack manifest, normalization and every
+daily receipt, and verifies the prediction artifact hash before any row is read.
+
+The closed-development catalog selector loads only explicitly requested
+validation/calibration conditions through a temporary indexed join. It rejects
+test conditions, absent or non-replayable markets, missing close/payout state,
+non-binary payouts and any catalog whose closed-test metadata or physical test-
+label count is invalid. Resolutions are emitted in deterministic event time with
+their exact catalog outcome and token mapping.
 
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
 the adapter and run the first development-only trade-tape replay with test
