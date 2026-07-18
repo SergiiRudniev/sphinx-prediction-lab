@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from sphinx_corpus.io import iter_jsonl_zst, sha256_file, write_jsonl_zst
-from sphinx_trace.development_tape import build_development_tape
+from sphinx_trace.development_tape import build_development_tape, load_tape_conditions
 
 
 def _market(
@@ -163,3 +163,6 @@ def test_build_development_tape_filters_exact_causal_windows_and_resumes(
     assert {row["development_split"] for row in rows} == {"validation", "calibration"}
     conditions = list(iter_jsonl_zst(output / "conditions.jsonl.zst"))
     assert {row["condition_id"] for row in conditions} == {"condition-a", "condition-b"}
+    validation = load_tape_conditions(output, "validation")
+    assert set(validation.contracts) == {"condition-a"}
+    assert validation.resolutions[0].payouts == (1, 0)

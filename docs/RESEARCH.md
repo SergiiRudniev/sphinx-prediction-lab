@@ -706,6 +706,26 @@ H009 stream, qualified pack and deterministic condition digest. This removes the
 need to parse the entire annual source tape on every policy epoch while keeping
 test physically closed.
 
+Sequential policy replay now has an explicit post-evidence inference boundary:
+H010 first consumes the evidence trade and any fills it causes, then H012 reads
+the updated portfolio and prediction memory, and only then is its action applied.
+The qualified decision index exposes validation/calibration rows only, verifies
+all tensor/example state IDs, and binds each action to the raw feature digest,
+market anchor, portfolio, memory, previous action and physical mask. Normalized
+feature access uses a bounded shard LRU rather than loading the annual pack into
+RAM.
+
+The full replay runner loads hash-bound direct or residual outcome checkpoints
+and the selected H012 checkpoint, merges policy decisions, filtered public
+liquidity and public resolutions in causal event time, and writes daily decision,
+order, fill and resolution audits. It resumes from an atomic adapter checkpoint,
+supports registered cost multipliers, reports CALL precision and weekly net
+profit, and refuses any unconsumed qualified decision. After each immutable audit
+shard, terminal orders, fills and closed-PnL rows are compacted into exact metric
+aggregates while live orders, positions, prediction state and checkpoint hashes
+remain restorable. This bounds memory even for a poorly initialized high-CALL
+policy without discarding debug evidence.
+
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
 the adapter and run the first development-only trade-tape replay with test
 physically closed.

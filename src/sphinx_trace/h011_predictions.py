@@ -41,7 +41,7 @@ def _load_object(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _feature_digest(
+def feature_digest(
     features: np.ndarray[Any, np.dtype[np.float32]],
     *,
     normalization_sha256: str,
@@ -175,7 +175,7 @@ def bind_development_predictions(
                     probability_outcome0=probability,
                     label_outcome0=float(arrays["labels"][output_index]),
                     market_probability_outcome0=float(arrays["baselines"][output_index]),
-                    feature_input_sha256=_feature_digest(
+                    feature_input_sha256=feature_digest(
                         np.asarray(features[row], dtype=np.float32),
                         normalization_sha256=normalization_sha256,
                         date=date,

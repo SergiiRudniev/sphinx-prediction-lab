@@ -131,3 +131,33 @@ def test_replay_cursor_and_evidence_contract_reject_reuse() -> None:
             shard_ordinal=0,
             row_ordinal=0,
         )
+
+
+def test_observe_then_infer_boundary_exposes_post_trade_state() -> None:
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(
+                retain_processed_liquidity_ids=False,
+                retain_prediction_records=False,
+            )
+        ),
+        {"condition": _contract()},
+        source_sha256="ab" * 32,
+    )
+
+    prices = adapter.observe_trade(
+        _trade("evidence", 100, "0.65"),
+        shard_ordinal=0,
+        row_ordinal=0,
+    )
+    portfolio = adapter.portfolio_features()
+    memory = adapter.prediction_memory_features("condition", 100)
+    orders = adapter.apply_call(
+        _call("call", "evidence", 100, SelectiveAction.CALL_OUTCOME_0, "0.1"),
+        prices,
+    )
+
+    assert prices == {"yes-token": Decimal("0.65"), "no-token": Decimal("0.35")}
+    assert portfolio[0:2] == (1.0, 1.0)
+    assert memory[1][0] == pytest.approx(0.5)
+    assert len(orders) == 1

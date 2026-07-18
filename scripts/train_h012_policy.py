@@ -23,15 +23,10 @@ from sphinx_trace.config import load_json
 from sphinx_trace.model import parameter_count
 from sphinx_trace.model_h011 import (
     SphinxTraceS0H011,
-    h011_variant_feature_mask,
-    h011_variant_group_mask,
 )
 from sphinx_trace.model_h012 import H012_ACTION_COUNT, SphinxTraceS0H012
-from sphinx_trace.model_h013 import (
-    SphinxTraceS0H013,
-    h013_variant_feature_mask,
-    h013_variant_group_mask,
-)
+from sphinx_trace.model_h013 import SphinxTraceS0H013
+from sphinx_trace.policy_checkpoint import load_outcome_checkpoint
 from sphinx_trace.policy_training import (
     ComponentTimePartition,
     component_time_partition,
@@ -46,6 +41,7 @@ IMPLEMENTATION_PATHS = (
     Path(__file__).resolve(),
     ROOT / "src" / "sphinx_trace" / "policy_training.py",
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
+    ROOT / "src" / "sphinx_trace" / "policy_checkpoint.py",
     ROOT / "src" / "sphinx_trace" / "model_h013.py",
     ROOT / "src" / "sphinx_trace" / "model_h011.py",
     ROOT / "src" / "sphinx_trace" / "model.py",
@@ -185,37 +181,13 @@ def _load_outcome(
     residual_config: dict[str, Any],
     device: torch.device,
 ) -> tuple[SphinxTraceS0H011 | SphinxTraceS0H013, Tensor, Tensor, dict[str, Any]]:
-    result = _load_object(outcome_dir / "result.json")
-    best_path = outcome_dir / "best-model.pt"
-    if (
-        result.get("valid") is not True
-        or result.get("test_labels_opened") is not False
-        or int(result.get("test_rows_consumed", -1)) != 0
-        or result.get("best_model_sha256") != sha256_file(best_path)
-    ):
-        raise RuntimeError("H012 requires a valid source-bound closed-test outcome model")
-    candidate = str(result["candidate_id"])
-    variant = str(result["variant_id"])
-    direct = SphinxTraceS0H011(model_config, candidate_id=candidate)
-    record_type = str(result.get("record_type"))
-    if record_type == "h013_market_residual_training_result":
-        architecture = residual_config["architecture"]
-        outcome: SphinxTraceS0H011 | SphinxTraceS0H013 = SphinxTraceS0H013(
-            direct,
-            minimum_probability=float(architecture["minimum_anchor_probability"]),
-            maximum_probability=float(architecture["maximum_anchor_probability"]),
-        )
-        feature_mask = h013_variant_feature_mask(variant, device=device)
-        group_mask = h013_variant_group_mask(variant, device=device)
-    elif record_type == "h011_outcome_training_result":
-        outcome = direct
-        feature_mask = h011_variant_feature_mask(variant, device=device)
-        group_mask = h011_variant_group_mask(variant, device=device)
-    else:
-        raise RuntimeError(f"Unsupported H012 outcome model result: {record_type}")
-    best = torch.load(best_path, map_location="cpu", weights_only=False)
-    outcome.load_state_dict(best["model"])
-    return outcome.to(device), feature_mask, group_mask, result
+    checkpoint = load_outcome_checkpoint(
+        outcome_dir,
+        model_config,
+        residual_config,
+        device,
+    )
+    return checkpoint.model, checkpoint.feature_mask, checkpoint.group_mask, checkpoint.result
 
 
 def _states(rows: int, device: torch.device) -> tuple[Tensor, Tensor, Tensor, Tensor]:
