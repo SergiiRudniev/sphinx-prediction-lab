@@ -791,15 +791,16 @@ paper-forward performance, insider attribution or production readiness.
 
 ## SPH-T-H012: Portfolio-Aware Selective Policy
 
-**Status:** `registered; implementation pending H011 outcome evidence`
+**Status:** `policy backbone implemented; replay and training pending H011 evidence`
 
 **Registered:** 2026-07-17, before full H011 outcome or profit metrics were
 observed.
 
 **Question.** Can one learned, portfolio-aware policy turn calibrated H011
-outcome state into profitable `CALL_YES`, `CALL_NO` and `SKIP` decisions, revise
-earlier calls and size multiple concurrent positions without fixed confidence,
-edge, category or position limits?
+outcome state into profitable `CALL_OUTCOME_0`, `CALL_OUTCOME_1` and `SKIP`
+decisions, revise earlier calls and size multiple concurrent positions without
+fixed confidence, edge, category or position limits? Outcome indices render as
+`YES`/`NO` for yes/no markets and as the actual catalog labels elsewhere.
 
 **Controlled construction.** Warm-start the selected H011 backbone, add causal
 portfolio and prior-prediction state, and train categorical action plus beta-size
@@ -819,6 +820,17 @@ stress, a positive component-block-bootstrap lower 95% profit bound and
 outperformance of both current market probability and the strongest learned
 baseline. CALL frequency is reported, not hardcoded; the policy must earn useful
 weekly profit by choosing when evidence is sufficient.
+
+**Implemented policy backbone.** H012 warm-starts an H011 outcome backbone and
+fuses its causal latent with a nine-field portfolio token and a recurrent
+prediction-memory token. Previous action is categorical; probability, size,
+elapsed time, position existence, position fraction, average entry and current
+mark are numeric. Four learned policy latents pass through four inspectable
+fusion blocks and emit seven action logits, beta-distributed equity sizing and a
+state-value estimate. A physical action mask can reject impossible operations
+but cannot impose confidence, edge, category, correlation or position-count
+limits. Debug output retains market-group attention, policy attention, portfolio
+and prediction-memory tokens for group ablation and attribution audits.
 
 **Next action.** Complete the H011 outcome ablations, implement the H009/H010
 event-time adapter and train the first portfolio-aware selective policy without
