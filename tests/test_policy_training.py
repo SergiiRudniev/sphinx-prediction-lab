@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 import torch
 
-from sphinx_trace.policy_training import component_time_partition, selective_log_utility_loss
+from sphinx_trace.policy_training import (
+    component_time_partition,
+    logged_execution_action_value_loss,
+    selective_log_utility_loss,
+)
 
 
 def _output(logits: torch.Tensor, size_alpha: float = 2.0, size_beta: float = 2.0):
@@ -109,3 +113,45 @@ def test_counterfactual_action_value_regression_teaches_both_sides_without_frequ
     assert logits.grad[1, 1] < 0.0
     assert metrics["action_value_loss"] > 0.0
     assert metrics["mean_call_probability"] == pytest.approx(2.0 / 3.0)
+
+
+def test_logged_execution_value_regresses_only_observed_actions_without_imitation() -> None:
+    logits = torch.zeros((3, 7), requires_grad=True)
+    output = _output(logits)
+
+    loss, metrics = logged_execution_action_value_loss(
+        output,
+        torch.tensor([0, 1, 2]),
+        torch.tensor([0.02, -0.03, 0.0]),
+        torch.tensor([1.0, 0.5, 0.0]),
+        sample_weights=torch.tensor([1.0, 2.0, 3.0]),
+    )
+    loss.backward()
+
+    assert logits.grad is not None
+    assert logits.grad[0, 0] < 0.0
+    assert logits.grad[0, 1] == 0.0
+    assert logits.grad[1, 1] > 0.0
+    assert logits.grad[1, 0] == 0.0
+    assert logits.grad[2].abs().sum() == 0.0
+    assert metrics["logged_call_count"] == 2
+    assert metrics["logged_filled_count"] == 2
+
+
+def test_selective_utility_reports_equal_weight_selection_numerator() -> None:
+    output = _output(
+        torch.tensor([[20.0, -20.0, -20.0], [-20.0, -20.0, 20.0]])
+    )
+
+    _, metrics = selective_log_utility_loss(
+        output,
+        torch.tensor([1.0, 0.0]),
+        torch.tensor([0.5, 0.5]),
+        _config(),
+        sample_weights=torch.tensor([1.0, 3.0]),
+    )
+
+    assert metrics["sample_weight_sum"] == pytest.approx(4.0)
+    assert metrics["weighted_chosen_log_utility_sum"] == pytest.approx(
+        metrics["weighted_chosen_log_utility"] * 4.0
+    )

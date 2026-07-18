@@ -149,6 +149,9 @@ def selective_log_utility_loss(
         "expected_log_utility": weighted_mean(expected_utility).detach(),
         "chosen_log_utility": chosen_utility.mean().detach(),
         "chosen_log_utility_sum": chosen_utility.sum().detach(),
+        "weighted_chosen_log_utility": weighted_mean(chosen_utility).detach(),
+        "weighted_chosen_log_utility_sum": (chosen_utility * weights).sum().detach(),
+        "sample_weight_sum": weight_sum.detach(),
         "entropy": weighted_mean(entropy).detach(),
         "value_loss": value_loss.detach(),
         "outcome_loss": outcome_loss.detach(),
@@ -169,4 +172,63 @@ def selective_log_utility_loss(
             if bool(calls.any())
             else torch.zeros((), device=logits.device)
         ),
+    }
+
+
+def logged_execution_action_value_loss(
+    output: dict[str, Tensor],
+    behavior_action_ids: Tensor,
+    realized_action_values: Tensor,
+    execution_fractions: Tensor,
+    *,
+    sample_weights: Tensor | None = None,
+) -> tuple[Tensor, dict[str, Tensor]]:
+    """Regress only the logged action to its fill- and resolution-aware value."""
+
+    logits = output["action_logits"][:, :3].float()
+    rows = len(logits)
+    if logits.shape != (rows, 3):
+        raise ValueError("H015 logged execution loss requires three initial actions")
+    if (
+        behavior_action_ids.shape != (rows,)
+        or realized_action_values.shape != (rows,)
+        or execution_fractions.shape != (rows,)
+    ):
+        raise ValueError("H015 logged execution targets must align with policy rows")
+    actions = behavior_action_ids.long()
+    targets = realized_action_values.float()
+    fractions = execution_fractions.float()
+    if bool(((actions < 0) | (actions >= 3)).any()):
+        raise ValueError("H015 logged behavior action is outside CALL-0/CALL-1/SKIP")
+    if not bool(torch.isfinite(targets).all()) or not bool(torch.isfinite(fractions).all()):
+        raise ValueError("H015 logged execution targets must be finite")
+    if bool(((fractions < 0.0) | (fractions > 1.0)).any()):
+        raise ValueError("H015 execution fractions must be between zero and one")
+    weights = torch.ones_like(targets) if sample_weights is None else sample_weights.float()
+    if weights.shape != targets.shape or bool((weights <= 0.0).any()):
+        raise ValueError("H015 logged execution sample weights must be aligned and positive")
+    predictions = logits.gather(1, actions[:, None]).squeeze(1)
+    loss_rows = F.smooth_l1_loss(predictions, targets.detach(), reduction="none")
+    weight_sum = weights.sum().clamp_min(1e-8)
+    loss = (loss_rows * weights).sum() / weight_sum
+    absolute_error = (predictions - targets).abs()
+    filled = fractions > 0.0
+    calls = actions != 2
+    return loss, {
+        "logged_execution_action_value_loss": loss.detach(),
+        "logged_execution_absolute_error": (
+            (absolute_error * weights).sum() / weight_sum
+        ).detach(),
+        "logged_execution_prediction_mean": (
+            (predictions * weights).sum() / weight_sum
+        ).detach(),
+        "logged_execution_target_mean": ((targets * weights).sum() / weight_sum).detach(),
+        "logged_call_count": calls.sum().detach(),
+        "logged_filled_count": filled.sum().detach(),
+        "logged_filled_target_mean": (
+            targets[filled].mean().detach()
+            if bool(filled.any())
+            else torch.zeros((), device=logits.device)
+        ),
+        "sample_weight_sum": weight_sum.detach(),
     }
