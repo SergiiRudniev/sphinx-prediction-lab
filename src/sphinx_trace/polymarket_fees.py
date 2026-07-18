@@ -422,6 +422,35 @@ class FeeScheduleBook:
         schedules = [_schedule_from_payload(row) for row in iter_jsonl_zst(data_path)]
         if len(schedules) != int(payload.get("rows", -1)):
             raise RuntimeError("H016 fee schedule row count changed")
+        proof_path = directory / str(payload.get("receipt_proof_path") or "")
+        if (
+            not proof_path.is_file()
+            or payload.get("receipt_proof_sha256") != sha256_file(proof_path)
+        ):
+            raise RuntimeError("H016 fee receipt proof contract changed")
+        receipt_schedule_ids = {
+            schedule.schedule_id
+            for schedule in schedules
+            if schedule.source
+            != "official_changelog_pre_2026_01_05_no_platform_taker_fees"
+        }
+        proof_schedule_ids: set[str] = set()
+        proof_rows = 0
+        for proof in iter_jsonl_zst(proof_path):
+            proof_rows += 1
+            schedule_id = str(proof.get("schedule_id") or "")
+            if (
+                proof.get("record_type") != "h016_fee_receipt_proof"
+                or proof.get("status") != "0x1"
+                or schedule_id in proof_schedule_ids
+            ):
+                raise RuntimeError("H016 fee receipt proof row changed")
+            proof_schedule_ids.add(schedule_id)
+        if (
+            proof_rows != int(payload.get("receipt_proof_rows", -1))
+            or proof_schedule_ids != receipt_schedule_ids
+        ):
+            raise RuntimeError("H016 fee receipt proof coverage changed")
         return cls(schedules, manifest_sha256=sha256_file(manifest_path))
 
 

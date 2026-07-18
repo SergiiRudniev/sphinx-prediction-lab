@@ -535,6 +535,11 @@ def replay(
         "valid": True,
         "split": split,
         "cost_multiplier": cost_multiplier,
+        "platform_fee_model": (
+            "receipt_qualified_historical"
+            if fee_schedule_book is not None
+            else "flat_trade_tape_proxy"
+        ),
         "contract_sha256": contract_sha256,
         "source_sha256": source_sha256,
         "policy_sha256": policy_sha256,
@@ -567,8 +572,13 @@ def replay(
         "test_rows_consumed": 0,
         "test_labels_opened": False,
         "evidence_boundary": (
-            "Development trade-tape liquidity proxy only; not historical orderbook "
-            "executability, untouched-test or paper-forward profit evidence."
+            "Development trade-tape liquidity proxy with receipt-qualified historical "
+            "Polymarket platform fees; not historical orderbook executability, "
+            "untouched-test or paper-forward profit evidence."
+            if fee_schedule_book is not None
+            else "Development trade-tape liquidity proxy with flat proxy fees; not "
+            "historical orderbook executability, untouched-test or paper-forward "
+            "profit evidence."
         ),
     }
     atomic_json(output_dir / "result.json", result)
