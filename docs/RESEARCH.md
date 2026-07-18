@@ -677,6 +677,13 @@ mask, portfolio state, prediction memory, catalog outcomes and the causal-input
 digest. Shard receipts bind source, policy and implementation hashes; their
 ordered hashes form a verified replay manifest.
 
+The H011 binder accepts validation or calibration artifacts only, rejects any
+test array, requires valid closed-test pack and model receipts, and joins each
+logit back to the exact feature shard and row. It verifies timestamp, market and
+component state IDs against both tensors and debug provenance before emitting a
+stable input digest bound to the train-only normalization artifact. This removes
+positional assumptions between model output and simulator input.
+
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
 the adapter and run the first development-only trade-tape replay with test
 physically closed.
