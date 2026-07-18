@@ -1452,3 +1452,60 @@ This is a valid negative H015 training result, not an improved model. The result
 is bound by contract
 `f947dd172f7c0c81f2df31b57cea4989e05ce2db47d6286bbf62f038930dac6f`;
 a fresh exact replay remains required by the registered protocol.
+
+## SPH-T-H016: Protocol-Exact Polymarket Fees
+
+**Status:** `registered; official rules audited; implementation pending`
+
+**Registered:** 2026-07-18, while the pre-registered H015 fresh replay was still
+running and before its result was observed. The replay is allowed to finish only
+as the final comparable flat-cost trajectory; it cannot qualify real net profit.
+
+**Trigger.** H010 currently subtracts a flat 100 bps of notional from every BUY
+and SELL fill. That is not Polymarket's fee model. The official rules make fees
+dependent on protocol era, per-market schedule, price and liquidity role. Makers
+pay no platform fee. Current takers pay a nonlinear USDC fee, while legacy CLOB
+V1 settled BUY fees in outcome-token proceeds and SELL fees in collateral.
+Consequently, every H010/H012/H014/H015 fee total and net-profit result observed
+so far is explicitly reclassified as `flat_fee_proxy_only`; none is real-cost
+qualified and none can support promotion.
+
+**Official chronology.** The dated Polymarket changelog first enabled taker fees
+for 15-minute crypto markets on 2026-01-05, added 5-minute crypto on 2026-02-12,
+NCAAB and Serie A on 2026-02-18, and new all-duration crypto markets after
+2026-03-06. The category fee structure changed on 2026-03-30 and the REST source
+of truth became each market's `feeSchedule` on 2026-03-31. CLOB V2 went live on
+2026-04-28 at approximately 11:00 UTC, replacing signed-order V1 fees with
+operator-set per-market fees at match time. These creation-time and execution-
+time boundaries intersect the development tape, which spans 2025-07-16 through
+2026-07-15, so a present-day category rate cannot be projected backward.
+
+**Registered implementation.** Build an immutable condition-and-time fee
+schedule from historically observed market/order parameters, pinned official
+contract and SDK behavior, and dated rollout rules in that priority order. Every
+fill must record protocol version, schedule source, maker/taker role, fee asset
+and exact amount. The present marketable-limit simulator is registered as a
+taker because it crosses observed liquidity after latency; it cannot claim maker
+status without a separate passive-order queue model. No builder code, maker
+rebate or taker rebate is assumed.
+
+V1 arithmetic must reproduce the pinned contract's integer rounding and preserve
+the distinction between shares deducted from a BUY and collateral deducted from
+a SELL. V2 must query the per-market fee details and reproduce the official
+price-dependent formula and five-decimal minimum-fee behavior. Current reference
+rates are recorded for regression tests, not historical imputation. Any fill
+whose applicable historical schedule cannot be established fails closed and
+rejects real-fee qualification; there is no zero-fee, category or 100-bps
+fallback.
+
+**Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
+rounding, creation-time rollout rules and the cutover boundary must pass
+regression tests. Per-fill fee audit must reconcile exactly to cash and token
+positions. Then H012, H014 and H015 must be replayed under 1.0x, 1.5x and 2.0x
+authoritative rate stress, and fee-dependent targets must be rebuilt and
+retrained. Calibration and test remain closed. No new model-profit claim may be
+made until the real-fee baselines are committed.
+
+**Evidence boundary.** Correct platform fees qualify only the cost side of the
+simulator. The trade tape still does not reconstruct historical orderbook depth,
+queue position or forward executable profit.
