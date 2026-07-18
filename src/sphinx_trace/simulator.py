@@ -10,6 +10,14 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
+from sphinx_trace.polymarket_fees import (
+    AppliedFee,
+    FeeAsset,
+    FeeProtocol,
+    FeeScheduleBook,
+    LiquidityRole,
+)
+
 ZERO = Decimal("0")
 ONE = Decimal("1")
 DECIMAL_RELATIVE_TOLERANCE = Decimal("1e-18")
@@ -53,6 +61,7 @@ class SimulationRules:
     adverse_price_ticks: int = 1
     tick_size: Decimal = Decimal("0.01")
     fee_bps: Decimal = Decimal("100")
+    fee_rate_multiplier: Decimal = ONE
     opposing_side_required: bool = False
     retain_processed_liquidity_ids: bool = True
     retain_prediction_records: bool = True
@@ -70,6 +79,8 @@ class SimulationRules:
             raise ValueError("adverse ticks must be non-negative and tick size positive")
         if self.fee_bps < ZERO:
             raise ValueError("fee_bps cannot be negative")
+        if self.fee_rate_multiplier < ZERO:
+            raise ValueError("fee_rate_multiplier cannot be negative")
 
     @property
     def fee_rate(self) -> Decimal:
@@ -86,6 +97,7 @@ class LiquidityEvent:
     price: Decimal
     shares: Decimal
     observed_side: OrderSide | None = None
+    transaction_hash: str | None = None
 
     def __post_init__(self) -> None:
         if not self.liquidity_id or not self.condition_id or not self.token_id:
@@ -96,6 +108,10 @@ class LiquidityEvent:
             raise ValueError("price must be between zero and one")
         if self.shares <= ZERO:
             raise ValueError("shares must be positive")
+        if self.transaction_hash is not None and (
+            not self.transaction_hash.startswith("0x") or len(self.transaction_hash) != 66
+        ):
+            raise ValueError("transaction_hash is invalid")
 
 
 @dataclass(slots=True)
@@ -147,6 +163,13 @@ class SimulatedFill:
     price: Decimal
     notional_usd: Decimal
     fee_usd: Decimal
+    position_shares: Decimal
+    collateral_fee_usd: Decimal
+    outcome_fee_shares: Decimal
+    fee_asset: FeeAsset
+    fee_schedule_id: str | None
+    fee_protocol: FeeProtocol | None
+    liquidity_role: LiquidityRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,8 +196,16 @@ def _decimal_dict(payload: dict[str, Any]) -> dict[str, Any]:
 class ReplaySimulator:
     """Replay calls against causal tape liquidity and terminal resolutions."""
 
-    def __init__(self, rules: SimulationRules) -> None:
+    def __init__(
+        self,
+        rules: SimulationRules,
+        *,
+        fee_schedule_book: FeeScheduleBook | None = None,
+    ) -> None:
+        if fee_schedule_book is not None and rules.fee_bps != ZERO:
+            raise ValueError("Protocol fee schedules cannot be combined with flat fee_bps")
         self.rules = rules
+        self.fee_schedule_book = fee_schedule_book
         self.cash_usd = rules.initial_cash_usd
         self.current_time_unix = 0
         self.orders: dict[str, SimulatedOrder] = {}
@@ -312,12 +343,114 @@ class ReplaySimulator:
     def _reserved_cash(self) -> Decimal:
         return sum(
             (
-                order.remaining_shares * order.limit_price * (ONE + self.rules.fee_rate)
+                self._maximum_buy_cost(order)
                 for order_id in sorted(self._open_order_ids)
                 if (order := self.orders[order_id]).side == OrderSide.BUY
             ),
             ZERO,
         )
+
+    def _quote_fee(
+        self,
+        *,
+        liquidity_id: str,
+        condition_id: str,
+        timestamp_unix: int,
+        transaction_hash: str | None,
+        side: OrderSide,
+        shares: Decimal,
+        price: Decimal,
+    ) -> AppliedFee | None:
+        if self.fee_schedule_book is None:
+            return None
+        return self.fee_schedule_book.quote(
+            liquidity_id,
+            condition_id=condition_id,
+            timestamp_unix=timestamp_unix,
+            transaction_hash=transaction_hash,
+            side=side.value,
+            liquidity_role=LiquidityRole.TAKER,
+            gross_shares=shares,
+            price=price,
+            rate_multiplier=self.rules.fee_rate_multiplier,
+        )
+
+    def _maximum_buy_cost(self, order: SimulatedOrder) -> Decimal:
+        notional = order.remaining_shares * order.limit_price
+        if self.fee_schedule_book is None:
+            return notional * (ONE + self.rules.fee_rate)
+        if order.evidence_liquidity_id is None:
+            raise RuntimeError("Protocol-fee order has no causal fee evidence")
+        fee = self._quote_fee(
+            liquidity_id=order.evidence_liquidity_id,
+            condition_id=order.condition_id,
+            timestamp_unix=order.submitted_at_unix,
+            transaction_hash=None,
+            side=order.side,
+            shares=order.remaining_shares,
+            price=order.limit_price,
+        )
+        if fee is None:
+            raise RuntimeError("Protocol fee quote unexpectedly used flat mode")
+        return notional + fee.collateral_fee_usd
+
+    def _affordable_buy_shares(
+        self,
+        *,
+        event: LiquidityEvent,
+        shares: Decimal,
+        price: Decimal,
+    ) -> Decimal:
+        return min(
+            shares,
+            self.buy_shares_for_total_cost(
+                total_cost_usd=self.cash_usd,
+                price=price,
+                evidence_liquidity_id=event.liquidity_id,
+                condition_id=event.condition_id,
+                timestamp_unix=event.timestamp_unix,
+                transaction_hash=event.transaction_hash,
+            ),
+        )
+
+    def buy_shares_for_total_cost(
+        self,
+        *,
+        total_cost_usd: Decimal,
+        price: Decimal,
+        evidence_liquidity_id: str,
+        condition_id: str,
+        timestamp_unix: int,
+        transaction_hash: str | None = None,
+    ) -> Decimal:
+        """Return the largest gross BUY size affordable under the active fee protocol."""
+
+        if total_cost_usd <= ZERO:
+            return ZERO
+        if price == ZERO:
+            raise ValueError("A zero-price BUY cannot be sized from a cash budget")
+        if self.fee_schedule_book is None:
+            unit_cost = price * (ONE + self.rules.fee_rate)
+            return total_cost_usd / unit_cost if unit_cost else ZERO
+        candidate = total_cost_usd / price
+        for _ in range(16):
+            if candidate <= ZERO:
+                return ZERO
+            fee = self._quote_fee(
+                liquidity_id=evidence_liquidity_id,
+                condition_id=condition_id,
+                timestamp_unix=timestamp_unix,
+                transaction_hash=transaction_hash,
+                side=OrderSide.BUY,
+                shares=candidate,
+                price=price,
+            )
+            if fee is None:
+                raise RuntimeError("Protocol fee quote unexpectedly used flat mode")
+            if candidate * price + fee.collateral_fee_usd <= total_cost_usd:
+                return candidate
+            candidate = min(candidate, (total_cost_usd - fee.collateral_fee_usd) / price)
+        raise RuntimeError("Protocol-fee affordability did not converge")
 
     def _reserved_shares(self, token_id: str) -> Decimal:
         return sum(
@@ -416,7 +549,7 @@ class ReplaySimulator:
             evidence_liquidity_id=evidence_liquidity_id,
         )
         if side == OrderSide.BUY:
-            maximum_cost = shares * price * (ONE + self.rules.fee_rate)
+            maximum_cost = self._maximum_buy_cost(order)
             if maximum_cost > self.cash_usd - self._reserved_cash():
                 order.status = OrderStatus.REJECTED
                 order.reject_reason = "INSUFFICIENT_CASH"
@@ -495,8 +628,11 @@ class ReplaySimulator:
                 continue
             shares = min(order.remaining_shares, available)
             if order.side == OrderSide.BUY:
-                unit_cost = price * (ONE + self.rules.fee_rate)
-                shares = min(shares, self.cash_usd / unit_cost if unit_cost else ZERO)
+                shares = self._affordable_buy_shares(
+                    event=event,
+                    shares=shares,
+                    price=price,
+                )
             else:
                 available_position = self.positions.get(order.token_id)
                 shares = min(
@@ -506,9 +642,29 @@ class ReplaySimulator:
             if shares <= ZERO:
                 continue
             notional = shares * price
-            fee = notional * self.rules.fee_rate
-            if order.side == OrderSide.BUY and notional + fee > self.cash_usd:
-                total_cost = notional + fee
+            protocol_fee = self._quote_fee(
+                liquidity_id=event.liquidity_id,
+                condition_id=event.condition_id,
+                timestamp_unix=event.timestamp_unix,
+                transaction_hash=event.transaction_hash,
+                side=order.side,
+                shares=shares,
+                price=price,
+            )
+            collateral_fee = (
+                notional * self.rules.fee_rate
+                if protocol_fee is None
+                else protocol_fee.collateral_fee_usd
+            )
+            fee_value = collateral_fee if protocol_fee is None else protocol_fee.fee_value_usd
+            outcome_fee_shares = (
+                ZERO if protocol_fee is None else protocol_fee.outcome_fee_shares
+            )
+            position_shares = shares - outcome_fee_shares if order.side == OrderSide.BUY else shares
+            if position_shares < ZERO:
+                raise RuntimeError("Protocol fee exceeds outcome-token proceeds")
+            if order.side == OrderSide.BUY and notional + collateral_fee > self.cash_usd:
+                total_cost = notional + collateral_fee
                 if _materially_different(total_cost, self.cash_usd):
                     raise RuntimeError(
                         "Affordable fill materially exceeds cash: "
@@ -518,11 +674,32 @@ class ReplaySimulator:
                 if notional > self.cash_usd:
                     shares = shares.next_minus()
                     notional = shares * price
-                    fee = notional * self.rules.fee_rate
+                    protocol_fee = self._quote_fee(
+                        liquidity_id=event.liquidity_id,
+                        condition_id=event.condition_id,
+                        timestamp_unix=event.timestamp_unix,
+                        transaction_hash=event.transaction_hash,
+                        side=order.side,
+                        shares=shares,
+                        price=price,
+                    )
+                    collateral_fee = (
+                        notional * self.rules.fee_rate
+                        if protocol_fee is None
+                        else protocol_fee.collateral_fee_usd
+                    )
+                    fee_value = (
+                        collateral_fee if protocol_fee is None else protocol_fee.fee_value_usd
+                    )
+                    outcome_fee_shares = (
+                        ZERO if protocol_fee is None else protocol_fee.outcome_fee_shares
+                    )
+                    position_shares = shares - outcome_fee_shares
                 else:
                     # Decimal division and the separately rounded fee can differ by one
                     # terminal digit. Rebase only that bounded arithmetic dust.
-                    fee = self.cash_usd - notional
+                    collateral_fee = self.cash_usd - notional
+                    fee_value = collateral_fee
             fill_id = _stable_hash(
                 {
                     "order_id": order.order_id,
@@ -541,7 +718,20 @@ class ReplaySimulator:
                 shares=shares,
                 price=price,
                 notional_usd=notional,
-                fee_usd=fee,
+                fee_usd=fee_value,
+                position_shares=position_shares,
+                collateral_fee_usd=collateral_fee,
+                outcome_fee_shares=outcome_fee_shares,
+                fee_asset=(
+                    FeeAsset.COLLATERAL
+                    if protocol_fee is None and collateral_fee
+                    else FeeAsset.NONE
+                    if protocol_fee is None
+                    else protocol_fee.fee_asset
+                ),
+                fee_schedule_id=None if protocol_fee is None else protocol_fee.schedule_id,
+                fee_protocol=None if protocol_fee is None else protocol_fee.protocol,
+                liquidity_role=LiquidityRole.TAKER,
             )
             self._apply_fill(order, fill)
             emitted.append(fill)
@@ -552,7 +742,7 @@ class ReplaySimulator:
 
     def _apply_fill(self, order: SimulatedOrder, fill: SimulatedFill) -> None:
         if fill.side == OrderSide.BUY:
-            total_cost = fill.notional_usd + fill.fee_usd
+            total_cost = fill.notional_usd + fill.collateral_fee_usd
             if total_cost > self.cash_usd:
                 raise RuntimeError("Fill would spend unavailable cash")
             self.cash_usd -= total_cost
@@ -565,17 +755,17 @@ class ReplaySimulator:
                 self._position_token_ids_by_condition.setdefault(
                     order.condition_id, set()
                 ).add(order.token_id)
-            buy_position.shares += fill.shares
+            buy_position.shares += fill.position_shares
             buy_position.cost_basis_usd += total_cost
             self._total_cost_basis_usd += total_cost
             mark = self.last_marks.get(order.token_id, fill.price)
-            self._marked_exposure_usd += fill.shares * mark
+            self._marked_exposure_usd += fill.position_shares * mark
         else:
             sell_position = self.positions.get(order.token_id)
             if sell_position is None or fill.shares > sell_position.shares:
                 raise RuntimeError("Fill would sell unavailable shares")
             allocated_cost = sell_position.cost_basis_usd * fill.shares / sell_position.shares
-            proceeds = fill.notional_usd - fill.fee_usd
+            proceeds = fill.notional_usd - fill.collateral_fee_usd
             pnl = proceeds - allocated_cost
             mark = self.last_marks.get(order.token_id, sell_position.average_price)
             sell_position.shares -= fill.shares
@@ -755,8 +945,13 @@ class ReplaySimulator:
         fills = [_decimal_dict(asdict(fill)) for fill in self.fills]
         predictions = [_decimal_dict(asdict(record)) for record in self.predictions]
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "record_type": "simulator_checkpoint",
+            "fee_schedule_manifest_sha256": (
+                None
+                if self.fee_schedule_book is None
+                else self.fee_schedule_book.manifest_sha256
+            ),
             "rules": rules,
             "current_time_unix": self.current_time_unix,
             "cash_usd": str(self.cash_usd),
@@ -793,7 +988,12 @@ class ReplaySimulator:
         return _stable_hash(self.snapshot())
 
     @classmethod
-    def from_snapshot(cls, payload: dict[str, Any]) -> ReplaySimulator:
+    def from_snapshot(
+        cls,
+        payload: dict[str, Any],
+        *,
+        fee_schedule_book: FeeScheduleBook | None = None,
+    ) -> ReplaySimulator:
         rules_value = dict(payload["rules"])
         for key in (
             "initial_cash_usd",
@@ -801,9 +1001,20 @@ class ReplaySimulator:
             "duplicate_liquidity_haircut",
             "tick_size",
             "fee_bps",
+            "fee_rate_multiplier",
         ):
-            rules_value[key] = decimal(rules_value[key])
-        simulator = cls(SimulationRules(**rules_value))
+            if key in rules_value:
+                rules_value[key] = decimal(rules_value[key])
+        expected_fee_manifest = payload.get("fee_schedule_manifest_sha256")
+        actual_fee_manifest = (
+            None if fee_schedule_book is None else fee_schedule_book.manifest_sha256
+        )
+        if expected_fee_manifest != actual_fee_manifest:
+            raise RuntimeError("Simulator fee schedule binding changed across resume")
+        simulator = cls(
+            SimulationRules(**rules_value),
+            fee_schedule_book=fee_schedule_book,
+        )
         simulator.current_time_unix = int(payload["current_time_unix"])
         simulator.cash_usd = decimal(payload["cash_usd"])
         simulator.orders = {}
@@ -833,8 +1044,37 @@ class ReplaySimulator:
         for row_value in payload["fills"]:
             row = dict(row_value)
             row["side"] = OrderSide(row["side"])
-            for key in ("shares", "price", "notional_usd", "fee_usd"):
+            for key in (
+                "shares",
+                "price",
+                "notional_usd",
+                "fee_usd",
+                "position_shares",
+                "collateral_fee_usd",
+                "outcome_fee_shares",
+            ):
+                if key not in row:
+                    if key == "position_shares":
+                        row[key] = row["shares"]
+                    elif key == "collateral_fee_usd":
+                        row[key] = row["fee_usd"]
+                    elif key == "outcome_fee_shares":
+                        row[key] = ZERO
                 row[key] = decimal(row[key])
+            row["fee_asset"] = FeeAsset(
+                row.get(
+                    "fee_asset",
+                    FeeAsset.COLLATERAL if row["fee_usd"] else FeeAsset.NONE,
+                )
+            )
+            fee_protocol = row.get("fee_protocol")
+            row["fee_protocol"] = (
+                None if fee_protocol is None else FeeProtocol(fee_protocol)
+            )
+            row["fee_schedule_id"] = row.get("fee_schedule_id")
+            row["liquidity_role"] = LiquidityRole(
+                row.get("liquidity_role", LiquidityRole.TAKER)
+            )
             simulator.fills.append(SimulatedFill(**row))
         simulator.predictions = []
         for row_value in payload["predictions"]:

@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
 
+from sphinx_trace.polymarket_fees import (
+    FeeAsset,
+    FeeFormula,
+    FeeProtocol,
+    FeeRounding,
+    FeeScheduleBook,
+    FeeScheduleEvidence,
+)
 from sphinx_trace.simulator import (
     LiquidityEvent,
     OrderSide,
@@ -14,12 +23,37 @@ from sphinx_trace.simulator import (
 )
 
 
+def _fee_schedule(
+    liquidity_id: str,
+    timestamp: int,
+    *,
+    protocol: FeeProtocol,
+) -> FeeScheduleEvidence:
+    is_v1 = protocol == FeeProtocol.CLOB_V1
+    return FeeScheduleEvidence(
+        schedule_id=(f"{timestamp:064x}"),
+        liquidity_id=liquidity_id,
+        transaction_hash="0x" + f"{timestamp:064x}",
+        condition_id="condition",
+        timestamp_unix=timestamp,
+        protocol=protocol,
+        formula=(FeeFormula.V1_MIN_PRICE_CURVE if is_v1 else FeeFormula.POLYMARKET_CURVE),
+        rate=Decimal("0.02" if is_v1 else "0.07"),
+        exponent=0 if is_v1 else 1,
+        taker_only=True,
+        collateral_rounding_decimals=6 if is_v1 else 5,
+        outcome_rounding_decimals=6,
+        rounding=FeeRounding.DOWN if is_v1 else FeeRounding.HALF_UP,
+        source="test",
+    )
+
+
 class _IterationOrderedSet(set[str]):
     def __init__(self, values: list[str]) -> None:
         super().__init__(values)
         self._values = tuple(values)
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self) -> Iterator[str]:
         return iter(self._values)
 
 
@@ -370,3 +404,91 @@ def test_compaction_discards_stale_expiry_entries() -> None:
     assert order.status == OrderStatus.FILLED
     assert simulator.orders == {}
     assert simulator.current_time_unix == 200
+
+
+@pytest.mark.parametrize(
+    ("protocol", "expected_cash", "expected_position", "expected_fee"),
+    [
+        (FeeProtocol.CLOB_V1, "50.0", "98.000000", "1.0000000"),
+        (FeeProtocol.CLOB_V2, "48.25000", "100", "1.75000"),
+    ],
+)
+def test_protocol_fee_buy_changes_the_correct_portfolio_asset(
+    protocol: FeeProtocol,
+    expected_cash: str,
+    expected_position: str,
+    expected_fee: str,
+) -> None:
+    book = FeeScheduleBook(
+        [
+            _fee_schedule("evidence", 1, protocol=protocol),
+            _fee_schedule("fill", 3, protocol=protocol),
+        ],
+        manifest_sha256="f" * 64,
+    )
+    simulator = ReplaySimulator(
+        SimulationRules(
+            initial_cash_usd=Decimal("100"),
+            latency_seconds=0,
+            available_share_fraction=Decimal("1"),
+            duplicate_liquidity_haircut=Decimal("1"),
+            adverse_price_ticks=0,
+            fee_bps=Decimal("0"),
+        ),
+        fee_schedule_book=book,
+    )
+    order = simulator.place_order(
+        decision_id="buy",
+        component_id="component",
+        condition_id="condition",
+        token_id="yes-token",
+        outcome="YES",
+        side=OrderSide.BUY,
+        submitted_at_unix=1,
+        requested_shares="100",
+        limit_price="0.5",
+        evidence_liquidity_id="evidence",
+    )
+    fills = simulator.process_liquidity(_event("fill", 3, price="0.5", shares="100"))
+
+    assert order.status == OrderStatus.FILLED
+    assert simulator.cash_usd == Decimal(expected_cash)
+    assert simulator.positions["yes-token"].shares == Decimal(expected_position)
+    assert simulator.total_fees_usd == Decimal(expected_fee)
+    assert fills[0].fee_asset == (
+        FeeAsset.OUTCOME if protocol == FeeProtocol.CLOB_V1 else FeeAsset.COLLATERAL
+    )
+    assert fills[0].position_shares == Decimal(expected_position)
+
+    restored = ReplaySimulator.from_snapshot(
+        simulator.snapshot(),
+        fee_schedule_book=book,
+    )
+    assert restored.checkpoint_sha256() == simulator.checkpoint_sha256()
+    with pytest.raises(RuntimeError, match="fee schedule binding"):
+        ReplaySimulator.from_snapshot(simulator.snapshot())
+
+
+def test_protocol_fee_schedule_fails_closed_during_order_reservation() -> None:
+    book = FeeScheduleBook(
+        [_fee_schedule("qualified", 1, protocol=FeeProtocol.CLOB_V2)],
+        manifest_sha256="e" * 64,
+    )
+    simulator = ReplaySimulator(
+        SimulationRules(fee_bps=Decimal("0")),
+        fee_schedule_book=book,
+    )
+
+    with pytest.raises(KeyError, match="unqualified"):
+        simulator.place_order(
+            decision_id="buy",
+            component_id="component",
+            condition_id="condition",
+            token_id="yes-token",
+            outcome="YES",
+            side=OrderSide.BUY,
+            submitted_at_unix=1,
+            requested_shares="1",
+            limit_price="0.5",
+            evidence_liquidity_id="missing",
+        )

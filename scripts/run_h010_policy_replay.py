@@ -24,6 +24,7 @@ from sphinx_trace.policy_checkpoint import load_policy_checkpoint
 from sphinx_trace.policy_decisions import PolicyFeatureStore, load_policy_decisions
 from sphinx_trace.policy_encodings import PolicyEncodingStore
 from sphinx_trace.policy_runtime import H012PolicyRuntime, PolicyInference
+from sphinx_trace.polymarket_fees import FeeScheduleBook
 from sphinx_trace.replay_audit import (
     build_audit_manifest,
     decision_audit_record,
@@ -42,6 +43,7 @@ DEFAULT_RESIDUAL_CONFIG = (
 IMPLEMENTATION_PATHS = (
     Path(__file__).resolve(),
     ROOT / "src" / "sphinx_trace" / "simulator.py",
+    ROOT / "src" / "sphinx_trace" / "polymarket_fees.py",
     ROOT / "src" / "sphinx_trace" / "replay_h010.py",
     ROOT / "src" / "sphinx_trace" / "replay_audit.py",
     ROOT / "src" / "sphinx_trace" / "policy_decisions.py",
@@ -86,7 +88,12 @@ def _atomic_torch_save(path: Path, payload: dict[str, Any]) -> None:
     raise PermissionError(f"Could not atomically replace {path}: {last_error}")
 
 
-def _rules(config: dict[str, Any], cost_multiplier: float) -> SimulationRules:
+def _rules(
+    config: dict[str, Any],
+    cost_multiplier: float,
+    *,
+    protocol_fees: bool = False,
+) -> SimulationRules:
     if cost_multiplier <= 0.0:
         raise ValueError("H010 cost multiplier must be positive")
     execution = config["execution"]
@@ -98,10 +105,19 @@ def _rules(config: dict[str, Any], cost_multiplier: float) -> SimulationRules:
         available_share_fraction=Decimal(str(proxy["available_share_fraction"])),
         duplicate_liquidity_haircut=Decimal(str(proxy["duplicate_liquidity_haircut"])),
         adverse_price_ticks=max(
-            0, math.ceil(float(proxy["adverse_price_ticks"]) * cost_multiplier)
+            0,
+            math.ceil(
+                float(proxy["adverse_price_ticks"])
+                * (1.0 if protocol_fees else cost_multiplier)
+            ),
         ),
         tick_size=Decimal(str(proxy["tick_size"])),
-        fee_bps=Decimal(str(float(proxy["fee_bps"]) * cost_multiplier)),
+        fee_bps=(
+            Decimal("0")
+            if protocol_fees
+            else Decimal(str(float(proxy["fee_bps"]) * cost_multiplier))
+        ),
+        fee_rate_multiplier=Decimal(str(cost_multiplier)) if protocol_fees else Decimal("1"),
         opposing_side_required=bool(proxy["opposing_side_required"]),
         retain_processed_liquidity_ids=False,
         retain_prediction_records=False,
@@ -110,7 +126,7 @@ def _rules(config: dict[str, Any], cost_multiplier: float) -> SimulationRules:
 
 def _fill_record(fill: Any) -> dict[str, Any]:
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "record_type": "h010_fill_audit",
         "fill_id": fill.fill_id,
         "order_id": fill.order_id,
@@ -121,6 +137,13 @@ def _fill_record(fill: Any) -> dict[str, Any]:
         "price": str(fill.price),
         "notional_usd": str(fill.notional_usd),
         "fee_usd": str(fill.fee_usd),
+        "position_shares": str(fill.position_shares),
+        "collateral_fee_usd": str(fill.collateral_fee_usd),
+        "outcome_fee_shares": str(fill.outcome_fee_shares),
+        "fee_asset": fill.fee_asset.value,
+        "fee_schedule_id": fill.fee_schedule_id,
+        "fee_protocol": None if fill.fee_protocol is None else fill.fee_protocol.value,
+        "liquidity_role": fill.liquidity_role.value,
     }
 
 
@@ -219,12 +242,16 @@ def replay(
     output_dir: Path,
     *,
     encoding_cache_dir: Path | None = None,
+    fee_schedule_dir: Path | None = None,
     split: str,
     cost_multiplier: float,
 ) -> dict[str, Any]:
     if split not in {"validation", "calibration"}:
         raise ValueError("H010 replay supports validation or calibration only")
     simulator_config = load_json(simulator_config_path)
+    fee_schedule_book = (
+        None if fee_schedule_dir is None else FeeScheduleBook.from_artifact(fee_schedule_dir)
+    )
     policy_config = load_json(policy_config_path)
     model_config = load_json(model_config_path)
     residual_config = load_json(residual_config_path)
@@ -288,6 +315,7 @@ def replay(
         f"policy_config:{sha256_file(policy_config_path)}\n"
         f"source:{source_sha256}\npolicy:{policy_sha256}\n"
         f"encoding_cache:{encoding_manifest_sha256 or 'none'}\n"
+        f"fee_schedule:{None if fee_schedule_book is None else fee_schedule_book.manifest_sha256}\n"
         f"implementation:{implementation_sha256}\nsplit:{split}\n"
         f"cost_multiplier:{cost_multiplier}\n"
     )
@@ -306,7 +334,10 @@ def replay(
         if saved.get("contract_sha256") != contract_sha256:
             raise RuntimeError("H010 replay checkpoint belongs to another contract")
         adapter = H010ReplayAdapter.from_snapshot(
-            dict(saved["adapter"]), catalog.contracts, source_sha256=source_sha256
+            dict(saved["adapter"]),
+            catalog.contracts,
+            source_sha256=source_sha256,
+            fee_schedule_book=fee_schedule_book,
         )
         start_ordinal = int(saved["next_shard_ordinal"])
         resolution_position = int(saved["resolution_position"])
@@ -321,7 +352,14 @@ def replay(
         resolved_calls = int(saved["resolved_calls"])
     else:
         adapter = H010ReplayAdapter(
-            ReplaySimulator(_rules(simulator_config, cost_multiplier)),
+            ReplaySimulator(
+                _rules(
+                    simulator_config,
+                    cost_multiplier,
+                    protocol_fees=fee_schedule_book is not None,
+                ),
+                fee_schedule_book=fee_schedule_book,
+            ),
             catalog.contracts,
             source_sha256=source_sha256,
         )
@@ -501,6 +539,9 @@ def replay(
         "source_sha256": source_sha256,
         "policy_sha256": policy_sha256,
         "encoding_manifest_sha256": encoding_manifest_sha256,
+        "fee_schedule_manifest_sha256": (
+            None if fee_schedule_book is None else fee_schedule_book.manifest_sha256
+        ),
         "implementation_sha256": implementation_sha256,
         "metrics": metrics,
         "actions": dict(sorted(action_counts.items())),
@@ -545,6 +586,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--outcome-dir", type=Path, required=True)
     value.add_argument("--policy-dir", type=Path, required=True)
     value.add_argument("--encoding-cache-dir", type=Path)
+    value.add_argument("--fee-schedule-dir", type=Path)
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--split", choices=("validation", "calibration"), required=True)
     value.add_argument("--cost-multiplier", type=float, default=1.0)
@@ -565,6 +607,9 @@ def main() -> None:
         args.output_dir.resolve(),
         encoding_cache_dir=(
             args.encoding_cache_dir.resolve() if args.encoding_cache_dir is not None else None
+        ),
+        fee_schedule_dir=(
+            args.fee_schedule_dir.resolve() if args.fee_schedule_dir is not None else None
         ),
         split=args.split,
         cost_multiplier=args.cost_multiplier,
