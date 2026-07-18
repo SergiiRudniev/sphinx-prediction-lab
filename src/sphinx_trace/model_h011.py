@@ -137,6 +137,7 @@ class SphinxTraceS0H011(nn.Module):
         *,
         group_mask: Tensor | None = None,
         return_debug: bool = False,
+        return_latent: bool = False,
     ) -> dict[str, Tensor]:
         if features.ndim != 2 or features.shape[1] != 128:
             raise ValueError("H011 features must have shape [batch, 128]")
@@ -168,9 +169,10 @@ class SphinxTraceS0H011(nn.Module):
             "position_size_beta_alpha": F.softplus(self.size_alpha(latent_state)) + 1.0,
             "position_size_beta_beta": F.softplus(self.size_beta(latent_state)) + 1.0,
         }
+        if return_debug or return_latent:
+            output["debug_latent_state"] = latent_state
         if return_debug:
             output["debug_group_tokens"] = groups
-            output["debug_latent_state"] = latent_state
             output["debug_attention"] = torch.stack(attentions, dim=1)
         return output
 

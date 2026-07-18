@@ -64,6 +64,37 @@ def test_h012_action_value_head_starts_at_safe_skip_anchor() -> None:
     )
 
 
+def test_h012_cached_market_encoding_matches_full_forward() -> None:
+    model = _models()
+    market = torch.randn((3, 128))
+    portfolio = torch.randn((3, 9))
+    memory = torch.randn((3, 7))
+    previous = torch.tensor([0, 2, 6])
+    physical = torch.ones((3, H012_ACTION_COUNT), dtype=torch.bool)
+    with torch.inference_mode():
+        backbone = model.outcome_backbone(market, return_latent=True)
+        full = model(
+            market,
+            portfolio,
+            memory,
+            previous,
+            physical_action_mask=physical,
+        )
+        cached = model.forward_from_market_encoding(
+            backbone["debug_latent_state"],
+            backbone["terminal_outcome_logit"],
+            backbone["uncertainty_log_scale"],
+            portfolio,
+            memory,
+            previous,
+            physical_action_mask=physical,
+        )
+
+    assert set(cached) == set(full)
+    for key in full:
+        torch.testing.assert_close(cached[key], full[key], rtol=0.0, atol=0.0)
+
+
 def test_h012_rejects_nonphysical_or_unknown_action_state() -> None:
     model = _models()
     with pytest.raises(ValueError, match="permit at least one"):
@@ -85,6 +116,7 @@ def test_h012_rejects_nonphysical_or_unknown_action_state() -> None:
 
 def test_h012_preserves_market_anchor_for_residual_backbone() -> None:
     direct = _models()
+    assert isinstance(direct.outcome_backbone, SphinxTraceS0H011)
     residual = SphinxTraceS0H013(direct.outcome_backbone)
     model = SphinxTraceS0H012(
         residual,
