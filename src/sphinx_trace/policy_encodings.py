@@ -65,15 +65,21 @@ class PolicyEncodingStore:
         self.cache_shards = int(cache_shards)
         self.manifest_path = cache_dir / "manifest.json"
         manifest = _load_object(self.manifest_path)
+        policy_result = _load_object(policy_dir / "result.json")
         pack_manifest_sha256 = sha256_file(pack_dir / "manifest.json")
         policy_result_sha256 = sha256_file(policy_dir / "result.json")
+        encoding_policy_sha256 = str(
+            policy_result.get("market_encoding_policy_result_sha256") or policy_result_sha256
+        )
+        redirected_encoding = encoding_policy_sha256 != policy_result_sha256
         if (
             manifest.get("record_type") != "h012_policy_encoding_cache_manifest"
             or manifest.get("valid") is not True
             or manifest.get("test_labels_opened") is not False
             or int(manifest.get("test_rows_consumed", -1)) != 0
             or manifest.get("pack_manifest_sha256") != pack_manifest_sha256
-            or manifest.get("policy_result_sha256") != policy_result_sha256
+            or manifest.get("policy_result_sha256") != encoding_policy_sha256
+            or (redirected_encoding and policy_result.get("market_backbone_frozen") is not True)
         ):
             raise RuntimeError("H012 policy encoding cache contract changed")
         self.manifest_sha256 = sha256_file(self.manifest_path)
@@ -106,7 +112,7 @@ class PolicyEncodingStore:
                 or int(receipt.get("shard_index", -1)) != shard_index
                 or int(receipt.get("rows", -1)) != rows
                 or receipt.get("pack_manifest_sha256") != pack_manifest_sha256
-                or receipt.get("policy_result_sha256") != policy_result_sha256
+                or receipt.get("policy_result_sha256") != encoding_policy_sha256
                 or receipt.get("source_receipt_sha256") != sha256_file(source_receipt)
                 or receipt.get("files") != raw.get("files")
             ):
