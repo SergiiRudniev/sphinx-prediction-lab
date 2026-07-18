@@ -91,6 +91,11 @@ def _fixture(root: Path) -> tuple[Path, Path]:
         },
         {
             "timestamp_unix": 1001,
+            "trade_id": "z1",
+            "condition_id": "condition-a",
+        },
+        {
+            "timestamp_unix": 1001,
             "trade_id": "a1",
             "condition_id": "condition-a",
         },
@@ -118,12 +123,12 @@ def _fixture(root: Path) -> tuple[Path, Path]:
     write_jsonl_zst(source_path, source_rows)
     stream_manifest = {
         "globally_ordered": True,
-        "rows": 6,
+        "rows": 7,
         "shards": [
             {
                 "date": "1970-01-01",
                 "path": "stream/date=1970-01-01.jsonl.zst",
-                "rows": 6,
+                "rows": 7,
                 "sha256": sha256_file(source_path),
             }
         ],
@@ -156,10 +161,10 @@ def test_build_development_tape_filters_exact_causal_windows_and_resumes(
     assert first["valid"] is True
     assert first["conditions"] == 2
     assert first["decision_split_counts"] == {"validation": 1, "calibration": 1}
-    assert first["retained_rows"] == 3
+    assert first["retained_rows"] == 4
     assert second["shard_digest"] == first["shard_digest"]
     rows = list(iter_jsonl_zst(output / "stream" / "date=1970-01-01.jsonl.zst"))
-    assert [row["trade_id"] for row in rows] == ["a1", "b1", "a2"]
+    assert [row["trade_id"] for row in rows] == ["z1", "a1", "b1", "a2"]
     assert {row["development_split"] for row in rows} == {"validation", "calibration"}
     conditions = list(iter_jsonl_zst(output / "conditions.jsonl.zst"))
     assert {row["condition_id"] for row in conditions} == {"condition-a", "condition-b"}

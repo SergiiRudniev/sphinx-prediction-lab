@@ -293,15 +293,13 @@ def build_development_tape(
                 date: str = date,
             ) -> Iterator[dict[str, Any]]:
                 nonlocal scanned, retained
-                previous_key: tuple[int, str] | None = None
+                previous_timestamp: int | None = None
                 for payload in iter_jsonl_zst(source_path):
                     scanned += 1
                     timestamp = int(payload["timestamp_unix"])
-                    trade_id = str(payload["trade_id"])
-                    key = (timestamp, trade_id)
-                    if previous_key is not None and key < previous_key:
+                    if previous_timestamp is not None and timestamp < previous_timestamp:
                         raise RuntimeError(f"H009 stream order regressed at {date}")
-                    previous_key = key
+                    previous_timestamp = timestamp
                     condition_id = str(payload["condition_id"]).lower()
                     window = windows.get(condition_id)
                     if window is None or not (
