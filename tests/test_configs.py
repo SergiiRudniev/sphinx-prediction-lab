@@ -172,6 +172,40 @@ def test_h014_replay_state_training_keeps_selection_and_test_closed() -> None:
     assert config["training"]["checkpoint_maximum_interval_seconds"] <= 900
 
 
+def test_h014_exact_result_rejects_promotion_and_h015_is_pre_registered() -> None:
+    h014 = load_json(
+        ROOT / "configs" / "trace" / "sphinx_trace_s0_h014_exact_validation_result.json"
+    )
+    h015 = load_json(
+        ROOT
+        / "configs"
+        / "trace"
+        / "sphinx_trace_s0_h015_on_policy_portfolio_advantage_v1.json"
+    )
+
+    assert h014["research_id"] == "SPH-T-H014"
+    assert h014["promotion_allowed"] is False
+    assert h014["gates"]["all_pass"] is False
+    assert h014["test_labels_opened"] is False
+
+    assert h015["research_id"] == "SPH-T-H015"
+    assert h015["corpus"]["rows_expected"] == 1_619_228
+    assert h015["corpus"]["behavior_policies"] == 2
+    assert h015["weighting"]["primary"] == "equal_market_total_weight_within_behavior_policy"
+    assert h015["weighting"]["fixed_call_frequency_target"] is None
+    assert h015["partition"]["partition_sha256"] == (
+        "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf"
+    )
+    assert h015["partition"]["calibration_used_for_training_or_selection"] is False
+    assert h015["corpus"]["calibration_rows_consumed"] == 0
+    assert h015["corpus"]["test_rows_consumed"] == 0
+    assert h015["corpus"]["test_labels_opened"] is False
+    assert h015["architecture"]["fixed_confidence_threshold"] is None
+    assert h015["architecture"]["fixed_edge_threshold"] is None
+    assert h015["architecture"]["fixed_bet_size"] is None
+    assert h015["architecture"]["fixed_portfolio_limit"] is None
+
+
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
     contracts = config["sources"]["ledger"]["contracts"]
