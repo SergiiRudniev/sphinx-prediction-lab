@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
+from sphinx_corpus.io import sha256_file, write_jsonl_zst
 from sphinx_trace.polymarket_fees import (
     FeeAsset,
     FeeFormula,
@@ -14,6 +17,7 @@ from sphinx_trace.polymarket_fees import (
     FeeScheduleEvidence,
     LiquidityRole,
     apply_polymarket_fee,
+    fee_schedule_payload,
 )
 
 
@@ -221,3 +225,45 @@ def test_condition_time_interval_qualifies_unseen_liquidity() -> None:
             condition_id="0x" + "c" * 64,
             timestamp_unix=110,
         )
+
+
+def test_artifact_requires_hash_bound_receipt_proof_coverage(tmp_path: Path) -> None:
+    schedule = _schedule()
+    data_path = tmp_path / "schedules.jsonl.zst"
+    proof_path = tmp_path / "source-receipts.jsonl.zst"
+    write_jsonl_zst(data_path, [fee_schedule_payload(schedule)])
+    write_jsonl_zst(
+        proof_path,
+        [
+            {
+                "schema_version": "1.0.0",
+                "record_type": "h016_fee_receipt_proof",
+                "schedule_id": schedule.schedule_id,
+                "transaction_hash": schedule.transaction_hash,
+                "status": "0x1",
+            }
+        ],
+    )
+    manifest = {
+        "record_type": "h016_fee_schedule_manifest",
+        "valid": True,
+        "data_path": data_path.name,
+        "data_sha256": sha256_file(data_path),
+        "rows": 1,
+        "receipt_proof_path": proof_path.name,
+        "receipt_proof_sha256": sha256_file(proof_path),
+        "receipt_proof_rows": 1,
+        "test_labels_opened": False,
+        "test_rows_consumed": 0,
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    book = FeeScheduleBook.from_artifact(tmp_path)
+    assert book.schedule_for("liquidity").schedule_id == schedule.schedule_id
+
+    write_jsonl_zst(proof_path, [])
+    manifest["receipt_proof_sha256"] = sha256_file(proof_path)
+    manifest["receipt_proof_rows"] = 0
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="proof coverage"):
+        FeeScheduleBook.from_artifact(tmp_path)

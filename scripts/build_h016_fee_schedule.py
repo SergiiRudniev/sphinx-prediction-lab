@@ -7,7 +7,10 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -376,48 +379,94 @@ class ReceiptCache:
         self.connection.commit()
 
 
+class RequestRateLimiter:
+    def __init__(self, requests_per_second: float) -> None:
+        if requests_per_second <= 0:
+            raise ValueError("H016 RPC request rate must be positive")
+        self.interval_seconds = 1.0 / requests_per_second
+        self.lock = threading.Lock()
+        self.next_allowed = 0.0
+
+    def wait(self) -> None:
+        with self.lock:
+            now = time.monotonic()
+            allowed = max(now, self.next_allowed)
+            self.next_allowed = allowed + self.interval_seconds
+        delay = allowed - now
+        if delay > 0:
+            time.sleep(delay)
+
+
 def _fetch_missing(
     rpc: PolygonRPC,
     cache: ReceiptCache,
     transaction_hashes: list[str],
     *,
     batch_size: int,
+    workers: int,
+    requests_per_second: float,
     output_dir: Path,
 ) -> bool:
     missing = [value for value in sorted(set(transaction_hashes)) if cache.get(value) is None]
-    for offset in range(0, len(missing), batch_size):
-        if (output_dir / "PAUSE").exists():
-            return False
-        batch = missing[offset : offset + batch_size]
-        results = _fetch_receipt_batch(rpc, batch)
-        rows: list[tuple[str, dict[str, Any]]] = []
-        for transaction_hash, result in zip(batch, results, strict=True):
-            if not isinstance(result, dict):
-                raise RuntimeError(f"H016 receipt not found: {transaction_hash}")
-            rows.append((transaction_hash, result))
-        cache.put_many(rows)
-        completed = min(offset + len(batch), len(missing))
-        if completed % max(batch_size, 250) == 0 or completed == len(missing):
-            print(f"receipts {completed}/{len(missing)}", flush=True)
+    batches = [
+        missing[offset : offset + batch_size]
+        for offset in range(0, len(missing), batch_size)
+    ]
+    completed = 0
+    limiter = RequestRateLimiter(requests_per_second)
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="h016-rpc") as executor:
+        for wave_start in range(0, len(batches), workers * 4):
+            wave = batches[wave_start : wave_start + workers * 4]
+            if (output_dir / "PAUSE").exists():
+                return False
+            wave_results = list(
+                executor.map(
+                    lambda batch: _fetch_receipt_batch(rpc, batch, limiter),
+                    wave,
+                )
+            )
+            rows: list[tuple[str, dict[str, Any]]] = []
+            for batch, results in zip(wave, wave_results, strict=True):
+                for transaction_hash, result in zip(batch, results, strict=True):
+                    if not isinstance(result, dict):
+                        raise RuntimeError(f"H016 receipt not found: {transaction_hash}")
+                    rows.append((transaction_hash, result))
+            cache.put_many(rows)
+            previous_completed = completed
+            completed += len(rows)
+            if (
+                completed // 250 > previous_completed // 250
+                or completed == len(missing)
+            ):
+                print(f"receipts {completed}/{len(missing)}", flush=True)
     return True
 
 
 def _fetch_receipt_batch(
     rpc: PolygonRPC,
     transaction_hashes: list[str],
+    limiter: RequestRateLimiter,
 ) -> list[Any]:
-    try:
-        return rpc.batch(
-            ("eth_getTransactionReceipt", [value]) for value in transaction_hashes
-        )
-    except RPCError:
-        if len(transaction_hashes) == 1:
-            raise
-        middle = len(transaction_hashes) // 2
-        return [
-            *_fetch_receipt_batch(rpc, transaction_hashes[:middle]),
-            *_fetch_receipt_batch(rpc, transaction_hashes[middle:]),
-        ]
+    last_error: RPCError | None = None
+    for cooldown_attempt in range(6):
+        limiter.wait()
+        try:
+            return rpc.batch(
+                ("eth_getTransactionReceipt", [value])
+                for value in transaction_hashes
+            )
+        except RPCError as error:
+            last_error = error
+            if "429" not in str(error):
+                break
+            time.sleep(min(30.0, 2.0 * (2**cooldown_attempt)))
+    if len(transaction_hashes) == 1:
+        raise RPCError(f"H016 receipt fetch failed after cooldown: {last_error}")
+    middle = len(transaction_hashes) // 2
+    return [
+        *_fetch_receipt_batch(rpc, transaction_hashes[:middle], limiter),
+        *_fetch_receipt_batch(rpc, transaction_hashes[middle:], limiter),
+    ]
 
 
 def _source_candidate(segment: TargetSegment, row: dict[str, Any]) -> FeeSourceCandidate:
@@ -498,6 +547,8 @@ def qualify(
     *,
     rpc_url: str,
     batch_size: int,
+    workers: int,
+    requests_per_second: float,
 ) -> dict[str, Any]:
     segments = _segments(plan)
     schedules: dict[str, FeeScheduleEvidence] = {}
@@ -516,7 +567,7 @@ def qualify(
     cache = ReceiptCache(output_dir / "receipt-cache.sqlite3")
     failures: dict[str, list[str]] = defaultdict(list)
     try:
-        with PolygonRPC(rpc_url, retries=8) as rpc:
+        with PolygonRPC(rpc_url, retries=2) as rpc:
             maximum_rank = max((len(row.candidates) for row in unresolved.values()), default=0)
             for rank in range(maximum_rank):
                 current = [
@@ -529,6 +580,8 @@ def qualify(
                     cache,
                     [str(row[2]["transaction_hash"]) for row in current],
                     batch_size=batch_size,
+                    workers=workers,
+                    requests_per_second=requests_per_second,
                     output_dir=output_dir,
                 ):
                     return {
@@ -628,6 +681,8 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--corpus-config", type=Path, default=DEFAULT_CORPUS_CONFIG)
     value.add_argument("--rpc-url", default=os.environ.get("POLYGON_RPC_URL", "https://polygon.drpc.org"))
     value.add_argument("--batch-size", type=int, default=20)
+    value.add_argument("--workers", type=int, default=4)
+    value.add_argument("--requests-per-second", type=float, default=12.0)
     value.add_argument("--candidates-per-segment", type=int, default=5)
     value.add_argument("--prepare-only", action="store_true")
     return value
@@ -635,7 +690,12 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = parser().parse_args()
-    if args.batch_size < 1 or args.candidates_per_segment < 1:
+    if (
+        args.batch_size < 1
+        or args.workers < 1
+        or args.requests_per_second <= 0
+        or args.candidates_per_segment < 1
+    ):
         raise ValueError("H016 batch and candidate counts must be positive")
     tape_dir = args.tape_dir.resolve()
     replay_dirs = tuple(path.resolve() for path in args.replay_dir)
@@ -671,6 +731,8 @@ def main() -> None:
         output_dir,
         rpc_url=str(args.rpc_url),
         batch_size=args.batch_size,
+        workers=args.workers,
+        requests_per_second=args.requests_per_second,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 
