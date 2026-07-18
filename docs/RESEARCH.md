@@ -1352,7 +1352,7 @@ orderbook executability or forward profit.
 
 ## SPH-T-H015: On-Policy Portfolio Advantage Aggregation
 
-**Status:** `source-bound corpus complete; trainer pending`
+**Status:** `source-bound corpus and trainer complete; full training pending`
 
 **Registered:** 2026-07-18, after the complete H014 exact replay and bootstrap
 were observed, before any H015 corpus, training or replay metric existed.
@@ -1414,3 +1414,13 @@ The 247,536,941-byte artifact is bound by manifest
 and contract
 `4793aee9b48d6f4ac6969764ec4c1cb3c358c8cb2da32e88438eb286f94e71da`.
 Calibration and test consumption remain zero.
+
+**Trainer contract.** H015 initializes the H014 epoch-0 policy and keeps its
+64.6M-parameter market/outcome backbone frozen. For fit and selection
+independently, every market receives equal total weight within each behavior
+trajectory and both behavior trajectories receive equal total weight. The loss
+combines three-action terminal counterfactual value with smooth-L1 regression of
+only the logged action to its execution-fraction-adjusted realized value. This
+does not imitate the logged action and introduces no CALL-rate, confidence,
+edge, bet-size or portfolio threshold. Checkpoints preserve optimizer,
+scheduler and all RNG states for exact epoch-boundary resume.
