@@ -1,0 +1,42 @@
+{
+  "id": "sphinx-trace-h010-development-tape-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H010",
+  "registered_at": "2026-07-18T01:04:00Z",
+  "objective": "reusable_full_scan_validation_calibration_trade_tape_for_exact_h010_policy_replay",
+  "dependencies": {
+    "chronicle": {
+      "id": "sphinx-chronicle-h009-v1",
+      "sha256": "d8fdbe7a310cd3bd6df11b219e2b63bc0d416434a12e11b55b765d0c5a495493"
+    },
+    "qualified_feature_pack": {
+      "id": "sphinx-trace-s0-h011-qualified-pack-v1",
+      "sha256": "426afc3ce1a7a04f7bbcde4049d3797edb254b53120a04d722e12032aaf75110"
+    },
+    "simulator": {
+      "id": "sphinx-trace-simulator-h010-v1",
+      "sha256": "9378e2efda75695fd2c8d95f8d8069c14bb8e3cdf2d318c19923fb5d2dfefee6"
+    }
+  },
+  "selection": {
+    "splits": ["validation", "calibration"],
+    "qualified_labels_only": true,
+    "first_trade": "first_qualified_decision_evidence_trade",
+    "last_trade": "catalog_public_close_second_inclusive",
+    "all_intermediate_public_trades": true,
+    "hard_market_cap": null,
+    "hard_trade_cap": null,
+    "test_rows_consumed": 0,
+    "test_terminal_fields_accessed": false
+  },
+  "qualification": {
+    "full_h009_stream_scan_required": true,
+    "h009_deep_hash_validation_required": true,
+    "global_event_order_required": true,
+    "source_and_condition_digests_required": true,
+    "daily_atomic_receipts": true,
+    "exact_resume_by_completed_day": true
+  },
+  "evidence_boundary": "Development trade tape is a conservative liquidity proxy, not historical orderbook depth, executable-profit, untouched-test or paper-forward evidence."
+}
