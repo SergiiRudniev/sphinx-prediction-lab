@@ -1,0 +1,80 @@
+{
+  "id": "sphinx-trace-s0-h012-train-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H012",
+  "registered_at": "2026-07-18T01:10:00Z",
+  "objective": "warm_start_then_exact_replay_optimize_learned_CALL_SKIP_side_and_balance_aware_size",
+  "dependencies": {
+    "policy": {
+      "id": "sphinx-trace-s0-h012-selective-policy-v1",
+      "sha256": "63ee4e3307bb7fac5ca8f7f6598ed0e1af308f5c4d9c95d3831f70c3bcbcd463"
+    },
+    "development_tape": {
+      "id": "sphinx-trace-h010-development-tape-v1",
+      "sha256": "0ba9c2c9acf56e3a1f44a540be2e3e3e875f49a88c1d41fa43e1f7adfb7e011a"
+    }
+  },
+  "selection": {
+    "fit_split": "validation",
+    "fit_component_time_fraction": 0.7,
+    "selection_split": "validation",
+    "selection_component_time_fraction": 0.3,
+    "audit_split": "calibration",
+    "components_cross_blocks": false,
+    "test_rows_consumed": 0,
+    "test_opened": false
+  },
+  "utility_warm_start": {
+    "enabled": true,
+    "actions": ["CALL_OUTCOME_0", "CALL_OUTCOME_1", "SKIP"],
+    "objective": "realized_log_growth_after_registered_entry_costs",
+    "learned_beta_size_mean": true,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_bet_size": null,
+    "entropy_weight": 0.002,
+    "value_weight": 0.25,
+    "outcome_auxiliary_weight": 0.1,
+    "execution_proxy": {
+      "adverse_price_ticks": 1,
+      "tick_size": 0.01,
+      "fee_bps": 100.0,
+      "minimum_entry_price": 0.01
+    },
+    "epochs": 8,
+    "batch_size": 512,
+    "policy_learning_rate": 0.0001,
+    "outcome_backbone_learning_rate": 0.00003,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "precision": "bf16_mixed"
+  },
+  "replay_fine_tuning": {
+    "method": "recurrent_clipped_policy_gradient",
+    "rollout_source": "exact_H010_development_tape",
+    "reward": "change_in_net_liquidation_value_after_all_registered_costs",
+    "discount": 1.0,
+    "gae_lambda": 1.0,
+    "clip_ratio": 0.2,
+    "value_clip": 0.2,
+    "entropy_weight": 0.001,
+    "epochs_per_rollout": 4,
+    "cost_stress_multipliers": [1.0, 1.5, 2.0],
+    "call_frequency_bonus": 0.0,
+    "skip_penalty": 0.0
+  },
+  "resume": {
+    "exact_model_optimizer_scheduler_and_rng": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "promotion": {
+    "primary": "calibration_weekly_net_profit_after_costs",
+    "positive_component_block_bootstrap_lower_95pct_required": true,
+    "market_and_strongest_learned_baseline_outperformance_required": true,
+    "minimum_historical_calls": 1000,
+    "minimum_independent_called_events": 1000
+  },
+  "evidence_boundary": "Utility warm-start is initialization only. Promotion requires exact H010 replay, cost stress, untouched test and paper-forward evidence."
+}

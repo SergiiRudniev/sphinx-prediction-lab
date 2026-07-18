@@ -10,6 +10,7 @@ from torch import Tensor, nn
 
 from sphinx_trace.model import RMSNorm
 from sphinx_trace.model_h011 import InspectableBlock, ScalarHead, SphinxTraceS0H011
+from sphinx_trace.model_h013 import SphinxTraceS0H013
 
 H012_ACTIONS = (
     "CALL_OUTCOME_0",
@@ -46,19 +47,24 @@ class SphinxTraceS0H012(nn.Module):
 
     def __init__(
         self,
-        outcome_backbone: SphinxTraceS0H011,
+        outcome_backbone: SphinxTraceS0H011 | SphinxTraceS0H013,
         policy_config: dict[str, Any],
     ) -> None:
         super().__init__()
         architecture = policy_config["architecture"]
         self.outcome_backbone = outcome_backbone
-        self.width = outcome_backbone.width
+        raw_backbone = (
+            outcome_backbone.backbone
+            if isinstance(outcome_backbone, SphinxTraceS0H013)
+            else outcome_backbone
+        )
+        self.width = raw_backbone.width
         self.fusion_latents = int(architecture["fusion_latents"])
         portfolio_width = int(architecture["portfolio_encoder_width"])
         memory_width = int(architecture["prediction_memory_encoder_width"])
-        if not outcome_backbone.blocks:
+        if not raw_backbone.blocks:
             raise ValueError("H012 requires a non-empty H011 outcome backbone")
-        backbone_block = cast(InspectableBlock, outcome_backbone.blocks[0])
+        backbone_block = cast(InspectableBlock, raw_backbone.blocks[0])
         heads = backbone_block.heads
         if self.width % heads:
             raise ValueError("H012 fusion width must be divisible by attention heads")
@@ -103,6 +109,7 @@ class SphinxTraceS0H012(nn.Module):
         prediction_memory_features: Tensor,
         previous_action_ids: Tensor,
         *,
+        market_probability: Tensor | None = None,
         market_group_mask: Tensor | None = None,
         physical_action_mask: Tensor | None = None,
         return_debug: bool = False,
@@ -121,11 +128,21 @@ class SphinxTraceS0H012(nn.Module):
         if bool(((previous_action_ids < 0) | (previous_action_ids >= H012_ACTION_COUNT)).any()):
             raise ValueError("H012 previous_action_ids contains an unknown action")
 
-        backbone = self.outcome_backbone(
-            market_features,
-            group_mask=market_group_mask,
-            return_debug=True,
-        )
+        if isinstance(self.outcome_backbone, SphinxTraceS0H013):
+            if market_probability is None:
+                raise ValueError("H012 residual backbone requires market_probability")
+            backbone = self.outcome_backbone(
+                market_features,
+                market_probability,
+                group_mask=market_group_mask,
+                return_debug=True,
+            )
+        else:
+            backbone = self.outcome_backbone(
+                market_features,
+                group_mask=market_group_mask,
+                return_debug=True,
+            )
         market_token = backbone["debug_latent_state"]
         portfolio_token = self.portfolio_encoder(portfolio_features)
         memory_token = self.memory_norm(
