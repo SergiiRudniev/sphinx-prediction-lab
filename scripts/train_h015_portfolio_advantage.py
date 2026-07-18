@@ -433,12 +433,16 @@ def _combined_loss(
             utility_config["counterfactual_action_value_weight"]
         ),
     }
+    physical_action_mask = torch.from_numpy(batch.physical_action_masks).to(
+        labels.device, non_blocking=True
+    )
     base_loss, base_metrics = selective_log_utility_loss(
         output,
         labels,
         baselines,
         base_config,
         sample_weights=sample_weights,
+        physical_action_mask=physical_action_mask,
     )
     logged_loss, logged_metrics = logged_execution_action_value_loss(
         output,
@@ -450,6 +454,7 @@ def _combined_loss(
             labels.device, non_blocking=True
         ),
         sample_weights=sample_weights,
+        physical_action_mask=physical_action_mask,
     )
     loss = base_loss + float(
         utility_config["logged_execution_action_value_weight"]

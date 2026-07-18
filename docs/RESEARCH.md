@@ -1424,3 +1424,14 @@ only the logged action to its execution-fraction-adjusted realized value. This
 does not imitate the logged action and introduces no CALL-rate, confidence,
 edge, bet-size or portfolio threshold. Checkpoints preserve optimizer,
 scheduler and all RNG states for exact epoch-boundary resume.
+
+**Numerical qualification.** The first H015 training trajectory was stopped
+after epoch 0 because its evaluation loss was infinite. The model outputs were
+finite, but counterfactual smooth-L1 evaluated physically masked action logits
+represented by the simulator sentinel `-3.39e38`; the resulting overflow made
+the checkpoint invalid. The loss now accepts the causal physical-action mask,
+excludes unavailable actions from counterfactual regression and asserts that
+the logged behavior action was available. Regression tests reproduce the
+sentinel case and require finite loss plus zero masked-action gradient. The
+partial trajectory is not resumed or used as evidence; a fresh output contract
+is required.
