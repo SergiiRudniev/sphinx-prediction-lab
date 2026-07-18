@@ -1,0 +1,57 @@
+{
+  "id": "sphinx-trace-s0-h012-50m-wallet-flow-utility-v1-result",
+  "version": "1.0.0-result",
+  "status": "complete_not_promoted",
+  "research_id": "SPH-T-H012",
+  "completed_at": "2026-07-18T02:49:40.899910Z",
+  "candidate_id": "50m",
+  "outcome_variant_id": "h013_uncapped_wallet_flow_residual",
+  "parameters": 64583696,
+  "source": {
+    "result_sha256": "5e436e38e0009d021865b47e1db5c7c9dfc45464bc3c9745ddc7e2a031635094",
+    "contract_sha256": "af760290194d9cbaa709fb2f523df8f0b7673379275c04f03af8ff4246f50dfe",
+    "source_digest": "ee5401aff84ae155699dd6e1bff00450b45a88463e0bce1f6dee239558ca0634",
+    "outcome_result_sha256": "b6bf2e5e64b00f4ff10b178749e41e84a8b6c52b0cd16c5aff1863732abcd0c5"
+  },
+  "training": {
+    "best_epoch": 0,
+    "epochs_completed": 4,
+    "elapsed_seconds": 866.2796922000125,
+    "fit_rows": 602201,
+    "selection_rows": 207413,
+    "calibration_rows": 578176,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "best_checkpoint": {
+    "selection_calls": 0,
+    "selection_call_rate": 0.0,
+    "selection_chosen_log_utility": 0.0,
+    "calibration_calls": 0,
+    "calibration_call_rate": 0.0,
+    "calibration_chosen_log_utility": 0.0
+  },
+  "failed_exploration": [
+    {
+      "epoch": 1,
+      "calls": 1377,
+      "call_precision": 0.6811909949164852,
+      "chosen_log_utility": -0.00023622388247608657
+    },
+    {
+      "epoch": 2,
+      "calls": 2435,
+      "call_precision": 0.6587268993839835,
+      "chosen_log_utility": -0.00035462284374891494
+    },
+    {
+      "epoch": 3,
+      "calls": 207413,
+      "call_precision": 0.477091599851504,
+      "chosen_log_utility": -0.0015014706806618324
+    }
+  ],
+  "decision": "do_not_promote_expected_utility_warm_start_collapsed_to_all_SKIP_and_exploratory_CALL_epochs_lost_after_costs",
+  "promotion_allowed": false,
+  "evidence_boundary": "Static development utility warm-start only; no profitable selection, exact replay, test or paper-forward claim."
+}

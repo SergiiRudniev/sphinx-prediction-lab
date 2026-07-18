@@ -59,7 +59,11 @@ def selective_log_utility_loss(
         raise ValueError("H012 warm-start requires three initial action logits")
     if labels_outcome0.shape != market_probability_outcome0.shape:
         raise ValueError("H012 utility labels and market probabilities must align")
-    policy = torch.softmax(logits.float(), dim=-1)
+    loss_mode = str(config.get("loss_mode", "expected_utility"))
+    temperature = float(config.get("action_value_temperature", 1.0))
+    if temperature <= 0.0:
+        raise ValueError("H012 action-value temperature must be positive")
+    policy = torch.softmax(logits.float() / temperature, dim=-1)
     alpha = output["position_size_beta_alpha"].float()
     beta = output["position_size_beta_beta"].float()
     size = alpha / (alpha + beta).clamp_min(1e-8)
@@ -77,6 +81,20 @@ def selective_log_utility_loss(
             torch.log(wealth0.clamp_min(1e-8)),
             torch.log(wealth1.clamp_min(1e-8)),
             torch.zeros_like(wealth0),
+        ),
+        dim=-1,
+    )
+    reference_size = float(config.get("action_value_reference_size", 0.05))
+    if not 0.0 < reference_size < 1.0:
+        raise ValueError("H012 action-value reference size must be between zero and one")
+    reference = torch.full_like(size, reference_size)
+    reference_wealth0 = 1.0 - reference + reference * label0 / (price0 * fee_multiplier)
+    reference_wealth1 = 1.0 - reference + reference * (1.0 - label0) / (price1 * fee_multiplier)
+    reference_log_utility = torch.stack(
+        (
+            torch.log(reference_wealth0.clamp_min(1e-8)),
+            torch.log(reference_wealth1.clamp_min(1e-8)),
+            torch.zeros_like(reference_wealth0),
         ),
         dim=-1,
     )
@@ -100,8 +118,25 @@ def selective_log_utility_loss(
         reduction="none",
     )
     outcome_loss = weighted_mean(outcome_rows)
+    action_value_rows = F.smooth_l1_loss(
+        logits.float(),
+        reference_log_utility.detach(),
+        reduction="none",
+    ).mean(dim=-1)
+    action_value_loss = weighted_mean(action_value_rows)
+    if loss_mode == "expected_utility":
+        action_value_weight = 0.0
+        policy_utility_weight = 1.0
+    elif loss_mode == "counterfactual_action_value":
+        action_value_weight = float(config["action_value_weight"])
+        policy_utility_weight = float(config["policy_utility_weight"])
+        if action_value_weight <= 0.0 or policy_utility_weight < 0.0:
+            raise ValueError("H012 counterfactual loss weights are invalid")
+    else:
+        raise ValueError(f"Unknown H012 utility loss mode: {loss_mode}")
     loss = (
-        -weighted_mean(expected_utility)
+        action_value_weight * action_value_loss
+        - policy_utility_weight * weighted_mean(expected_utility)
         - float(config["entropy_weight"]) * weighted_mean(entropy)
         + float(config["value_weight"]) * value_loss
         + float(config["outcome_auxiliary_weight"]) * outcome_loss
@@ -117,6 +152,13 @@ def selective_log_utility_loss(
         "entropy": weighted_mean(entropy).detach(),
         "value_loss": value_loss.detach(),
         "outcome_loss": outcome_loss.detach(),
+        "action_value_loss": action_value_loss.detach(),
+        "mean_call_probability": policy[:, :2].sum(dim=-1).mean().detach(),
+        "positive_call_value_fraction": (logits[:, :2].max(dim=-1).values > 0.0)
+        .float()
+        .mean()
+        .detach(),
+        "mean_selected_action_value": logits.gather(1, chosen[:, None]).mean().detach(),
         "mean_size": size.mean().detach(),
         "call_rate": calls.float().mean().detach(),
         "call_count": calls.sum().detach(),
