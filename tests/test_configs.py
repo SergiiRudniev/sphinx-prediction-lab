@@ -292,6 +292,50 @@ def test_h016_real_fee_qualification_is_fail_closed_and_supersedes_flat_proxy() 
     assert result["test_labels_opened"] is False
 
 
+def test_h017_protocol_tail_training_is_pre_registered_and_closed_test() -> None:
+    config = load_json(
+        ROOT
+        / "configs"
+        / "trace"
+        / "sphinx_trace_s0_h017_protocol_tail_utility_v1.json"
+    )
+
+    assert config["research_id"] == "SPH-T-H017"
+    assert config["status"] == "registered"
+    assert config["corpus"]["outcome_share_fee_is_not_subtracted_again_as_execution_time_USD"]
+    assert config["corpus"]["unknown_fee_schedule_policy"] == "fail_closed"
+    assert config["architecture"]["hard_wallet_count_cap"] is None
+    assert config["architecture"]["fixed_call_frequency"] is None
+    assert config["architecture"]["fixed_bet_size"] is None
+    assert config["training"]["lower_tail_quantile"] == 0.1
+    assert config["protocol_execution"]["liquidity_role"] == "TAKER"
+    assert config["protocol_execution"]["fee_rate_multiplier"] == 1.0
+    assert config["promotion"]["outperform_H014_net_profit"]
+    assert config["promotion"]["component_lower_95pct_profit_must_be_positive"]
+    assert config["corpus"]["calibration_rows_consumed"] == 0
+    assert config["corpus"]["test_rows_consumed"] == 0
+    assert config["corpus"]["test_labels_opened"] is False
+
+    result = load_json(
+        ROOT
+        / "configs"
+        / "trace"
+        / "sphinx_trace_s0_h017_protocol_tail_pack_v1_result.json"
+    )
+    assert result["status"] == "complete_qualified_for_training"
+    assert result["rows"] == 1619228
+    assert result["fit_rows"] + result["selection_rows"] == result["rows"]
+    assert result["protocol_target_audit"]["empty_fee_schedule_ids"] == 0
+    assert result["source_reproduction"]["H012_result_pnl_matches"]
+    assert result["source_reproduction"]["H014_result_pnl_matches"]
+    assert result["source_reproduction"][
+        "outcome_fee_execution_time_USD_double_subtraction"
+    ] is False
+    assert result["valid"] is True
+    assert result["test_rows_consumed"] == 0
+    assert result["test_labels_opened"] is False
+
+
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
     contracts = config["sources"]["ledger"]["contracts"]

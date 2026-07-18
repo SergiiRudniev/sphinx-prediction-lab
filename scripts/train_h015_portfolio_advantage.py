@@ -28,6 +28,8 @@ from sphinx_trace.policy_training import (
     logged_execution_action_value_loss,
     selective_log_utility_loss,
 )
+from sphinx_trace.protocol_tail_pack import validate_protocol_tail_shard
+from sphinx_trace.protocol_tail_training import protocol_tail_utility_loss
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = (
@@ -45,8 +47,11 @@ DEFAULT_RESIDUAL_CONFIG = (
 )
 IMPLEMENTATION_PATHS = (
     Path(__file__).resolve(),
+    ROOT / "scripts" / "train_h017_protocol_tail_policy.py",
     ROOT / "src" / "sphinx_trace" / "on_policy_pack.py",
     ROOT / "src" / "sphinx_trace" / "policy_training.py",
+    ROOT / "src" / "sphinx_trace" / "protocol_tail_pack.py",
+    ROOT / "src" / "sphinx_trace" / "protocol_tail_training.py",
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
     ROOT / "src" / "sphinx_trace" / "policy_checkpoint.py",
     ROOT / "src" / "sphinx_trace" / "model_h013.py",
@@ -82,6 +87,8 @@ class StateBatch:
     behavior_action_ids: NDArray[np.int64]
     realized_action_values: NDArray[np.float32]
     execution_fractions: NDArray[np.float32]
+    winning_payout_multipliers: NDArray[np.float32] | None
+    reference_action_values: NDArray[np.float32] | None
 
 
 def _load_object(path: Path) -> dict[str, Any]:
@@ -135,12 +142,18 @@ def _state_shards(
     config_sha256: str,
 ) -> tuple[list[StateShard], dict[str, Any]]:
     manifest = _load_object(state_dir / "manifest.json")
+    research_id = str(config.get("research_id") or "")
+    protocol_tail = research_id == "SPH-T-H017"
+    expected_manifest_type = (
+        "h017_protocol_tail_pack_manifest"
+        if protocol_tail
+        else "h015_on_policy_portfolio_advantage_pack_manifest"
+    )
     initial_result_path = initial_policy_dir / "result.json"
     initial_result_sha256 = sha256_file(initial_result_path)
     initial_result = _load_object(initial_result_path)
     if (
-        manifest.get("record_type")
-        != "h015_on_policy_portfolio_advantage_pack_manifest"
+        manifest.get("record_type") != expected_manifest_type
         or manifest.get("valid") is not True
         or manifest.get("test_labels_opened") is not False
         or int(manifest.get("test_rows_consumed", -1)) != 0
@@ -156,7 +169,7 @@ def _state_shards(
         != sha256_file(initial_policy_dir / "best-policy.pt")
         or initial_result.get("test_labels_opened") is not False
     ):
-        raise RuntimeError("H015 training source contract changed")
+        raise RuntimeError(f"{research_id} training source contract changed")
     raw_shards = manifest.get("shards")
     if not isinstance(raw_shards, list):
         raise RuntimeError("H015 state manifest has no shards")
@@ -192,6 +205,8 @@ def _state_shards(
             expected_rows=rows,
             expected_behavior_code=behavior_code,
         )
+        if protocol_tail:
+            validate_protocol_tail_shard(state, files, expected_rows=rows)
         shards.append(
             StateShard(behavior_id, behavior_code, date, state, encoding, pack, rows)
         )
@@ -205,7 +220,7 @@ def _state_shards(
         or sorted(behavior_rows) != list(range(int(config["corpus"]["behavior_policies"])))
         or any(rows != expected_per_behavior for rows in behavior_rows.values())
     ):
-        raise RuntimeError("H015 state row or behavior coverage changed")
+        raise RuntimeError(f"{research_id} state row or behavior coverage changed")
     return shards, manifest
 
 
@@ -258,6 +273,20 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
     fractions = np.load(
         shard.state / "execution_fractions.npy", mmap_mode="r", allow_pickle=False
     )
+    payout_path = shard.state / "winning_payout_multipliers.npy"
+    reference_path = shard.state / "reference_action_values.npy"
+    if payout_path.is_file() != reference_path.is_file():
+        raise RuntimeError(f"Protocol target arrays are incomplete: {shard.date}")
+    payout_multipliers = (
+        np.load(payout_path, mmap_mode="r", allow_pickle=False)
+        if payout_path.is_file()
+        else None
+    )
+    reference_values = (
+        np.load(reference_path, mmap_mode="r", allow_pickle=False)
+        if reference_path.is_file()
+        else None
+    )
     source_rows = np.load(
         shard.encoding / "row_indices.npy", mmap_mode="r", allow_pickle=False
     )
@@ -299,6 +328,16 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         behavior_action_ids=np.asarray(actions[indices], dtype=np.int64),
         realized_action_values=np.asarray(values[indices], dtype=np.float32),
         execution_fractions=np.asarray(fractions[indices], dtype=np.float32),
+        winning_payout_multipliers=(
+            None
+            if payout_multipliers is None
+            else np.asarray(payout_multipliers[indices], dtype=np.float32)
+        ),
+        reference_action_values=(
+            None
+            if reference_values is None
+            else np.asarray(reference_values[indices], dtype=np.float32)
+        ),
     )
     if (
         output.market_latents.ndim != 2
@@ -310,6 +349,21 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         or not bool(np.isfinite(output.baselines).all())
         or not bool(np.isfinite(output.realized_action_values).all())
         or not bool(np.isin(output.behavior_action_ids, (0, 1, 2)).all())
+        or (
+            output.winning_payout_multipliers is not None
+            and (
+                output.winning_payout_multipliers.shape != (len(indices), 2)
+                or not bool(np.isfinite(output.winning_payout_multipliers).all())
+                or bool((output.winning_payout_multipliers <= 0.0).any())
+            )
+        )
+        or (
+            output.reference_action_values is not None
+            and (
+                output.reference_action_values.shape != (len(indices), 3)
+                or not bool(np.isfinite(output.reference_action_values).all())
+            )
+        )
     ):
         raise RuntimeError(f"H015 training batch is invalid: {shard.date}")
     return output
@@ -426,6 +480,39 @@ def _combined_loss(
     sample_weights: Tensor,
     utility_config: dict[str, Any],
 ) -> tuple[Tensor, dict[str, Tensor]]:
+    physical_action_mask = torch.from_numpy(batch.physical_action_masks).to(
+        labels.device, non_blocking=True
+    )
+    if str(utility_config.get("loss_mode")) == (
+        "protocol_exact_counterfactual_plus_logged_execution_plus_lower_tail"
+    ):
+        if (
+            batch.winning_payout_multipliers is None
+            or batch.reference_action_values is None
+        ):
+            raise RuntimeError("H017 batch has no protocol-exact targets")
+        return protocol_tail_utility_loss(
+            output,
+            labels,
+            torch.from_numpy(batch.winning_payout_multipliers).to(
+                labels.device, non_blocking=True
+            ),
+            torch.from_numpy(batch.reference_action_values).to(
+                labels.device, non_blocking=True
+            ),
+            torch.from_numpy(batch.behavior_action_ids).to(
+                labels.device, non_blocking=True
+            ),
+            torch.from_numpy(batch.realized_action_values).to(
+                labels.device, non_blocking=True
+            ),
+            torch.from_numpy(batch.execution_fractions).to(
+                labels.device, non_blocking=True
+            ),
+            utility_config,
+            sample_weights=sample_weights,
+            physical_action_mask=physical_action_mask,
+        )
     base_config = {
         **utility_config,
         "loss_mode": "counterfactual_action_value",
@@ -433,9 +520,6 @@ def _combined_loss(
             utility_config["counterfactual_action_value_weight"]
         ),
     }
-    physical_action_mask = torch.from_numpy(batch.physical_action_masks).to(
-        labels.device, non_blocking=True
-    )
     base_loss, base_metrics = selective_log_utility_loss(
         output,
         labels,
@@ -473,12 +557,16 @@ def _evaluate(
     device: torch.device,
 ) -> dict[str, Any]:
     model.eval()
+    protocol_tail = str(utility_config.get("loss_mode")) == (
+        "protocol_exact_counterfactual_plus_logged_execution_plus_lower_tail"
+    )
     totals = {
         "rows": 0.0,
         "weight": 0.0,
         "loss": 0.0,
         "chosen": 0.0,
         "expected": 0.0,
+        "tail": 0.0,
         "logged_loss": 0.0,
         "logged_absolute_error": 0.0,
         "size": 0.0,
@@ -520,8 +608,23 @@ def _evaluate(
             totals["rows"] += len(batch.labels)
             totals["weight"] += weight_sum
             totals["loss"] += float(loss) * weight_sum
-            totals["chosen"] += float(metrics["weighted_chosen_log_utility_sum"])
-            totals["expected"] += float(metrics["expected_log_utility"]) * weight_sum
+            if protocol_tail:
+                totals["chosen"] += (
+                    float(metrics["protocol_exact_chosen_utility"]) * weight_sum
+                )
+                totals["expected"] += (
+                    float(metrics["protocol_exact_expected_utility"]) * weight_sum
+                )
+                totals["tail"] += (
+                    float(metrics["protocol_exact_tail_utility"]) * weight_sum
+                )
+            else:
+                totals["chosen"] += float(
+                    metrics["weighted_chosen_log_utility_sum"]
+                )
+                totals["expected"] += (
+                    float(metrics["expected_log_utility"]) * weight_sum
+                )
             totals["logged_loss"] += (
                 float(metrics["logged_execution_action_value_loss"]) * weight_sum
             )
@@ -539,7 +642,7 @@ def _evaluate(
     if not rows or weight_sum <= 0.0:
         raise RuntimeError(f"H015 evaluation partition {partition_code} has no rows")
     call_count = int(totals["calls"])
-    return {
+    result = {
         "rows": rows,
         "sample_weight_sum": weight_sum,
         "loss": totals["loss"] / weight_sum,
@@ -575,10 +678,24 @@ def _evaluate(
             for code, counts in sorted(behavior_action_counts.items())
         },
     }
+    if protocol_tail:
+        result["equal_market_mean_protocol_exact_chosen_utility"] = (
+            totals["chosen"] / weight_sum
+        )
+        result["equal_market_mean_protocol_exact_expected_utility"] = (
+            totals["expected"] / weight_sum
+        )
+        result["equal_market_mean_protocol_exact_tail_utility"] = (
+            totals["tail"] / weight_sum
+        )
+    return result
 
 
 def _selection_score(metrics: dict[str, Any]) -> float:
-    value = metrics["equal_market_mean_chosen_counterfactual_utility"]
+    value = metrics.get(
+        "equal_market_mean_protocol_exact_chosen_utility",
+        metrics["equal_market_mean_chosen_counterfactual_utility"],
+    )
     if isinstance(value, dict):
         raise TypeError("H015 equal-market selection utility must be numeric")
     return float(value)
@@ -600,6 +717,7 @@ def train(
 ) -> dict[str, Any]:
     started = time.perf_counter()
     config = load_json(config_path)
+    research_id = str(config.get("research_id") or "SPH-T-H015")
     policy_config = load_json(policy_config_path)
     model_config = load_json(model_config_path)
     residual_config = load_json(residual_config_path)
@@ -609,7 +727,7 @@ def train(
     random.seed(seed)
     torch.set_float32_matmul_precision("high")
     if not torch.cuda.is_available():
-        raise RuntimeError("H015 full portfolio-advantage training requires CUDA")
+        raise RuntimeError(f"{research_id} full policy training requires CUDA")
     device = torch.device("cuda")
     config_sha256 = sha256_file(config_path)
     shards, state_manifest = _state_shards(
@@ -656,6 +774,14 @@ def train(
         device,
     )
     model = loaded.model
+    expected_tensor_sha256 = config["dependencies"]["initial_policy"].get(
+        "model_tensor_sha256"
+    )
+    if (
+        expected_tensor_sha256 is not None
+        and _module_digest(model) != expected_tensor_sha256
+    ):
+        raise RuntimeError(f"{research_id} initial model tensor digest changed")
     model.outcome_backbone.requires_grad_(False)
     market_backbone_sha256 = _module_digest(model.outcome_backbone)
     trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
@@ -805,7 +931,11 @@ def train(
         atomic_json(
             output_dir / "progress.json",
             {
-                "record_type": "h015_portfolio_advantage_training_progress",
+                "record_type": (
+                    "h017_protocol_tail_training_progress"
+                    if research_id == "SPH-T-H017"
+                    else "h015_portfolio_advantage_training_progress"
+                ),
                 "contract_sha256": contract_sha256,
                 "epoch": epoch + 1,
                 "epochs": epochs,
@@ -852,8 +982,12 @@ def train(
         raise RuntimeError("H015 initial policy lost its frozen market encoding source")
     result: dict[str, Any] = {
         "schema_version": "1.0.0",
-        "record_type": "h015_portfolio_advantage_policy_result",
-        "research_id": "SPH-T-H015",
+        "record_type": (
+            "h017_protocol_tail_policy_result"
+            if research_id == "SPH-T-H017"
+            else "h015_portfolio_advantage_policy_result"
+        ),
+        "research_id": research_id,
         "completed_at": now_utc(),
         "valid": math.isfinite(best_selection),
         "config_sha256": config_sha256,

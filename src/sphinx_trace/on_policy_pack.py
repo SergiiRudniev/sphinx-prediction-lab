@@ -180,13 +180,23 @@ def build_logged_execution_index(
             shares = Decimal(str(record.get("shares")))
             notional = Decimal(str(record.get("notional_usd")))
             fee = Decimal(str(record.get("fee_usd")))
-            if shares <= _ZERO or notional < _ZERO or fee < _ZERO:
+            position_shares = Decimal(str(record.get("position_shares", shares)))
+            collateral_fee = Decimal(
+                str(record.get("collateral_fee_usd", fee))
+            )
+            if (
+                shares <= _ZERO
+                or notional < _ZERO
+                or fee < _ZERO
+                or not _ZERO <= position_shares <= shares
+                or collateral_fee < _ZERO
+            ):
                 raise RuntimeError(f"H015 fill contains invalid economics: {order_id}")
             payout = payouts_by_condition[order.condition_id][order.token_id]
             execution = executions[order.decision_id]
             execution.filled_shares += shares
-            execution.cost_usd += notional + fee
-            execution.pnl_usd += shares * payout - notional - fee
+            execution.cost_usd += notional + collateral_fee
+            execution.pnl_usd += position_shares * payout - notional - collateral_fee
             execution.fills += 1
             fill_count += 1
         elif record_type == "h010_resolution_audit":

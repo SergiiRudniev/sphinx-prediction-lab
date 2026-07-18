@@ -1,0 +1,151 @@
+{
+  "id": "sphinx-trace-s0-h017-protocol-tail-utility-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H017",
+  "registered_at": "2026-07-18T14:00:00Z",
+  "objective": "learn_protocol_exact_execution_conditioned_action_value_and_size_while_improving_lower_tail_weekly_profit",
+  "trigger": {
+    "H014_real_fee_net_profit_usd": 1186.5307626689923,
+    "H014_return_on_initial_cash": 0.11865307626689924,
+    "H014_maximum_drawdown": 0.058156250818921,
+    "H014_active_week_mean_usd": 29.663269066724798,
+    "H014_active_week_median_usd": 10.410703702023966,
+    "H014_active_week_minimum_usd": -350.93757198285857,
+    "H014_weekly_bootstrap_lower_95pct_usd": 0.3028612329407437,
+    "H014_component_bootstrap_lower_mean_profit_usd": -0.000756788237606583,
+    "failure": "the_current_leader_is_profitable_but_has_a_negative_independent_component_lower_bound_and_large_losing_longshot_weeks",
+    "target_defect": "H015_counterfactual_targets_use_flat_100_bps_and_logged_V1_BUY_targets_value_outcome_share_fees_as_execution_time_USD_instead_of_terminal_share_quantity"
+  },
+  "hypothesis": "protocol_exact_counterfactual_payoff_multipliers_correct_logged_settlement_and_a_learned_lower_tail_utility_objective_will_preserve_frequent_calls_while_reducing_concentrated_losing_longshot_exposure_and_raise_net_weekly_profit",
+  "dependencies": {
+    "initial_policy": {
+      "id": "sphinx-trace-s0-h014-replay-state-policy-seed17",
+      "parameters": 64583696,
+      "result_sha256": "2b3a93b38d00b69776834cf82b83313a99239e8ac6605d80024b3ba3947de0d7",
+      "best_model_sha256": "303e0dcabf4ab3b67c2707dde443283734ddf74452c6908eb430c83d4202c8c7",
+      "model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81"
+    },
+    "fee_schedule_manifest_sha256": "3fe07cad9f3890407d37ad77d6b5cec700143be8576b7eb4e2d1e116122553cc",
+    "feature_pack_manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86",
+    "encoding_manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3",
+    "development_tape_manifest_sha256": "2b81546da6f8821f8c2c3b6e7e4927ea5dd18471821460a90b0e28985d845b1b",
+    "behavior_replays": [
+      {
+        "id": "H012-v2-real-fee-1x",
+        "result_sha256": "a4c363b8105de2f6259e74a47a4c59a4915df99e5e07c64e979fb93cb3c8889a",
+        "audit_manifest_sha256": "0f0a8126ff559afbd7ecf9a937df5acd61f97b879f2ad03af5d00e6341658deb",
+        "rows": 809614
+      },
+      {
+        "id": "H014-real-fee-1x",
+        "result_sha256": "8d28c229a00a67deb7b679585b4e5277c88ab65f9dba29d3699c3d80e3ae882c",
+        "audit_manifest_sha256": "45aa9f53745720af928197a06728854e7a3196395da690b2a137ae65a1bfed87",
+        "rows": 809614
+      }
+    ]
+  },
+  "corpus": {
+    "id": "sphinx-h017-protocol-tail-on-policy-pack-v1",
+    "rows_expected": 1619228,
+    "behavior_policies": 2,
+    "one_row_per_behavior_policy_decision": true,
+    "preserve_exact_causal_portfolio_and_prediction_memory_state": true,
+    "targets": [
+      "protocol_exact_CALL0_CALL1_SKIP_reference_log_utility",
+      "protocol_exact_winning_payout_per_total_cost_for_CALL0_and_CALL1",
+      "logged_behavior_action_terminal_realized_log_utility",
+      "logged_execution_fraction",
+      "logged_terminal_pnl_usd",
+      "week_id"
+    ],
+    "V1_BUY_terminal_pnl": "position_shares_times_terminal_payout_minus_notional_minus_collateral_fee",
+    "outcome_share_fee_is_not_subtracted_again_as_execution_time_USD": true,
+    "fee_schedule_resolved_by_condition_and_decision_time": true,
+    "unknown_fee_schedule_policy": "fail_closed",
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "partition": {
+    "reuse_H012_whole_component_time_partition": true,
+    "fit_component_fraction": 0.7,
+    "fit_rows_expected": 1204402,
+    "selection_rows_expected": 414826,
+    "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf",
+    "components_cross_blocks": false,
+    "calibration_used_for_training_or_selection": false
+  },
+  "architecture": {
+    "initialize_from_H014": true,
+    "freeze_market_and_outcome_backbone": true,
+    "train_portfolio_encoder": true,
+    "train_prediction_memory_encoder": true,
+    "train_policy_fusion": true,
+    "train_action_value_size_and_state_value_heads": true,
+    "parameters": 64583696,
+    "hard_wallet_count_cap": null,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null,
+    "fixed_portfolio_limit": null
+  },
+  "training": {
+    "loss_mode": "protocol_exact_counterfactual_plus_logged_execution_plus_lower_tail",
+    "action_value_reference_size": 0.05,
+    "action_value_temperature": 0.05,
+    "counterfactual_action_value_weight": 4.0,
+    "logged_execution_action_value_weight": 2.0,
+    "policy_exact_utility_weight": 0.2,
+    "lower_tail_quantile": 0.1,
+    "lower_tail_utility_weight": 0.25,
+    "entropy_weight": 0.0001,
+    "value_weight": 0.1,
+    "outcome_auxiliary_weight": 0.0,
+    "equal_market_total_weight_within_behavior": true,
+    "behavior_policy_total_weights_equal": true,
+    "epochs": 12,
+    "early_stopping_patience": 4,
+    "batch_size": 1024,
+    "policy_learning_rate": 0.00001,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "precision": "bf16_mixed",
+    "exact_resume": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "protocol_execution": {
+    "reference_equity_usd": 10000.0,
+    "adverse_price_ticks": 1,
+    "tick_size": 0.01,
+    "minimum_entry_price": 0.01,
+    "liquidity_role": "TAKER",
+    "fee_rate_multiplier": 1.0
+  },
+  "selection": {
+    "primary": "selection_equal_market_mean_protocol_exact_chosen_utility",
+    "secondary": "selection_lower_tail_protocol_exact_chosen_utility",
+    "fresh_exact_real_fee_validation_replay_required": true,
+    "cost_stress_multipliers": [
+      1.0,
+      1.5,
+      2.0
+    ],
+    "calibration_remains_closed_until_validation_gates_pass": true
+  },
+  "promotion": {
+    "outperform_H014_net_profit": true,
+    "outperform_H014_maximum_drawdown": true,
+    "outperform_H014_active_week_median": true,
+    "improve_H014_worst_week": true,
+    "weekly_lower_95pct_profit_must_be_positive": true,
+    "component_lower_95pct_profit_must_be_positive": true,
+    "positive_profit_at_two_x_authoritative_fee_stress": true,
+    "minimum_calls": 5000,
+    "minimum_independent_components": 1000,
+    "untouched_test_and_paper_forward_required_after_development": true
+  },
+  "evidence_boundary": "H017 can improve protocol-fee-qualified development replay only; historical orderbook executability, untouched test and paper-forward profit remain required."
+}

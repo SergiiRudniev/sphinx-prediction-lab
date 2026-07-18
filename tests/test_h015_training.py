@@ -126,3 +126,25 @@ def test_h015_batch_rejects_encoding_row_drift(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="no longer align"):
         _batch(shard, np.asarray([0], dtype=np.int64))
+
+
+def test_h017_batch_loads_protocol_targets_when_present(tmp_path: Path) -> None:
+    shard = _shard(tmp_path)
+    np.save(
+        shard.state / "winning_payout_multipliers.npy",
+        np.asarray([[1.5, 2.0], [4.0, 1.2]], dtype=np.float32),
+    )
+    np.save(
+        shard.state / "reference_action_values.npy",
+        np.asarray([[0.02, -0.05, 0.0], [-0.05, 0.01, 0.0]], dtype=np.float32),
+    )
+
+    batch = _batch(shard, np.asarray([1, 0], dtype=np.int64))
+
+    assert batch.winning_payout_multipliers is not None
+    assert batch.reference_action_values is not None
+    assert np.allclose(
+        batch.winning_payout_multipliers,
+        np.asarray([[4.0, 1.2], [1.5, 2.0]], dtype=np.float32),
+    )
+    assert batch.reference_action_values[:, 2].tolist() == [0.0, 0.0]
