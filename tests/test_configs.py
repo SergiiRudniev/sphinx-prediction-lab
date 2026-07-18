@@ -152,6 +152,26 @@ def test_h011_model_and_training_are_resumable_and_multi_head() -> None:
     assert training["training"]["checkpoint_maximum_interval_seconds"] <= 900
 
 
+def test_h014_replay_state_training_keeps_selection_and_test_closed() -> None:
+    result = load_json(
+        ROOT / "configs" / "trace" / "sphinx_trace_s0_h012_v2_exact_validation_result.json"
+    )
+    config = load_json(
+        ROOT / "configs" / "trace" / "sphinx_trace_s0_h014_replay_state_distillation_v1.json"
+    )
+
+    assert result["promotion_allowed"] is False
+    assert result["gates"]["all_pass"] is False
+    assert config["research_id"] == "SPH-T-H014"
+    assert config["corpus"]["rows"] == 809_614
+    assert config["corpus"]["teacher_action_is_input_or_target"] is False
+    assert config["architecture"]["fixed_confidence_threshold"] is None
+    assert config["architecture"]["fixed_call_frequency"] is None
+    assert config["partition"]["calibration_used_for_training_or_selection"] is False
+    assert config["corpus"]["test_labels_opened"] is False
+    assert config["training"]["checkpoint_maximum_interval_seconds"] <= 900
+
+
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
     contracts = config["sources"]["ledger"]["contracts"]

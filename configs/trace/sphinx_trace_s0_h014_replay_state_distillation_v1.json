@@ -1,0 +1,133 @@
+{
+  "id": "sphinx-trace-s0-h014-replay-state-distillation-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H014",
+  "registered_at": "2026-07-18T07:30:00Z",
+  "objective": "remove_static_to_sequential_policy_state_shift_and_improve_exact_weekly_net_profit",
+  "trigger": {
+    "result": "sphinx-trace-s0-h012-v2-exact-validation-result",
+    "result_sha256": "71f23d1f535337bec6e64fd07a7700760a9d2cdac5c871309bebbe9f26b24e41",
+    "profit_evaluation_sha256": "57cff11c5151d3a1923f626ed6e6d939512140a97efa50e9f359549283ac367c",
+    "observed_static_selection_call_rate": 0.013948016758833824,
+    "observed_exact_replay_call_rate": 0.04780181148102799,
+    "weekly_lower_95pct_profit_usd": -14.828914107944481,
+    "component_lower_95pct_profit_usd": -0.018786498849318496
+  },
+  "hypothesis": "training_the_learned_policy_on_exact_causal_portfolio_and_prediction_memory_states_will_correct_the_call_distribution_shift_and_raise_risk_adjusted_weekly_profit_without_a_fixed_call_threshold",
+  "dependencies": {
+    "initial_policy": {
+      "id": "sphinx-trace-s0-h012-v2-50m-wallet-flow-action-value-seed17",
+      "result_sha256": "ea75b913dcdf193f2cf323bdbb3d5f599d29331aa216ee253c33ca6e246cfe8a",
+      "parameters": 64583696
+    },
+    "feature_pack": {
+      "id": "sphinx-trace-s0-h011-qualified-pack-v1",
+      "manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86"
+    },
+    "market_encoding_cache": {
+      "id": "sphinx-h012-v2-wallet-flow-policy-encodings-v1",
+      "manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3"
+    },
+    "teacher_replay": {
+      "audit_manifest_sha256": "0fd8fd169f87dd58c538eb5204d44b5f3f0e7422ab6822c12f1a68f6f6a890e5",
+      "decisions": 809614,
+      "split": "validation",
+      "cost_multiplier": 1.0
+    }
+  },
+  "corpus": {
+    "id": "sphinx-h014-replay-state-pack-v1",
+    "rows": 809614,
+    "one_row_per_exact_policy_decision": true,
+    "source_bound_daily_shards": true,
+    "inputs": [
+      "cached_market_latent",
+      "cached_terminal_logit",
+      "cached_uncertainty_log_scale",
+      "exact_portfolio_features",
+      "exact_prediction_memory_features",
+      "previous_action_id",
+      "physical_action_mask",
+      "causal_market_probability",
+      "component_id",
+      "timestamp"
+    ],
+    "targets": [
+      "terminal_outcome",
+      "counterfactual_CALL_OUTCOME_0_log_utility",
+      "counterfactual_CALL_OUTCOME_1_log_utility",
+      "SKIP_zero_utility"
+    ],
+    "teacher_action_is_input_or_target": false,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "partition": {
+    "method": "reuse_exact_H012_whole_component_time_partition",
+    "fit_component_fraction": 0.7,
+    "fit_rows_expected": 602201,
+    "selection_rows_expected": 207413,
+    "components_cross_blocks": false,
+    "calibration_used_for_training_or_selection": false,
+    "test_used_for_training_or_selection": false
+  },
+  "architecture": {
+    "initialize_all_weights_from_H012_v2": true,
+    "freeze_market_and_outcome_backbone": true,
+    "train_portfolio_encoder": true,
+    "train_prediction_memory_encoder": true,
+    "train_previous_action_embedding": true,
+    "train_policy_latents_and_fusion": true,
+    "train_action_size_and_value_heads": true,
+    "hard_wallet_count_cap": null,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null
+  },
+  "training": {
+    "loss_mode": "counterfactual_action_value",
+    "action_value_reference_size": 0.05,
+    "action_value_temperature": 0.05,
+    "action_value_weight": 4.0,
+    "policy_utility_weight": 0.1,
+    "entropy_weight": 0.0002,
+    "value_weight": 0.1,
+    "outcome_auxiliary_weight": 0.0,
+    "execution_proxy": {
+      "adverse_price_ticks": 1,
+      "tick_size": 0.01,
+      "fee_bps": 100.0,
+      "minimum_entry_price": 0.01
+    },
+    "epochs": 12,
+    "early_stopping_patience": 4,
+    "batch_size": 1024,
+    "component_balance": "inverse_sqrt_frequency_normalized",
+    "policy_learning_rate": 0.00003,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "precision": "bf16_mixed",
+    "exact_resume": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "selection": {
+    "primary_static_metric": "selection_mean_chosen_counterfactual_log_utility",
+    "exact_H010_replay_required": true,
+    "weekly_and_component_bootstrap_required": true,
+    "cost_stress_multipliers": [1.0, 1.5, 2.0],
+    "calibration_remains_closed_until_validation_gate_passes": true
+  },
+  "promotion": {
+    "weekly_lower_95pct_profit_must_be_positive": true,
+    "component_lower_95pct_profit_must_be_positive": true,
+    "minimum_calls": 1000,
+    "minimum_independent_components": 1000,
+    "outperform_H012_exact_replay": true,
+    "positive_profit_under_registered_cost_stress": true,
+    "untouched_test_and_paper_forward_required_after_development": true
+  },
+  "evidence_boundary": "H014 can test whether exact replay-state training improves development profit. It cannot establish untouched-test, historical-orderbook executability or paper-forward profit."
+}
