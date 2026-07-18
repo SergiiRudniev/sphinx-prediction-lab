@@ -895,7 +895,7 @@ insider attribution or production safety.
 
 ## SPH-T-H013: Market-Anchored Residual Outcome Model
 
-**Status:** `registered; zero-initialized residual wrapper implemented`
+**Status:** `registered; residual wrapper and resumable trainer implemented`
 
 **Registered:** 2026-07-18, after the direct H011 market-only temporal
 inconsistency was measured and before any wallet-variant result was observed.
@@ -923,12 +923,20 @@ initialized to exact zeros, so unit tests verify that initial output equals the
 market bit-for-bit before learning. H011 information-group masks are reused
 unchanged for matched direct-versus-residual ablations.
 
+The H013 trainer evaluates and stores the exact zero-residual market anchor as
+epoch -1 before the first optimizer step. A learned checkpoint replaces it only
+when validation log loss improves, so the selected residual candidate cannot be
+worse than the anchor merely because training ran. Checkpoints bind all three
+configs, source receipts, implementation files, optimizer, scheduler and RNG
+state; the lightweight progress receipt includes epoch history and supports the
+same `PAUSE` resume boundary as H011.
+
 **Acceptance.** Both validation and calibration must have component-bootstrap
 upper 95% log-loss delta below zero. Test remains closed. Passing outcome lift
 does not imply profitable selection; H010/H012 remain required.
 
-**Next action.** Finish the active direct wallet ablations, implement the
-zero-initialized residual wrapper and run the matched 50M residual campaign.
+**Next action.** Finish the active direct wallet ablations and run the matched
+50M residual campaign.
 
 **Evidence boundary.** H013 development lift cannot establish selective-call
 profit, untouched-test performance, executable profit or paper-forward profit.
