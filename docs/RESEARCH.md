@@ -716,7 +716,7 @@ production evidence.
 
 ## SPH-T-H011: Uncapped Causal Flow Campaign
 
-**Status:** `strictly pre-close qualified pack verified; wallet training pending restart`
+**Status:** `direct wallet rejected; 50M market-anchored wallet residual running`
 
 **Registered:** 2026-07-17, before full-corpus model metrics were observed.
 
@@ -873,11 +873,31 @@ at or after close, zero missing close times and zero test labels. New training
 and calibration v2 contracts depend on this qualified view; old checkpoints
 cannot resume under the new source digest.
 
-**Next action.** Restart the 50M uncapped-wallet-flow and matched market-only
-controls from scratch on the qualified pack, then train causal resolved-
-performance. Finish the quota-aware actor context in parallel and add its
-matched variant; keep the Polygon graph variant blocked until its source is
-complete.
+**Qualified direct wallet result.** The matched 50,248,198-parameter uncapped-
+wallet-flow model trained for six epochs and stopped after 1,869.65 seconds,
+selecting epoch 2. It remained worse than the contemporaneous market on both
+strictly pre-close development blocks. Validation log loss was 0.459994 versus
+0.453239 (`+0.006755`); calibration was 0.453494 versus 0.451444
+(`+0.002050`). Platt scaling fitted only on validation did not rescue the result:
+calibration delta became `+0.003649`. The equal-component mean delta was
+`+0.003562` with 95% bootstrap interval [`+0.002579`, `+0.004548`] across
+91,840 components. The entire interval is worse than market. This rejects direct
+full-probability relearning from the current wallet-flow representation; it does
+not reject incremental wallet signal around the market anchor. Test remained
+physically closed.
+
+**Actor-context completion.** The uncapped public maker/taker context collector
+completed all 451 adaptive partitions: 2,016,833 actor rows and 136,967,269
+compressed bytes, with 32/64/128-way result-limit splits and a bound receipt
+digest. Availability ends at 2026-01-06 and every monthly block remains masked
+until its public window closes. This source is complete for its declared window,
+not for the later half of H009, and contains no funding-transfer or insider
+labels. It can now support an honest availability-masked actor ablation.
+
+**Next action.** Complete the running 50M market-anchored uncapped-wallet-flow
+residual. Build the availability-masked actor feature pack and its matched
+residual after the direct causal comparison. Keep the Polygon graph variant
+blocked until its source is complete.
 
 **Evidence boundary.** H011 validation and conservative trade-tape replay cannot
 establish untouched-test, historical orderbook depth, executable profit,
