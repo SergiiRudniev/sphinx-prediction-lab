@@ -203,7 +203,9 @@ class ReplaySimulator:
         self.current_time_unix = timestamp_unix
         while self._expiry_heap and self._expiry_heap[0][0] < timestamp_unix:
             _, order_id = heapq.heappop(self._expiry_heap)
-            order = self.orders[order_id]
+            order = self.orders.get(order_id)
+            if order is None:
+                continue
             if order.status in OPEN_ORDER_STATUSES:
                 order.status = OrderStatus.EXPIRED
                 self._untrack_open(order)
@@ -621,6 +623,10 @@ class ReplaySimulator:
         for order_id in removable:
             order = self.orders.pop(order_id)
             self.archived_order_status_counts[order.status.value] += 1
+        self._expiry_heap = [
+            (self.orders[order_id].expires_at_unix, order_id) for order_id in self._open_order_ids
+        ]
+        heapq.heapify(self._expiry_heap)
         fills = len(self.fills)
         self.archived_fill_count += fills
         self.fills.clear()
