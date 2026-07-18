@@ -1570,7 +1570,8 @@ schedule artifact is supplied, so prior results remain reproducible and cannot
 silently acquire a real-cost label. The complete regression suite includes cash/
 position reconciliation vectors for V1 and V2, fail-closed schedule binding and
 the Decimal affordability boundary that previously rejected a valid all-cash
-fill by one terminal digit. All 183 tests pass.
+fill by one terminal digit. All 193 tests pass after the H017 target and trainer
+regressions are included.
 
 **Historical receipt qualification.** On-chain smoke qualification exposed two
 distinct V1 operator settlement curves that the gross exchange contract alone
@@ -1642,3 +1643,61 @@ made until the real-fee baselines are committed.
 **Evidence boundary.** Correct platform fees qualify only the cost side of the
 simulator. The trade tape still does not reconstruct historical orderbook depth,
 queue position or forward executable profit.
+
+## SPH-T-H017: Protocol-Exact Tail Utility
+
+**Status:** `protocol-exact corpus qualified; training pending`
+
+**Registered:** 2026-07-18, after the complete H016 1.0x real-fee baselines were
+observed and while the pre-registered H014 2.0x fee stress was still running,
+before any H017 corpus, training metric or replay result existed.
+
+**Trigger.** H014 is the current real-fee development leader at `+$1,186.53`,
+but it has a `-$350.94` worst week and its independent-component bootstrap lower
+mean remains slightly negative. H015 cannot solve this: its selected checkpoint
+is tensor-identical to H014. Its old training targets also contain two now-known
+cost defects. Counterfactual utilities use flat 100 bps, and the logged V1 BUY
+target subtracts an outcome-share fee again as its execution-time USD value even
+though the simulator correctly deducts the share quantity from terminal payout.
+
+**Hypothesis.** Rebuild the two-policy on-policy corpus from the H012 and H014
+receipt-qualified 1.0x audits. Resolve the exact condition-time fee schedule for
+every decision, represent each CALL side by winning payout per unit of total
+cost, and compute logged terminal PnL from `position_shares * payout - notional -
+collateral_fee`. Train the existing 64,583,696-parameter portfolio policy from
+H014 with exact counterfactual utility, corrected execution-conditioned value
+and a learned lower-tail utility term. This should reduce concentrated losing
+longshot exposure without a fixed threshold, bet size, call frequency, wallet
+cap or portfolio limit.
+
+**Corpus and training contract.** The H017 pack contains 1,619,228 exact causal
+states: all 809,614 validation decisions from each H012 and H014 behavior replay.
+The original whole-component chronological 70/30 fit/selection partition is
+reused; repeated decisions do not increase a market's total training weight and
+both behavior policies receive equal total weight. The market/outcome backbone
+is frozen to isolate the effect of corrected economics; portfolio, prediction
+memory, policy fusion, action-value, size and state-value parameters train for at
+most 12 resumable BF16 epochs. The model, rather than an external threshold,
+continues to choose CALL-0, CALL-1 or SKIP and its balance-relative size.
+
+**Completed corpus.** The receipt-bound artifact contains exactly 1,619,228
+rows: 1,204,402 fit and 414,826 selection states over 74,370 and 31,874 whole
+components. It is 411,066,021 bytes and contains all 365 daily shards for each
+behavior. Across one non-duplicated 809,614-row behavior view, all targets are
+finite and every row has a non-empty fee schedule ID; 163,697 distinct schedules
+are exercised. Corrected per-fill terminal attribution reproduces H012
+`+$950.2291063185` and H014 `+$1,186.5307626690` exactly. CALL-0 has 318,850
+positive reference utilities and CALL-1 has 376,585; losing reference exposure
+is `log(0.95) = -0.051293...`, while the largest winning reference utility is
+`1.703922`. The manifest digest is `57ff60da...f114`; calibration and test remain
+untouched.
+
+**Acceptance.** A fresh exact replay must beat H014's net profit, maximum
+drawdown, active-week median and worst week; both weekly and independent-
+component lower 95% bounds must be positive; 2.0x authoritative fee stress must
+remain profitable; and at least 5,000 calls over 1,000 independent components
+must remain. Calibration and test stay closed until all development gates pass.
+
+**Evidence boundary.** H017 can improve protocol-fee-qualified development
+replay only. Historical orderbook execution, untouched test and paper-forward
+profit remain separate requirements.

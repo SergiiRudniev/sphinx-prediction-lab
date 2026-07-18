@@ -108,7 +108,7 @@
     "fee_dependent_policy_retrained": false,
     "all_pass": false
   },
-  "decision": "continue_H016_cost_stress_then_register_real_fee_tail_aware_training_hypothesis",
+  "decision": "continue_H016_cost_stress_and_build_pre_registered_H017_real_fee_targets",
   "promotion_allowed": false,
   "test_rows_consumed": 0,
   "test_labels_opened": false,

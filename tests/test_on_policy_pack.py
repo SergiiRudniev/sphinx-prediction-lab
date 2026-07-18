@@ -105,6 +105,46 @@ def test_unfilled_call_receives_zero_logged_value_without_becoming_skip_label() 
     assert target.execution_fraction == 0.0
 
 
+def test_v1_outcome_fee_is_attributed_as_terminal_share_quantity() -> None:
+    payouts = {"condition": {"token0": Decimal(1), "token1": Decimal(0)}}
+    records = [
+        _decision("call", 2, "CALL_OUTCOME_0"),
+        {
+            "record_type": "h010_order_audit",
+            "order_id": "order",
+            "decision_id": "call",
+            "condition_id": "condition",
+            "token_id": "token0",
+            "side": "BUY",
+            "requested_shares": "10",
+        },
+        {
+            "record_type": "h010_fill_audit",
+            "order_id": "order",
+            "side": "BUY",
+            "shares": "10",
+            "position_shares": "9.5",
+            "notional_usd": "5",
+            "fee_usd": "0.25",
+            "collateral_fee_usd": "0",
+            "outcome_fee_shares": "0.5",
+            "fee_asset": "OUTCOME",
+        },
+        {
+            "record_type": "h010_resolution_audit",
+            "condition_id": "condition",
+            "payouts": ["1", "0"],
+        },
+    ]
+
+    index = build_logged_execution_index(records, payouts, reference_size=0.05)
+    target = index.targets[("2026-01-01", 2)]
+
+    assert target.realized_pnl_usd == pytest.approx(4.5)
+    assert target.executed_cost_usd == pytest.approx(5.0)
+    assert target.conditional_log_utility == pytest.approx(math.log(1.045))
+
+
 def test_logged_execution_index_rejects_sell_attribution() -> None:
     payouts = {"condition": {"token0": Decimal(1), "token1": Decimal(0)}}
     records = [
