@@ -17,7 +17,15 @@
     "clob_v2_cutover_and_fee_model": "https://docs.polymarket.com/v2-migration",
     "clob_v1_fee_settlement": "https://github.com/Polymarket/ctf-exchange/blob/main/docs/Overview.md",
     "clob_v1_contract": "https://github.com/Polymarket/ctf-exchange",
-    "clob_v2_contract": "https://github.com/Polymarket/ctf-exchange-v2"
+    "clob_v1_fee_module": "https://github.com/Polymarket/exchange-fee-module",
+    "clob_v2_contract": "https://github.com/Polymarket/ctf-exchange-v2",
+    "clob_v2_python_sdk": "https://github.com/Polymarket/py-clob-client-v2"
+  },
+  "pinned_official_implementations": {
+    "clob_v1_contract_commit": "ed5c7708b7be3aa98bf5f0c6602b57cc498e2ef4",
+    "clob_v1_fee_module_commit": "1a3c31c48275a9adceb039a05cfcf15aba4629bc",
+    "clob_v2_contract_commit": "ccc0596074f4dfd62c944fbca4de252893b82b4b",
+    "clob_v2_python_sdk_commit": "215fc63a8fd6ec3a10c7edb73997c9772d8686d3"
   },
   "evidence_reclassification": {
     "affected_research": [
@@ -45,7 +53,7 @@
   "protocol_eras": {
     "clob_v1": {
       "end_exclusive": "2026-04-28T11:00:00Z",
-      "fee_source": "signed_order_fee_rate_and_historical_market_schedule",
+      "fee_source": "contemporaneous_onchain_OrderFilled_and_FeeRefunded_evidence_plus_signed_order_fee_rate",
       "settlement": {
         "BUY": "deduct_outcome_token_proceeds",
         "SELL": "deduct_collateral_proceeds"
@@ -61,8 +69,9 @@
     },
     "clob_v2": {
       "start_inclusive": "2026-04-28T11:00:00Z",
-      "fee_source": "per_market_fee_details_at_match_time",
-      "platform_fee_formula": "fee_usdc = shares * fee_rate * price * (1 - price)",
+      "fee_source": "contemporaneous_onchain_active_taker_OrderFilled_fee_plus_per_market_fee_details_at_match_time",
+      "platform_fee_formula": "fee_usdc = shares * fee_rate * (price * (1 - price)) ** exponent",
+      "current_documented_exponent": 1,
       "fee_parameters": [
         "rate",
         "exponent",
@@ -89,6 +98,8 @@
   "schedule_artifact": {
     "id": "sphinx-h016-polymarket-fee-schedule-v1",
     "key": [
+      "liquidity_id",
+      "transaction_hash",
       "condition_id",
       "effective_from",
       "effective_to",
@@ -96,6 +107,7 @@
       "liquidity_role"
     ],
     "source_priority": [
+      "contemporaneous_onchain_active_taker_fee_and_v1_fee_refund",
       "historically_observed_market_or_order_fee_parameters",
       "official_protocol_and_sdk_records",
       "official_dated_rollout_rule"
@@ -108,11 +120,15 @@
   },
   "implementation": {
     "replace_fee_bps_with_fee_schedule_resolver": true,
+    "bind_each_tape_liquidity_event_to_its_transaction_hash": true,
+    "decode_v1_FeeRefunded_to_obtain_net_operator_fee": true,
     "preserve_fee_asset_and_quantity_effects": true,
     "record_per_fill_protocol_schedule_role_fee_asset_and_source": true,
     "cost_stress_scales_authoritative_fee_rates": true,
     "old_flat_bps_stress_allowed": false,
-    "exact_pause_and_resume_required": true
+    "exact_pause_and_resume_required": true,
+    "sort_all_order_id_reductions_before_decimal_sum": true,
+    "bit_identical_replay_replication_required": true
   },
   "required_regression_vectors": [
     "v2_crypto_100_shares_at_0_50_costs_1_75",
@@ -126,7 +142,8 @@
     "v1_sell_fee_reduces_received_collateral",
     "protocol_cutover_selects_v1_before_and_v2_after",
     "march_6_crypto_rule_uses_market_creation_time",
-    "unresolved_schedule_fails_closed"
+    "unresolved_schedule_fails_closed",
+    "identical_model_replays_are_bit_identical_across_fresh_processes"
   ],
   "rerun_protocol": {
     "policies": [

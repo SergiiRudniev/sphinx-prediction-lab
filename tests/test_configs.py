@@ -242,16 +242,32 @@ def test_h016_real_fee_qualification_is_fail_closed_and_supersedes_flat_proxy() 
     assert config["execution_contract"]["default_liquidity_role"] == "TAKER"
     assert config["execution_contract"]["maker_fee"] == 0.0
     assert config["execution_contract"]["builder_fee"] == 0.0
+    assert config["pinned_official_implementations"]["clob_v2_contract_commit"] == (
+        "ccc0596074f4dfd62c944fbca4de252893b82b4b"
+    )
     assert config["schedule_artifact"]["category_only_imputation_allowed"] is False
     assert config["schedule_artifact"]["unknown_schedule_fallback"] is None
     assert config["schedule_artifact"]["unresolved_fill_policy"] == (
         "reject_real_fee_qualification"
     )
     assert config["implementation"]["old_flat_bps_stress_allowed"] is False
+    assert config["implementation"]["decode_v1_FeeRefunded_to_obtain_net_operator_fee"]
+    assert config["implementation"]["sort_all_order_id_reductions_before_decimal_sum"]
     assert config["rerun_protocol"]["rebuild_fee_dependent_training_targets"] is True
     assert config["rerun_protocol"]["calibration_rows_consumed"] == 0
     assert config["rerun_protocol"]["test_rows_consumed"] == 0
     assert config["rerun_protocol"]["test_labels_opened"] is False
+
+    h015 = load_json(
+        ROOT / "configs" / "trace" / "sphinx_trace_s0_h015_exact_validation_result.json"
+    )
+    assert h015["research_id"] == "SPH-T-H015"
+    assert h015["candidate"]["identical_to_H014_model_tensors"] is True
+    assert h015["identity_replication_control"]["passed"] is False
+    assert h015["exact_replay"]["real_cost_qualified"] is False
+    assert h015["gates"]["all_pass"] is False
+    assert h015["promotion_allowed"] is False
+    assert h015["test_labels_opened"] is False
 
 
 def test_corpus_v1_covers_both_clob_protocols() -> None:
