@@ -1,0 +1,25 @@
+{
+  "id": "sphinx-trace-h010-profit-evaluation-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H010",
+  "registered_at": "2026-07-18T01:55:00Z",
+  "objective": "measure_weekly_and_independent_called_component_profit_uncertainty_after_exact_replay",
+  "bootstrap": {
+    "method_weekly": "circular_moving_block",
+    "weekly_block_length": 4,
+    "method_components": "iid_equal_component",
+    "replicates": 5000,
+    "confidence": 0.95,
+    "seed": 17012
+  },
+  "promotion": {
+    "weekly_mean_lower_95pct_must_be_positive": true,
+    "component_mean_lower_95pct_must_be_positive": true,
+    "minimum_calls": 1000,
+    "minimum_independent_components": 1000,
+    "strongest_baseline_outperformance_required_separately": true,
+    "cost_stress_required_separately": true
+  },
+  "evidence_boundary": "Development trade-tape profit uncertainty only; no orderbook executability, untouched-test or paper-forward evidence."
+}

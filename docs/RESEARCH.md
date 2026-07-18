@@ -726,6 +726,16 @@ aggregates while live orders, positions, prediction state and checkpoint hashes
 remain restorable. This bounds memory even for a poorly initialized high-CALL
 policy without discarding debug evidence.
 
+Profit promotion now has a separate preregistered uncertainty audit. Weekly net
+profit uses a four-week circular moving-block bootstrap to retain short serial
+dependence; realized profit across called event components uses an equal-
+component bootstrap. Both lower 95% bounds must be positive, with at least 1,000
+resolved calls and 1,000 independent called components. Per-condition realized
+PnL now includes both early sell/close PnL and terminal settlement, is written at
+resolution, then compacted from live state. Baseline outperformance and cost
+stress remain separate mandatory gates; a positive point estimate cannot promote
+a policy.
+
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
 the adapter and run the first development-only trade-tape replay with test
 physically closed.

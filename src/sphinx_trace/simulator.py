@@ -186,6 +186,7 @@ class ReplaySimulator:
         self.last_marks: dict[str, Decimal] = {}
         self.equity_curve: list[tuple[int, Decimal]] = [(0, rules.initial_cash_usd)]
         self.realized_pnl_usd = ZERO
+        self.condition_realized_pnl_usd: dict[str, Decimal] = {}
         self.total_fees_usd = ZERO
         self.closed_pnls: list[Decimal] = []
         self.archived_order_status_counts: dict[str, int] = {
@@ -477,6 +478,9 @@ class ReplaySimulator:
             sell_position.cost_basis_usd -= allocated_cost
             self.cash_usd += proceeds
             self.realized_pnl_usd += pnl
+            self.condition_realized_pnl_usd[order.condition_id] = (
+                self.condition_realized_pnl_usd.get(order.condition_id, ZERO) + pnl
+            )
             self.closed_pnls.append(pnl)
             if sell_position.shares == ZERO:
                 del self.positions[order.token_id]
@@ -514,6 +518,9 @@ class ReplaySimulator:
             pnl = payout - position.cost_basis_usd
             self.cash_usd += payout
             self.realized_pnl_usd += pnl
+            self.condition_realized_pnl_usd[condition_id] = (
+                self.condition_realized_pnl_usd.get(condition_id, ZERO) + pnl
+            )
             self.closed_pnls.append(pnl)
             resolution_pnl += pnl
             del self.positions[token_id]
@@ -525,6 +532,11 @@ class ReplaySimulator:
         """Return current marked equity without exposing mutable portfolio internals."""
 
         return self._equity()
+
+    def pop_condition_realized_pnl(self, condition_id: str) -> Decimal:
+        """Return and compact total realized PnL after one market resolution."""
+
+        return self.condition_realized_pnl_usd.pop(condition_id, ZERO)
 
     def available_cash_usd(self) -> Decimal:
         """Return cash not reserved by pending buy orders."""
@@ -645,6 +657,9 @@ class ReplaySimulator:
             "last_marks": {key: str(value) for key, value in sorted(self.last_marks.items())},
             "equity_curve": [[timestamp, str(value)] for timestamp, value in self.equity_curve],
             "realized_pnl_usd": str(self.realized_pnl_usd),
+            "condition_realized_pnl_usd": {
+                key: str(value) for key, value in sorted(self.condition_realized_pnl_usd.items())
+            },
             "total_fees_usd": str(self.total_fees_usd),
             "closed_pnls": [str(value) for value in self.closed_pnls],
             "archived_order_status_counts": dict(self.archived_order_status_counts),
@@ -717,6 +732,10 @@ class ReplaySimulator:
             (int(timestamp), decimal(value)) for timestamp, value in payload["equity_curve"]
         ]
         simulator.realized_pnl_usd = decimal(payload["realized_pnl_usd"])
+        simulator.condition_realized_pnl_usd = {
+            key: decimal(value)
+            for key, value in payload.get("condition_realized_pnl_usd", {}).items()
+        }
         simulator.total_fees_usd = decimal(payload["total_fees_usd"])
         simulator.closed_pnls = [decimal(value) for value in payload["closed_pnls"]]
         simulator.archived_order_status_counts = {
