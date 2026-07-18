@@ -895,7 +895,7 @@ insider attribution or production safety.
 
 ## SPH-T-H013: Market-Anchored Residual Outcome Model
 
-**Status:** `registered after H011 market-only result; implementation pending`
+**Status:** `registered; zero-initialized residual wrapper implemented`
 
 **Registered:** 2026-07-18, after the direct H011 market-only temporal
 inconsistency was measured and before any wallet-variant result was observed.
@@ -915,6 +915,13 @@ state.
 residual, causal resolved-performance residual and actor-context residual
 variants with the same H011 pack, candidate sizes, seed, optimizer and split
 contract. Compare each both to its direct H011 counterpart and to the market.
+
+**Implementation.** The wrapper consumes the exact causal market probability as
+a separate anchor tensor, clips only for a finite logit transform and adds the
+H011 outcome head as an unrestricted residual. The final residual projection is
+initialized to exact zeros, so unit tests verify that initial output equals the
+market bit-for-bit before learning. H011 information-group masks are reused
+unchanged for matched direct-versus-residual ablations.
 
 **Acceptance.** Both validation and calibration must have component-bootstrap
 upper 95% log-loss delta below zero. Test remains closed. Passing outcome lift
