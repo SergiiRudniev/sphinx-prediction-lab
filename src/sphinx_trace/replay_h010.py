@@ -13,7 +13,6 @@ from typing import Any
 from sphinx_trace.model_h012 import H012_ACTIONS
 from sphinx_trace.simulator import (
     ONE,
-    OPEN_ORDER_STATUSES,
     ZERO,
     LiquidityEvent,
     OrderSide,
@@ -345,9 +344,8 @@ class H010ReplayAdapter:
         )
 
     def _cancel_pending(self, condition_id: str, timestamp_unix: int) -> None:
-        for order in self.simulator.orders.values():
-            if order.condition_id == condition_id and order.status in OPEN_ORDER_STATUSES:
-                self.simulator.cancel_order(order.order_id, timestamp_unix)
+        for order in self.simulator.open_orders_for_condition(condition_id):
+            self.simulator.cancel_order(order.order_id, timestamp_unix)
 
     def _condition_positions(self, condition_id: str) -> list[SimulatedPosition]:
         return sorted(
@@ -386,9 +384,7 @@ class H010ReplayAdapter:
         )
         peak = max((value for _, value in self.simulator.equity_curve), default=initial)
         drawdown = (peak - equity) / peak if peak > ZERO else ZERO
-        pending = sum(
-            order.status in OPEN_ORDER_STATUSES for order in self.simulator.orders.values()
-        )
+        pending = self.simulator.pending_order_count()
         return (
             float(self.simulator.cash_usd / initial),
             float(equity / initial),

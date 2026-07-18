@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 from dataclasses import asdict, dataclass
 from decimal import Decimal
@@ -171,6 +172,10 @@ class ReplaySimulator:
         self.cash_usd = rules.initial_cash_usd
         self.current_time_unix = 0
         self.orders: dict[str, SimulatedOrder] = {}
+        self._open_order_ids: set[str] = set()
+        self._open_order_ids_by_token: dict[str, set[str]] = {}
+        self._open_order_ids_by_condition: dict[str, set[str]] = {}
+        self._expiry_heap: list[tuple[int, str]] = []
         self.positions: dict[str, SimulatedPosition] = {}
         self.fills: list[SimulatedFill] = []
         self.predictions: list[PredictionRecord] = []
@@ -188,16 +193,49 @@ class ReplaySimulator:
         if timestamp_unix < self.current_time_unix:
             raise ValueError("Simulator input time regressed")
         self.current_time_unix = timestamp_unix
-        for order in self.orders.values():
-            if order.status in OPEN_ORDER_STATUSES and order.expires_at_unix < timestamp_unix:
+        while self._expiry_heap and self._expiry_heap[0][0] < timestamp_unix:
+            _, order_id = heapq.heappop(self._expiry_heap)
+            order = self.orders[order_id]
+            if order.status in OPEN_ORDER_STATUSES:
                 order.status = OrderStatus.EXPIRED
+                self._untrack_open(order)
+
+    def _track_open(self, order: SimulatedOrder) -> None:
+        self._open_order_ids.add(order.order_id)
+        self._open_order_ids_by_token.setdefault(order.token_id, set()).add(order.order_id)
+        self._open_order_ids_by_condition.setdefault(order.condition_id, set()).add(order.order_id)
+        heapq.heappush(self._expiry_heap, (order.expires_at_unix, order.order_id))
+
+    def _untrack_open(self, order: SimulatedOrder) -> None:
+        self._open_order_ids.discard(order.order_id)
+        for index, key in (
+            (self._open_order_ids_by_token, order.token_id),
+            (self._open_order_ids_by_condition, order.condition_id),
+        ):
+            values = index.get(key)
+            if values is None:
+                continue
+            values.discard(order.order_id)
+            if not values:
+                del index[key]
+
+    def open_orders_for_condition(self, condition_id: str) -> tuple[SimulatedOrder, ...]:
+        """Return current open orders for one market in deterministic order."""
+
+        return tuple(
+            self.orders[order_id]
+            for order_id in sorted(self._open_order_ids_by_condition.get(condition_id, ()))
+        )
+
+    def pending_order_count(self) -> int:
+        return len(self._open_order_ids)
 
     def _reserved_cash(self) -> Decimal:
         return sum(
             (
                 order.remaining_shares * order.limit_price * (ONE + self.rules.fee_rate)
-                for order in self.orders.values()
-                if order.status in OPEN_ORDER_STATUSES and order.side == OrderSide.BUY
+                for order_id in self._open_order_ids
+                if (order := self.orders[order_id]).side == OrderSide.BUY
             ),
             ZERO,
         )
@@ -206,10 +244,8 @@ class ReplaySimulator:
         return sum(
             (
                 order.remaining_shares
-                for order in self.orders.values()
-                if order.status in OPEN_ORDER_STATUSES
-                and order.side == OrderSide.SELL
-                and order.token_id == token_id
+                for order_id in self._open_order_ids_by_token.get(token_id, ())
+                if (order := self.orders[order_id]).side == OrderSide.SELL
             ),
             ZERO,
         )
@@ -314,6 +350,8 @@ class ReplaySimulator:
                 order.status = OrderStatus.REJECTED
                 order.reject_reason = "INSUFFICIENT_SHARES"
         self.orders[order_id] = order
+        if order.status in OPEN_ORDER_STATUSES:
+            self._track_open(order)
         return order
 
     def cancel_order(self, order_id: str, timestamp_unix: int) -> SimulatedOrder:
@@ -321,6 +359,7 @@ class ReplaySimulator:
         order = self.orders[order_id]
         if order.status in OPEN_ORDER_STATUSES:
             order.status = OrderStatus.CANCELLED
+            self._untrack_open(order)
         return order
 
     def _side_is_eligible(self, order: SimulatedOrder, event: LiquidityEvent) -> bool:
@@ -351,10 +390,9 @@ class ReplaySimulator:
         emitted: list[SimulatedFill] = []
         candidates = sorted(
             (
-                order
-                for order in self.orders.values()
-                if order.status in OPEN_ORDER_STATUSES
-                and order.token_id == event.token_id
+                self.orders[order_id]
+                for order_id in self._open_order_ids_by_token.get(event.token_id, ())
+                if (order := self.orders[order_id]).status in OPEN_ORDER_STATUSES
                 and order.eligible_at_unix <= event.timestamp_unix <= order.expires_at_unix
                 and order.evidence_liquidity_id != event.liquidity_id
                 and self._side_is_eligible(order, event)
@@ -444,6 +482,8 @@ class ReplaySimulator:
             if order.filled_shares == order.requested_shares
             else OrderStatus.PARTIAL
         )
+        if order.status == OrderStatus.FILLED:
+            self._untrack_open(order)
 
     def resolve(
         self,
@@ -453,9 +493,9 @@ class ReplaySimulator:
         token_payouts: dict[str, Decimal | float | int | str],
     ) -> Decimal:
         self._advance(timestamp_unix)
-        for order in self.orders.values():
-            if order.condition_id == condition_id and order.status in OPEN_ORDER_STATUSES:
-                order.status = OrderStatus.CANCELLED
+        for order in self.open_orders_for_condition(condition_id):
+            order.status = OrderStatus.CANCELLED
+            self._untrack_open(order)
         resolution_pnl = ZERO
         for token_id, position in list(self.positions.items()):
             if position.condition_id != condition_id:
@@ -600,6 +640,8 @@ class ReplaySimulator:
             row["filled_shares"] = decimal(row["filled_shares"])
             order = SimulatedOrder(**row)
             simulator.orders[order.order_id] = order
+            if order.status in OPEN_ORDER_STATUSES:
+                simulator._track_open(order)
         simulator.positions = {}
         for row_value in payload["positions"]:
             row = dict(row_value)

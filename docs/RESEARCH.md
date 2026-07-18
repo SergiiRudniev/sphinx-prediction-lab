@@ -669,7 +669,10 @@ one equity point for every unchanged portfolio mark. It keeps a monotonic source
 cursor, counts consumed liquidity, retains marks only for exposed or fillable
 tokens and records equity only when portfolio value can change. Prediction and
 liquidity retention remain available for small audit runs. Exact adapter plus
-simulator restoration is hash-stable in unit replay. The append-only disk audit
+simulator restoration is hash-stable in unit replay. Active orders are indexed
+by token and condition and expire through a deterministic priority queue, so one
+new public trade no longer scans the complete historical order ledger. The
+append-only disk audit
 stores compact decision, order, fill and resolution records in immutable atomic
 daily Zstandard shards. Each decision points back to its exact feature date and
 row instead of duplicating 128 inputs, while retaining action logits, physical
@@ -692,6 +695,16 @@ test conditions, absent or non-replayable markets, missing close/payout state,
 non-binary payouts and any catalog whose closed-test metadata or physical test-
 label count is invalid. Resolutions are emitted in deterministic event time with
 their exact catalog outcome and token mapping.
+
+A registered reusable development-tape builder discovers every strictly
+qualified validation/calibration condition directly from daily feature masks,
+validates it against the closed catalog, and scans all 176,119,673 H009 rows.
+For each market it retains the complete public trade interval from its first
+eligible decision through the public close second, without market or trade caps.
+Daily atomic receipts support resume and bind the result to the deep-hash-valid
+H009 stream, qualified pack and deterministic condition digest. This removes the
+need to parse the entire annual source tape on every policy epoch while keeping
+test physically closed.
 
 **Next action.** Bind completed H011 prediction rows and catalog resolutions to
 the adapter and run the first development-only trade-tape replay with test
