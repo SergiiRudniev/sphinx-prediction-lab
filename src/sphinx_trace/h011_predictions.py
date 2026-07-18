@@ -54,6 +54,17 @@ def _feature_digest(
     return digest.hexdigest()
 
 
+def _pack_source_digest(pack_dir: Path, shards: list[Path]) -> str:
+    digest = hashlib.sha256()
+    digest.update(sha256_file(pack_dir / "manifest.json").encode())
+    digest.update(sha256_file(pack_dir / "normalization.npz").encode())
+    for shard in shards:
+        date = shard.name.removeprefix("date=")
+        receipt_path = pack_dir / "receipts" / f"date={date}.json"
+        digest.update(f"{date}:{sha256_file(receipt_path)}\n".encode())
+    return digest.hexdigest()
+
+
 def bind_development_predictions(
     pack_dir: Path,
     model_dir: Path,
@@ -79,6 +90,11 @@ def bind_development_predictions(
     shards = sorted(path for path in (pack_dir / "shards").glob("date=*") if path.is_dir())
     if not shards:
         raise RuntimeError("Prediction binding found no H011 shards")
+    if result.get("source_digest") != _pack_source_digest(pack_dir, shards):
+        raise RuntimeError("H011 model result belongs to another feature pack")
+    predictions_path = model_dir / "predictions.npz"
+    if result.get("predictions_sha256") != sha256_file(predictions_path):
+        raise RuntimeError("H011 model prediction digest changed")
 
     prefix = f"{split}_"
     required = (
@@ -91,7 +107,7 @@ def bind_development_predictions(
         "market_ids",
         "component_ids",
     )
-    with np.load(model_dir / "predictions.npz", allow_pickle=False) as archive:
+    with np.load(predictions_path, allow_pickle=False) as archive:
         if any(key.startswith("test_") for key in archive.files):
             raise RuntimeError("Prediction artifact contains forbidden test arrays")
         arrays = {name: np.asarray(archive[prefix + name]) for name in required}
