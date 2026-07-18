@@ -816,6 +816,22 @@ failures are no longer retried unchanged. The collector recognizes the quota
 reset time, checkpoints the adaptive leaf plan and waits without discarding
 completed actors. This changes query shape only; no actor is capped or sampled.
 
+**First 50M market-only result.** Seed 17 trained 50,248,198 parameters for five
+epochs before registered early stopping, with epoch 1 retained as best. The run
+took 1,604.09 seconds over the complete pack and kept test rows at zero. On
+811,726 validation decisions, calibrated log loss was 0.456481 against the
+market's 0.452098. The equal-component delta was +0.005211 with 95% interval
+[+0.004885, +0.005552], so the candidate clearly failed the validation lift
+gate.
+
+On the later 579,252-row calibration audit it moved in the opposite direction:
+calibrated log loss was 0.445097 against 0.450778, and the equal-component delta
+was -0.007515 with 95% interval [-0.008529, -0.006495]. This is real held-out
+development evidence of temporal regime sensitivity, not a stable promotion.
+Market-only is therefore retained as a control and not promoted. The matched
+uncapped-wallet-flow run started immediately under the same seed, source and
+training contract.
+
 **Next action.** Complete the active 50M market-only run, then train the matched
 uncapped-wallet-flow and causal resolved-performance variants on the identical
 verified pack. Finish the quota-aware actor context in parallel and add its
