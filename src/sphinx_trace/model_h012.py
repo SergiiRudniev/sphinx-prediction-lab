@@ -101,6 +101,14 @@ class SphinxTraceS0H012(nn.Module):
         self.value = ScalarHead(self.width)
         nn.init.normal_(self.policy_latents, std=0.02)
         nn.init.normal_(self.token_type, std=0.02)
+        nn.init.zeros_(self.action.weight)
+        with torch.no_grad():
+            self.action.bias.copy_(
+                torch.tensor(
+                    [-1e-4, -1e-4, 0.0, -1.0, -1.0, -1.0, -1.0],
+                    dtype=self.action.bias.dtype,
+                )
+            )
 
     def forward(
         self,

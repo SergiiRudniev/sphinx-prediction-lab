@@ -198,7 +198,6 @@ def _states(rows: int, device: torch.device) -> tuple[Tensor, Tensor, Tensor, Te
     previous = torch.full((rows,), 2, dtype=torch.long, device=device)
     physical = torch.zeros((rows, H012_ACTION_COUNT), dtype=torch.bool, device=device)
     physical[:, :3] = True
-    physical[:, 4] = True
     return portfolio, memory, previous, physical
 
 
@@ -270,6 +269,10 @@ def _evaluate(
         "mean_size": 0.0,
         "calls": 0.0,
         "correct_calls": 0.0,
+        "action_value_loss": 0.0,
+        "mean_call_probability": 0.0,
+        "positive_call_value_fraction": 0.0,
+        "mean_selected_action_value": 0.0,
     }
     for shard in shards:
         indices = _indices(
@@ -301,6 +304,14 @@ def _evaluate(
             totals["mean_size"] += float(metrics["mean_size"]) * rows
             totals["calls"] += float(metrics["call_count"])
             totals["correct_calls"] += float(metrics["correct_call_count"])
+            totals["action_value_loss"] += float(metrics["action_value_loss"]) * rows
+            totals["mean_call_probability"] += float(metrics["mean_call_probability"]) * rows
+            totals["positive_call_value_fraction"] += (
+                float(metrics["positive_call_value_fraction"]) * rows
+            )
+            totals["mean_selected_action_value"] += (
+                float(metrics["mean_selected_action_value"]) * rows
+            )
     rows = int(totals["rows"])
     if not rows:
         raise RuntimeError(f"H012 evaluation split {split_code} has no selected rows")
@@ -316,6 +327,10 @@ def _evaluate(
         "correct_calls": int(totals["correct_calls"]),
         "call_precision": totals["correct_calls"] / calls if calls else 0.0,
         "skips": rows - calls,
+        "action_value_loss": totals["action_value_loss"] / rows,
+        "mean_call_probability": totals["mean_call_probability"] / rows,
+        "positive_call_value_fraction": totals["positive_call_value_fraction"] / rows,
+        "mean_selected_action_value": totals["mean_selected_action_value"] / rows,
     }
 
 

@@ -55,6 +55,15 @@ def test_h012_fuses_market_portfolio_and_prediction_memory() -> None:
     assert output["debug_policy_attention"].shape == (2, 4, 7, 7)
 
 
+def test_h012_action_value_head_starts_at_safe_skip_anchor() -> None:
+    model = _models()
+
+    assert torch.count_nonzero(model.action.weight) == 0
+    assert model.action.bias.detach().tolist() == pytest.approx(
+        [-0.0001, -0.0001, 0.0, -1.0, -1.0, -1.0, -1.0]
+    )
+
+
 def test_h012_rejects_nonphysical_or_unknown_action_state() -> None:
     model = _models()
     with pytest.raises(ValueError, match="permit at least one"):

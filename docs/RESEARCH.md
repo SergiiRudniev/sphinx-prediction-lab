@@ -1012,9 +1012,31 @@ implementation, optimizer, scheduler and all RNG states, and supports an atomic
 `PAUSE` boundary. Reported warm-start utility, CALL rate and precision remain
 diagnostic until their calls pass the stateful H010 replay.
 
-**Next action.** Complete the H011 outcome ablations, implement the H009/H010
-event-time adapter and train the first portfolio-aware selective policy without
-opening test.
+**First wallet-flow utility warm-start result.** The 64,583,696-parameter H012
+policy trained for four epochs and 866.28 seconds over 602,201 early-validation
+fit rows, with 207,413 later-validation selection rows and 578,176 calibration
+rows. Epoch 0 became the selected checkpoint by choosing `SKIP` for every row.
+Later epochs did explore: epoch 1 made 1,377 calls at 68.12% side precision and
+epoch 2 made 2,435 at 65.87%, but their mean realized log utilities were
+`-0.0002362` and `-0.0003546`. Epoch 3 became unstable and called on all 207,413
+rows at 47.71% precision, with `-0.0015015` mean log utility. The selected model
+therefore makes zero calls on both selection and calibration and is not
+promoted. This also demonstrates why CALL precision is only a diagnostic: the
+apparently accurate sparse epochs concentrated on prices whose payout did not
+cover error and registered costs.
+
+**H012-v2 hypothesis.** Direct expected-utility gradients can escape into either
+zero-size/all-SKIP or indiscriminate CALL without first learning the conditional
+value of each side. The next warm-start will regress counterfactual realized
+log-utility for CALL-0, CALL-1 and SKIP at a registered reference exposure, then
+use the learned action values to optimize a separate state-dependent size. It
+does not impose a CALL count, confidence threshold or fixed production stake;
+SKIP remains the zero-utility action and the model must learn a positive value to
+beat it.
+
+**Next action.** Train the registered counterfactual-action-value warm-start,
+then send only its selected checkpoint through the exact H010 stateful replay
+without opening test.
 
 **Evidence boundary.** Trade-tape development profit cannot establish historical
 orderbook executability, untouched-test performance, paper-forward profit,

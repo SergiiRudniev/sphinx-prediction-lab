@@ -32,6 +32,17 @@ def _config() -> dict[str, object]:
     }
 
 
+def _action_value_config() -> dict[str, object]:
+    return {
+        **_config(),
+        "loss_mode": "counterfactual_action_value",
+        "action_value_reference_size": 0.05,
+        "action_value_temperature": 0.05,
+        "action_value_weight": 4.0,
+        "policy_utility_weight": 0.1,
+    }
+
+
 def test_component_partition_never_splits_a_component() -> None:
     components = np.array([1, 1, 2, 3, 3, 4], dtype=np.int64)
     timestamps = np.array([1, 4, 2, 3, 8, 9], dtype=np.int64)
@@ -75,3 +86,26 @@ def test_selective_utility_backpropagates_into_actions_and_size() -> None:
 
     assert logits.grad is not None and torch.isfinite(logits.grad).all()
     assert alpha.grad is not None and torch.isfinite(alpha.grad).all()
+
+
+def test_counterfactual_action_value_regression_teaches_both_sides_without_frequency_target() -> (
+    None
+):
+    logits = torch.zeros((2, 7), requires_grad=True)
+    output = _output(logits, size_alpha=1.1, size_beta=20.0)
+    loss, metrics = selective_log_utility_loss(
+        output,
+        torch.tensor([1.0, 0.0]),
+        torch.tensor([0.4, 0.6]),
+        _action_value_config(),
+    )
+
+    loss.backward()
+
+    assert logits.grad is not None
+    assert logits.grad[0, 0] < 0.0
+    assert logits.grad[0, 1] > 0.0
+    assert logits.grad[1, 0] > 0.0
+    assert logits.grad[1, 1] < 0.0
+    assert metrics["action_value_loss"] > 0.0
+    assert metrics["mean_call_probability"] == pytest.approx(2.0 / 3.0)
