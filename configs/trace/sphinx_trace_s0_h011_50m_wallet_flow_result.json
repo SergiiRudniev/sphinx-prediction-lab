@@ -1,0 +1,49 @@
+{
+  "id": "sphinx-trace-s0-h011-50m-wallet-flow-qualified-seed17-result",
+  "version": "1.0.0-result",
+  "status": "complete_rejected",
+  "research_id": "SPH-T-H011",
+  "completed_at": "2026-07-18T01:24:42.618718Z",
+  "candidate_id": "50m",
+  "variant_id": "h011_uncapped_wallet_flow",
+  "seed": 17,
+  "parameters": 50248198,
+  "source": {
+    "feature_pack": "sphinx-trace-s0-h011-qualified-pack-v1",
+    "source_digest": "ee5401aff84ae155699dd6e1bff00450b45a88463e0bce1f6dee239558ca0634",
+    "training_config_sha256": "ae07e23bb394f76c16a1bee1651dcd5095b7d5bc8ff242d7d412f536a3dc969a",
+    "result_sha256": "e097ccde1d38a4a310459b6771ed8cca4ffffae21d2658f197cce94d2e6355ac",
+    "calibration_sha256": "3f55d75397961c2c70ef64b34daa636bdf2dee31f21ad93cd2d01b527daadb1b"
+  },
+  "training": {
+    "best_epoch": 2,
+    "epochs_completed": 6,
+    "elapsed_seconds": 1869.6478797000018,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "validation": {
+    "rows": 809614,
+    "raw_log_loss": 0.459993702078686,
+    "market_log_loss": 0.4532389063476882,
+    "raw_delta_vs_market": 0.006754795730997798
+  },
+  "calibration": {
+    "rows": 578176,
+    "raw_log_loss": 0.45349425994286413,
+    "market_log_loss": 0.451444120225557,
+    "raw_delta_vs_market": 0.002050139717307109,
+    "platt_log_loss": 0.45509315791795074,
+    "platt_delta_vs_market": 0.0036490376923937196,
+    "component_mean_delta": 0.0035616289739632515,
+    "component_bootstrap_95pct": [
+      0.0025787597814607263,
+      0.0045477806140415845
+    ],
+    "components": 91840,
+    "replicates": 5000
+  },
+  "decision": "reject_direct_wallet_relearning_and_continue_market_anchored_residual",
+  "promotion_allowed": false,
+  "evidence_boundary": "Strictly pre-close development outcome evidence only; no simulator, test, executable-profit or paper-forward claim."
+}
