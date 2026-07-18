@@ -892,3 +892,36 @@ opening test.
 **Evidence boundary.** Trade-tape development profit cannot establish historical
 orderbook executability, untouched-test performance, paper-forward profit,
 insider attribution or production safety.
+
+## SPH-T-H013: Market-Anchored Residual Outcome Model
+
+**Status:** `registered after H011 market-only result; implementation pending`
+
+**Registered:** 2026-07-18, after the direct H011 market-only temporal
+inconsistency was measured and before any wallet-variant result was observed.
+
+**Trigger.** Direct 50M outcome learning was worse than market on validation but
+better on calibration. Relearning the full probability can discard a strong
+causal prior and lets small regime shifts dominate the network output.
+
+**Hypothesis.** Start the terminal logit exactly at the contemporaneous market
+logit and make the network learn only an additive residual. Initialize the
+residual head to zero, apply no hard residual cap, and add a small registered L2
+penalty. At step zero the model is exactly the market baseline; every learned
+deviation must be justified by causal market, component, wallet and universe
+state.
+
+**Controlled comparison.** Train matched market-residual, uncapped-wallet-flow
+residual, causal resolved-performance residual and actor-context residual
+variants with the same H011 pack, candidate sizes, seed, optimizer and split
+contract. Compare each both to its direct H011 counterpart and to the market.
+
+**Acceptance.** Both validation and calibration must have component-bootstrap
+upper 95% log-loss delta below zero. Test remains closed. Passing outcome lift
+does not imply profitable selection; H010/H012 remain required.
+
+**Next action.** Finish the active direct wallet ablations, implement the
+zero-initialized residual wrapper and run the matched 50M residual campaign.
+
+**Evidence boundary.** H013 development lift cannot establish selective-call
+profit, untouched-test performance, executable profit or paper-forward profit.

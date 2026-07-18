@@ -1,0 +1,64 @@
+{
+    "id": "sphinx-trace-s0-h013-market-residual-v1",
+    "version": "1.0.0-registered",
+    "status": "registered",
+    "research_id": "SPH-T-H013",
+    "registered_at": "2026-07-18T00:35:00Z",
+    "triggering_evidence": {
+        "h011_market_only_result": "sphinx-trace-s0-h011-50m-market-only",
+        "validation_calibrated_delta_vs_market": 0.004382344016710837,
+        "calibration_calibrated_delta_vs_market": -0.005680769181490686,
+        "interpretation": "direct_outcome_learning_was_not_temporally_stable_against_the_market_anchor"
+    },
+    "dependencies": {
+        "feature_pack": {
+            "id": "sphinx-trace-s0-h011-pack-v1",
+            "sha256": "994bc0abc43c0ed9431fd44f1ee3cd4e5bfb51b28bee44577e7ff3efbfe88a12"
+        },
+        "model": {
+            "id": "sphinx-trace-s0-h011-model-v1",
+            "sha256": "d9797557fa2a5e42d7a209b755e54fb497a065d722188c2dd26d0616fb0162ea"
+        },
+        "training": {
+            "id": "sphinx-trace-s0-h011-train-v1",
+            "sha256": "78ef7de7e69ba9a62e3368b0db82d3e88f19e47e759e140954a2fb9366f1e571"
+        },
+        "calibration": {
+            "id": "sphinx-trace-s0-h011-calibration-v1",
+            "sha256": "f9ec6f9febc9d277dccf04d7a72765036cd7c8b1142f7dc735e5f5f72795fe34"
+        }
+    },
+    "hypothesis": "zero_initialized_market_logit_residual_improves_temporal_stability_and_exposes_incremental_wallet_signal",
+    "architecture": {
+        "base_candidates": ["50m", "100m", "150m"],
+        "first_candidate": "50m",
+        "market_anchor": "causal_current_market_probability_outcome0",
+        "anchor_transform": "clipped_logit",
+        "minimum_anchor_probability": 0.000001,
+        "maximum_anchor_probability": 0.999999,
+        "terminal_logit": "market_anchor_logit_plus_learned_residual_logit",
+        "residual_head_initialization": "exact_zero",
+        "residual_hard_cap": null,
+        "raw_wallet_identity": false
+    },
+    "training": {
+        "matched_h011_optimizer_schedule_and_seed": true,
+        "residual_l2_weight": 0.001,
+        "variants": [
+            "h013_market_residual",
+            "h013_uncapped_wallet_flow_residual",
+            "h013_causal_wallet_performance_residual",
+            "h013_actor_context_residual"
+        ],
+        "test_rows_consumed": 0,
+        "test_opened": false
+    },
+    "evaluation": {
+        "validation_and_calibration_both_required": true,
+        "component_bootstrap_config": "sphinx-trace-s0-h011-calibration-v1",
+        "promotion_requires_upper_95pct_delta_vs_market_below_zero_on_validation": true,
+        "promotion_requires_upper_95pct_delta_vs_market_below_zero_on_calibration": true,
+        "compare_against_direct_H011_matched_variant": true
+    },
+    "evidence_boundary": "H013 can establish stable incremental development outcome lift. It cannot establish selective-call profit, untouched-test performance, executable profit or paper-forward performance."
+}
