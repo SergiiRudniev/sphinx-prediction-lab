@@ -232,6 +232,28 @@ def test_h014_exact_result_rejects_promotion_and_h015_is_pre_registered() -> Non
     assert model["test_labels_opened"] is False
 
 
+def test_h016_real_fee_qualification_is_fail_closed_and_supersedes_flat_proxy() -> None:
+    config = load_json(
+        ROOT / "configs" / "trace" / "sphinx_trace_simulator_h016_real_fees_v1.json"
+    )
+
+    assert config["research_id"] == "SPH-T-H016"
+    assert config["evidence_reclassification"]["previous_real_cost_qualified"] is False
+    assert config["execution_contract"]["default_liquidity_role"] == "TAKER"
+    assert config["execution_contract"]["maker_fee"] == 0.0
+    assert config["execution_contract"]["builder_fee"] == 0.0
+    assert config["schedule_artifact"]["category_only_imputation_allowed"] is False
+    assert config["schedule_artifact"]["unknown_schedule_fallback"] is None
+    assert config["schedule_artifact"]["unresolved_fill_policy"] == (
+        "reject_real_fee_qualification"
+    )
+    assert config["implementation"]["old_flat_bps_stress_allowed"] is False
+    assert config["rerun_protocol"]["rebuild_fee_dependent_training_targets"] is True
+    assert config["rerun_protocol"]["calibration_rows_consumed"] == 0
+    assert config["rerun_protocol"]["test_rows_consumed"] == 0
+    assert config["rerun_protocol"]["test_labels_opened"] is False
+
+
 def test_corpus_v1_covers_both_clob_protocols() -> None:
     config = load_json(ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json")
     contracts = config["sources"]["ledger"]["contracts"]

@@ -1,0 +1,156 @@
+{
+  "id": "sphinx-trace-simulator-h016-real-fees-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H016",
+  "registered_at": "2026-07-18T07:08:00Z",
+  "objective": "replace_the_flat_execution_cost_proxy_with_timestamp_market_role_and_protocol_exact_polymarket_fees",
+  "trigger": {
+    "current_simulator_fee_bps": 100.0,
+    "failure": "the_simulator_charges_one_percent_of_notional_on_every_fill_but_polymarket_fees_depend_on_protocol_era_market_schedule_price_and_maker_taker_role",
+    "consequence": "all_existing_net_profit_and_fee_totals_are_proxy_cost_evidence_only"
+  },
+  "official_sources": {
+    "current_fee_rules": "https://docs.polymarket.com/trading/fees",
+    "market_fee_parameters": "https://docs.polymarket.com/api-reference/markets/get-clob-market-info",
+    "historical_fee_rollouts": "https://docs.polymarket.com/changelog",
+    "clob_v2_cutover_and_fee_model": "https://docs.polymarket.com/v2-migration",
+    "clob_v1_fee_settlement": "https://github.com/Polymarket/ctf-exchange/blob/main/docs/Overview.md",
+    "clob_v1_contract": "https://github.com/Polymarket/ctf-exchange",
+    "clob_v2_contract": "https://github.com/Polymarket/ctf-exchange-v2"
+  },
+  "evidence_reclassification": {
+    "affected_research": [
+      "SPH-T-H010",
+      "SPH-T-H012",
+      "SPH-T-H014",
+      "SPH-T-H015"
+    ],
+    "previous_net_profit_label": "flat_fee_proxy_only",
+    "previous_real_cost_qualified": false,
+    "previous_promotion_allowed": false,
+    "real_fee_replay_required": true
+  },
+  "execution_contract": {
+    "simulated_order_type": "MARKETABLE_LIMIT",
+    "default_liquidity_role": "TAKER",
+    "role_must_be_explicit_per_fill": true,
+    "maker_fee": 0.0,
+    "builder_code": null,
+    "builder_fee": 0.0,
+    "maker_rebates_included": false,
+    "taker_rebates_included": false,
+    "reason": "the_current_policy_crosses_observed_liquidity_after_latency_and_does_not_model_passive_queue_priority_or_a_builder_code"
+  },
+  "protocol_eras": {
+    "clob_v1": {
+      "end_exclusive": "2026-04-28T11:00:00Z",
+      "fee_source": "signed_order_fee_rate_and_historical_market_schedule",
+      "settlement": {
+        "BUY": "deduct_outcome_token_proceeds",
+        "SELL": "deduct_collateral_proceeds"
+      },
+      "arithmetic": "match_pinned_official_contract_integer_arithmetic",
+      "schedule_changes": [
+        "2026-01-05_15m_crypto",
+        "2026-02-12_5m_crypto",
+        "2026-02-18_NCAAB_and_Serie_A",
+        "2026-03-06_new_all_crypto_markets",
+        "2026-03-30_category_fee_structure"
+      ]
+    },
+    "clob_v2": {
+      "start_inclusive": "2026-04-28T11:00:00Z",
+      "fee_source": "per_market_fee_details_at_match_time",
+      "platform_fee_formula": "fee_usdc = shares * fee_rate * price * (1 - price)",
+      "fee_parameters": [
+        "rate",
+        "exponent",
+        "taker_only"
+      ],
+      "round_decimal_places": 5,
+      "minimum_nonzero_fee_usdc": 0.00001,
+      "settlement_asset": "pUSD_USDC_value"
+    }
+  },
+  "current_v2_reference_rates": {
+    "crypto": 0.07,
+    "sports": 0.05,
+    "finance": 0.04,
+    "politics": 0.04,
+    "economics": 0.05,
+    "culture": 0.05,
+    "weather": 0.05,
+    "other_general": 0.05,
+    "mentions": 0.04,
+    "tech": 0.04,
+    "geopolitics_world_events": 0.0
+  },
+  "schedule_artifact": {
+    "id": "sphinx-h016-polymarket-fee-schedule-v1",
+    "key": [
+      "condition_id",
+      "effective_from",
+      "effective_to",
+      "protocol_version",
+      "liquidity_role"
+    ],
+    "source_priority": [
+      "historically_observed_market_or_order_fee_parameters",
+      "official_protocol_and_sdk_records",
+      "official_dated_rollout_rule"
+    ],
+    "current_market_parameters_may_not_be_backfilled_across_history": true,
+    "category_only_imputation_allowed": false,
+    "unknown_schedule_fallback": null,
+    "unresolved_fill_policy": "reject_real_fee_qualification",
+    "manifest_and_receipts_required": true
+  },
+  "implementation": {
+    "replace_fee_bps_with_fee_schedule_resolver": true,
+    "preserve_fee_asset_and_quantity_effects": true,
+    "record_per_fill_protocol_schedule_role_fee_asset_and_source": true,
+    "cost_stress_scales_authoritative_fee_rates": true,
+    "old_flat_bps_stress_allowed": false,
+    "exact_pause_and_resume_required": true
+  },
+  "required_regression_vectors": [
+    "v2_crypto_100_shares_at_0_50_costs_1_75",
+    "v2_finance_100_shares_at_0_50_costs_1_00",
+    "v2_general_100_shares_at_0_50_costs_1_25",
+    "v2_taker_fee_is_symmetric_at_0_30_and_0_70",
+    "v2_maker_fee_is_zero",
+    "v2_geopolitics_fee_is_zero",
+    "v2_rounds_to_five_decimals_and_subminimum_to_zero",
+    "v1_buy_fee_reduces_received_shares",
+    "v1_sell_fee_reduces_received_collateral",
+    "protocol_cutover_selects_v1_before_and_v2_after",
+    "march_6_crypto_rule_uses_market_creation_time",
+    "unresolved_schedule_fails_closed"
+  ],
+  "rerun_protocol": {
+    "policies": [
+      "H012-v2",
+      "H014-epoch0",
+      "H015-selected"
+    ],
+    "rebuild_fee_dependent_training_targets": true,
+    "retrain_fee_dependent_policies": true,
+    "replay_cost_multipliers": [
+      1.0,
+      1.5,
+      2.0
+    ],
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "acceptance": {
+    "every_fill_has_qualified_schedule": true,
+    "official_examples_and_contract_vectors_pass": true,
+    "per_fill_fee_audit_reconciles_to_portfolio_cash_and_positions": true,
+    "old_proxy_results_remain_immutable_and_explicitly_superseded": true,
+    "fresh_real_fee_baseline_results_committed_before_next_model_claim": true
+  },
+  "evidence_boundary": "H016 qualifies simulated platform fees only. Trade-tape liquidity remains a proxy for historical orderbook depth, queue position and executable forward profit."
+}
