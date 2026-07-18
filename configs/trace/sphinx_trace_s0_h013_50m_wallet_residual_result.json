@@ -1,0 +1,51 @@
+{
+  "id": "sphinx-trace-s0-h013-50m-wallet-residual-qualified-seed17-result",
+  "version": "1.0.0-result",
+  "status": "complete_not_promoted",
+  "research_id": "SPH-T-H013",
+  "completed_at": "2026-07-18T01:52:09.690684Z",
+  "candidate_id": "50m",
+  "variant_id": "h013_uncapped_wallet_flow_residual",
+  "seed": 17,
+  "parameters": 50248198,
+  "source": {
+    "source_digest": "ee5401aff84ae155699dd6e1bff00450b45a88463e0bce1f6dee239558ca0634",
+    "result_sha256": "b6bf2e5e64b00f4ff10b178749e41e84a8b6c52b0cd16c5aff1863732abcd0c5",
+    "calibration_sha256": "5ee9a71d23ccc982795309cc1b9338e72c66f5fb847c9e6b64f422f879ec14b5"
+  },
+  "training": {
+    "initial_anchor_validation_log_loss": 0.45323890634729297,
+    "best_epoch": 1,
+    "epochs_completed": 5,
+    "elapsed_seconds": 1617.3822389999987,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "validation": {
+    "rows": 809614,
+    "calibrated_log_loss": 0.4532316879419986,
+    "market_log_loss": 0.4532389063476882,
+    "calibrated_delta_vs_market": -0.000007218405689624063,
+    "component_mean_delta": 0.000017006927198751147,
+    "component_bootstrap_95pct": [
+      -0.0000003124382017505269,
+      0.000034065984634458725
+    ],
+    "components": 106244
+  },
+  "calibration": {
+    "rows": 578176,
+    "calibrated_log_loss": 0.4514010243045413,
+    "market_log_loss": 0.451444120225557,
+    "calibrated_delta_vs_market": -0.000043095921015701144,
+    "component_mean_delta": -0.00007496964007308798,
+    "component_bootstrap_95pct": [
+      -0.0000931776865383675,
+      -0.00005636651501797211
+    ],
+    "components": 91840
+  },
+  "decision": "do_not_promote_validation_component_interval_crosses_zero_continue_causal_wallet_performance_residual",
+  "promotion_allowed": false,
+  "evidence_boundary": "Tiny held-out development calibration lift only; no stable two-block outcome promotion, simulator profit, test or paper-forward claim."
+}

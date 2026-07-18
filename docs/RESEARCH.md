@@ -1044,6 +1044,23 @@ configs, source receipts, implementation files, optimizer, scheduler and RNG
 state; the lightweight progress receipt includes epoch history and supports the
 same `PAUSE` resume boundary as H011.
 
+**First qualified residual result.** The 50,248,198-parameter uncapped-wallet-
+flow residual selected epoch 1 after five epochs and 1,617.38 seconds. Its raw
+validation log loss improved the anchor by only `0.00000686`; raw calibration
+was worse by `0.00003193`. Validation-fitted Platt scaling produced row-weighted
+deltas of `-0.00000722` on validation and `-0.00004310` on calibration. The
+equal-component view is deliberately stricter: validation mean delta was
+`+0.00001701`, 95% interval [`-0.00000031`, `+0.00003407`], while calibration
+was `-0.00007497`, interval [`-0.00009318`, `-0.00005637`]. Thus calibration
+contains a statistically stable but extremely small incremental signal, whereas
+validation does not meet the registered upper-bound-below-zero gate. The model
+is not promoted. The exact market anchor successfully prevented the severe
+degradation seen in direct wallet relearning.
+
+The matched causal-resolved-wallet-performance residual started immediately.
+It adds only performance updates that became public after registered resolution
+time and keeps actor and graph channels masked.
+
 **Acceptance.** Both validation and calibration must have component-bootstrap
 upper 95% log-loss delta below zero. Test remains closed. Passing outcome lift
 does not imply profitable selection; H010/H012 remain required.
