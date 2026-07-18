@@ -1481,7 +1481,7 @@ replication test are now mandatory in H016. H015 is rejected for promotion.
 
 ## SPH-T-H016: Protocol-Exact Polymarket Fees
 
-**Status:** `registered; official rules audited; implementation pending`
+**Status:** `registered; deterministic reductions repaired; fee implementation pending`
 
 **Registered:** 2026-07-18, while the pre-registered H015 fresh replay was still
 running and before its result was observed. The replay is allowed to finish only
@@ -1542,6 +1542,15 @@ V1 refund and bind the resulting schedule evidence to the liquidity ID. As a
 proof vector, transaction `0x1907...c63d3` on 2026-05-15 contains a V2 taker BUY
 of 150 shares at 0.51 and an exact 2.62395 collateral fee; maker events charge
 zero. This reconciles exactly as `150 * 0.07 * 0.51 * 0.49 = 2.62395`.
+
+**Determinism repair.** Every reservation reduction now sorts order IDs before
+Decimal accumulation. Daily full-position validation, checkpoint serialization
+and resume-time aggregate reconstruction also use canonical token/order order.
+The regression suite forces identical positive Decimal reservations through two
+opposite set iteration orders at a 28-digit precision boundary that previously
+produced different available cash; both now return exactly the same state. All
+159 tests pass. Fresh-process full replay identity remains an H016 acceptance
+gate and will be checked together with the real-fee baselines.
 
 **Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
 rounding, creation-time rollout rules and the cutover boundary must pass

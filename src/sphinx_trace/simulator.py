@@ -264,14 +264,15 @@ class ReplaySimulator:
         return self._peak_equity_usd
 
     def _validate_portfolio_aggregates(self) -> None:
+        positions = tuple(self.positions[token_id] for token_id in sorted(self.positions))
         cost_basis = sum(
-            (position.cost_basis_usd for position in self.positions.values()), ZERO
+            (position.cost_basis_usd for position in positions), ZERO
         )
         exposure = sum(
             (
                 position.shares
                 * self.last_marks.get(position.token_id, position.average_price)
-                for position in self.positions.values()
+                for position in positions
             ),
             ZERO,
         )
@@ -284,7 +285,7 @@ class ReplaySimulator:
             for condition_id, token_ids in self._position_token_ids_by_condition.items()
         }
         expected_index: dict[str, set[str]] = {}
-        for position in self.positions.values():
+        for position in positions:
             expected_index.setdefault(position.condition_id, set()).add(position.token_id)
         mismatches: list[str] = []
         if _materially_different(self._total_cost_basis_usd, cost_basis):
@@ -312,7 +313,7 @@ class ReplaySimulator:
         return sum(
             (
                 order.remaining_shares * order.limit_price * (ONE + self.rules.fee_rate)
-                for order_id in self._open_order_ids
+                for order_id in sorted(self._open_order_ids)
                 if (order := self.orders[order_id]).side == OrderSide.BUY
             ),
             ZERO,
@@ -322,7 +323,7 @@ class ReplaySimulator:
         return sum(
             (
                 order.remaining_shares
-                for order_id in self._open_order_ids_by_token.get(token_id, ())
+                for order_id in sorted(self._open_order_ids_by_token.get(token_id, ()))
                 if (order := self.orders[order_id]).side == OrderSide.SELL
             ),
             ZERO,
@@ -745,8 +746,12 @@ class ReplaySimulator:
     def snapshot(self) -> dict[str, Any]:
         self._validate_portfolio_aggregates()
         rules = _decimal_dict(asdict(self.rules))
-        orders = [_decimal_dict(asdict(order)) for order in self.orders.values()]
-        positions = [_decimal_dict(asdict(position)) for position in self.positions.values()]
+        orders = [
+            _decimal_dict(asdict(self.orders[order_id])) for order_id in sorted(self.orders)
+        ]
+        positions = [
+            _decimal_dict(asdict(self.positions[token_id])) for token_id in sorted(self.positions)
+        ]
         fills = [_decimal_dict(asdict(fill)) for fill in self.fills]
         predictions = [_decimal_dict(asdict(record)) for record in self.predictions]
         return {
@@ -851,13 +856,19 @@ class ReplaySimulator:
             (int(timestamp), decimal(value)) for timestamp, value in payload["equity_curve"]
         ]
         simulator._total_cost_basis_usd = sum(
-            (position.cost_basis_usd for position in simulator.positions.values()), ZERO
+            (
+                simulator.positions[token_id].cost_basis_usd
+                for token_id in sorted(simulator.positions)
+            ),
+            ZERO,
         )
         simulator._marked_exposure_usd = sum(
             (
-                position.shares
-                * simulator.last_marks.get(position.token_id, position.average_price)
-                for position in simulator.positions.values()
+                simulator.positions[token_id].shares
+                * simulator.last_marks.get(
+                    token_id, simulator.positions[token_id].average_price
+                )
+                for token_id in sorted(simulator.positions)
             ),
             ZERO,
         )
