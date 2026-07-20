@@ -33,6 +33,36 @@ def _models() -> SphinxTraceS0H012:
     return SphinxTraceS0H012(backbone, policy_config).eval()
 
 
+def _residual_model() -> SphinxTraceS0H012:
+    base = _models()
+    policy_config = {
+        "architecture": {
+            "portfolio_encoder_width": 256,
+            "prediction_memory_encoder_width": 256,
+            "fusion_latents": 4,
+            "fusion_layers": 4,
+            "residual_policy_head": {
+                "enabled": True,
+                "hidden_width": 16,
+                "layers": 2,
+                "dropout": 0.0,
+                "zero_initialize_action_output": True,
+            },
+            "protocol_action_value_head": {
+                "enabled": True,
+                "hidden_width": 16,
+                "layers": 2,
+                "dropout": 0.0,
+            },
+        }
+    }
+    residual = SphinxTraceS0H012(base.outcome_backbone, policy_config).eval()
+    missing, unexpected = residual.load_state_dict(base.state_dict(), strict=False)
+    assert not unexpected
+    assert missing
+    return residual
+
+
 def test_h012_fuses_market_portfolio_and_prediction_memory() -> None:
     model = _models()
     physical = torch.ones((2, H012_ACTION_COUNT), dtype=torch.bool)
@@ -53,6 +83,27 @@ def test_h012_fuses_market_portfolio_and_prediction_memory() -> None:
     assert output["debug_portfolio_token"].shape == (2, 64)
     assert output["debug_prediction_memory_token"].shape == (2, 64)
     assert output["debug_policy_attention"].shape == (2, 4, 7, 7)
+
+
+def test_h018_zero_residual_preserves_base_action_and_separates_values() -> None:
+    model = _residual_model()
+    batch = 2
+    physical = torch.ones(batch, H012_ACTION_COUNT, dtype=torch.bool)
+    physical[0, 0] = False
+    with torch.inference_mode():
+        output = model.forward_from_market_encoding(
+            torch.randn(batch, model.width),
+            torch.randn(batch),
+            torch.randn(batch),
+            torch.randn(batch, 9),
+            torch.randn(batch, 7),
+            torch.full((batch,), 2, dtype=torch.long),
+            physical_action_mask=physical,
+        )
+    assert output["protocol_action_values"].shape == (batch, 3)
+    assert output["action_residual_logits"].shape == (batch, H012_ACTION_COUNT)
+    assert torch.equal(output["action_logits"], output["base_action_logits"])
+    assert output["action_logits"][0, 0] == torch.finfo(torch.float32).min
 
 
 def test_h012_action_value_head_starts_at_safe_skip_anchor() -> None:

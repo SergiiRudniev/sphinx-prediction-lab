@@ -83,10 +83,13 @@ class StateBatch:
     labels: NDArray[np.float32]
     baselines: NDArray[np.float32]
     market_ids: NDArray[np.int64]
+    component_ids: NDArray[np.int64]
+    week_ids: NDArray[np.int64] | None
     behavior_policy_codes: NDArray[np.uint8]
     behavior_action_ids: NDArray[np.int64]
     realized_action_values: NDArray[np.float32]
     execution_fractions: NDArray[np.float32]
+    realized_pnl_usd: NDArray[np.float64] | None
     winning_payout_multipliers: NDArray[np.float32] | None
     reference_action_values: NDArray[np.float32] | None
 
@@ -249,6 +252,9 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         shard.state / "encoding_offsets.npy", mmap_mode="r", allow_pickle=False
     )
     markets = np.load(shard.state / "market_ids.npy", mmap_mode="r", allow_pickle=False)
+    components = np.load(
+        shard.state / "component_ids.npy", mmap_mode="r", allow_pickle=False
+    )
     behaviors = np.load(
         shard.state / "behavior_policy_codes.npy", mmap_mode="r", allow_pickle=False
     )
@@ -275,6 +281,8 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
     )
     payout_path = shard.state / "winning_payout_multipliers.npy"
     reference_path = shard.state / "reference_action_values.npy"
+    week_path = shard.state / "week_ids.npy"
+    realized_pnl_path = shard.state / "realized_pnl_usd.npy"
     if payout_path.is_file() != reference_path.is_file():
         raise RuntimeError(f"Protocol target arrays are incomplete: {shard.date}")
     payout_multipliers = (
@@ -285,6 +293,16 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
     reference_values = (
         np.load(reference_path, mmap_mode="r", allow_pickle=False)
         if reference_path.is_file()
+        else None
+    )
+    week_ids = (
+        np.load(week_path, mmap_mode="r", allow_pickle=False)
+        if week_path.is_file()
+        else None
+    )
+    realized_pnl = (
+        np.load(realized_pnl_path, mmap_mode="r", allow_pickle=False)
+        if realized_pnl_path.is_file()
         else None
     )
     source_rows = np.load(
@@ -324,10 +342,21 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         labels=np.asarray(labels[selected_rows], dtype=np.float32),
         baselines=np.asarray(baselines[selected_rows], dtype=np.float32),
         market_ids=np.asarray(markets[indices], dtype=np.int64),
+        component_ids=np.asarray(components[indices], dtype=np.int64),
+        week_ids=(
+            None
+            if week_ids is None
+            else np.asarray(week_ids[indices], dtype=np.int64)
+        ),
         behavior_policy_codes=np.asarray(behaviors[indices], dtype=np.uint8),
         behavior_action_ids=np.asarray(actions[indices], dtype=np.int64),
         realized_action_values=np.asarray(values[indices], dtype=np.float32),
         execution_fractions=np.asarray(fractions[indices], dtype=np.float32),
+        realized_pnl_usd=(
+            None
+            if realized_pnl is None
+            else np.asarray(realized_pnl[indices], dtype=np.float64)
+        ),
         winning_payout_multipliers=(
             None
             if payout_multipliers is None
@@ -348,6 +377,7 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         or not bool(np.isin(output.labels, (0.0, 1.0)).all())
         or not bool(np.isfinite(output.baselines).all())
         or not bool(np.isfinite(output.realized_action_values).all())
+        or output.component_ids.shape != (len(indices),)
         or not bool(np.isin(output.behavior_action_ids, (0, 1, 2)).all())
         or (
             output.winning_payout_multipliers is not None
@@ -362,6 +392,20 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
             and (
                 output.reference_action_values.shape != (len(indices), 3)
                 or not bool(np.isfinite(output.reference_action_values).all())
+            )
+        )
+        or (
+            output.week_ids is not None
+            and (
+                output.week_ids.shape != (len(indices),)
+                or bool((output.week_ids < 0).any())
+            )
+        )
+        or (
+            output.realized_pnl_usd is not None
+            and (
+                output.realized_pnl_usd.shape != (len(indices),)
+                or not bool(np.isfinite(output.realized_pnl_usd).all())
             )
         )
     ):
