@@ -106,11 +106,7 @@ class FeeScheduleEvidence:
 
     @property
     def effective_from(self) -> int:
-        return (
-            self.timestamp_unix
-            if self.effective_from_unix is None
-            else self.effective_from_unix
-        )
+        return self.timestamp_unix if self.effective_from_unix is None else self.effective_from_unix
 
     @property
     def effective_to(self) -> int:
@@ -132,9 +128,7 @@ class FeeScheduleEvidence:
     ) -> FeeScheduleEvidence:
         payload = {
             "liquidity_id": liquidity_id,
-            "transaction_hash": (
-                None if transaction_hash is None else transaction_hash.lower()
-            ),
+            "transaction_hash": (None if transaction_hash is None else transaction_hash.lower()),
             "condition_id": condition_id.lower(),
             "timestamp_unix": timestamp_unix,
             "protocol": protocol.value,
@@ -293,6 +287,25 @@ def apply_polymarket_fee(
     )
 
 
+class UnqualifiedFeeScheduleError(KeyError):
+    """Structured fail-closed signal for extending a historical fee corpus."""
+
+    def __init__(
+        self,
+        *,
+        liquidity_id: str,
+        condition_id: str | None,
+        timestamp_unix: int | None,
+    ) -> None:
+        self.liquidity_id = liquidity_id
+        self.condition_id = condition_id
+        self.timestamp_unix = timestamp_unix
+        super().__init__(
+            "Polymarket fee schedule is unqualified: "
+            f"{liquidity_id}@{condition_id}:{timestamp_unix}"
+        )
+
+
 class FeeScheduleBook:
     """Immutable fail-closed lookup from exact events or condition-time intervals."""
 
@@ -313,9 +326,7 @@ class FeeScheduleBook:
             schedule_ids.add(schedule.schedule_id)
             if schedule.liquidity_id is not None:
                 if schedule.liquidity_id in bound:
-                    raise ValueError(
-                        f"Fee schedule liquidity ID repeats: {schedule.liquidity_id}"
-                    )
+                    raise ValueError(f"Fee schedule liquidity ID repeats: {schedule.liquidity_id}")
                 bound[schedule.liquidity_id] = schedule
             by_condition.setdefault(schedule.condition_id, []).append(schedule)
         if not schedule_ids:
@@ -359,9 +370,10 @@ class FeeScheduleBook:
                 None,
             )
         if schedule is None:
-            raise KeyError(
-                "Polymarket fee schedule is unqualified: "
-                f"{liquidity_id}@{condition_id}:{timestamp_unix}"
+            raise UnqualifiedFeeScheduleError(
+                liquidity_id=liquidity_id,
+                condition_id=condition_id,
+                timestamp_unix=timestamp_unix,
             )
         if condition_id is not None and schedule.condition_id != condition_id.lower():
             raise RuntimeError("Fee schedule condition binding changed")
@@ -423,16 +435,14 @@ class FeeScheduleBook:
         if len(schedules) != int(payload.get("rows", -1)):
             raise RuntimeError("H016 fee schedule row count changed")
         proof_path = directory / str(payload.get("receipt_proof_path") or "")
-        if (
-            not proof_path.is_file()
-            or payload.get("receipt_proof_sha256") != sha256_file(proof_path)
+        if not proof_path.is_file() or payload.get("receipt_proof_sha256") != sha256_file(
+            proof_path
         ):
             raise RuntimeError("H016 fee receipt proof contract changed")
         receipt_schedule_ids = {
             schedule.schedule_id
             for schedule in schedules
-            if schedule.source
-            != "official_changelog_pre_2026_01_05_no_platform_taker_fees"
+            if schedule.source != "official_changelog_pre_2026_01_05_no_platform_taker_fees"
         }
         proof_schedule_ids: set[str] = set()
         proof_identities: set[tuple[str, str]] = set()
@@ -466,15 +476,12 @@ class FeeScheduleBook:
         ):
             raise RuntimeError("H016 fee receipt consensus proof coverage changed")
         market_info_path = directory / str(payload.get("market_info_path") or "")
-        if (
-            not market_info_path.is_file()
-            or payload.get("market_info_sha256") != sha256_file(market_info_path)
+        if not market_info_path.is_file() or payload.get("market_info_sha256") != sha256_file(
+            market_info_path
         ):
             raise RuntimeError("H016 fee market-info proof contract changed")
         expected_market_info_conditions = {
-            schedule.condition_id
-            for schedule in schedules
-            if "clob_market_info" in schedule.source
+            schedule.condition_id for schedule in schedules if "clob_market_info" in schedule.source
         }
         market_info_conditions: set[str] = set()
         market_info_rows = 0
@@ -494,9 +501,7 @@ class FeeScheduleBook:
                 else ""
             )
             market_condition_id = (
-                str(market_payload.get("c", "")).lower()
-                if isinstance(market_payload, dict)
-                else ""
+                str(market_payload.get("c", "")).lower() if isinstance(market_payload, dict) else ""
             )
             if (
                 proof.get("record_type") != "h016_fee_market_info_proof"
@@ -512,15 +517,12 @@ class FeeScheduleBook:
         ):
             raise RuntimeError("H016 fee market-info proof coverage changed")
         market_trade_path = directory / str(payload.get("market_trade_path") or "")
-        if (
-            not market_trade_path.is_file()
-            or payload.get("market_trade_sha256") != sha256_file(market_trade_path)
+        if not market_trade_path.is_file() or payload.get("market_trade_sha256") != sha256_file(
+            market_trade_path
         ):
             raise RuntimeError("H016 fee market-trade proof contract changed")
         expected_market_trade_schedules = {
-            schedule.schedule_id
-            for schedule in schedules
-            if "market_wide_trade" in schedule.source
+            schedule.schedule_id for schedule in schedules if "market_wide_trade" in schedule.source
         }
         market_trade_schedules: set[str] = set()
         market_trade_rows = 0
