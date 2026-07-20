@@ -127,7 +127,7 @@ def learned_call_loss_veto_loss(
             / called_weights.sum().clamp_min(1e-8)
         )
     else:
-        veto_action_loss = logits.sum() * 0.0
+        veto_action_loss = residual_logits.sum() * 0.0
 
     safe_protocol_values = torch.where(
         available, protocol_values, reference_action_values.float()

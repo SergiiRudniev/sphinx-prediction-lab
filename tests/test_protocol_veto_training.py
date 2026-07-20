@@ -71,3 +71,24 @@ def test_h019_requires_separate_protocol_value_head() -> None:
             torch.zeros(4),
             _config(),
         )
+
+
+def test_h019_no_base_call_batch_has_finite_zero_veto_loss() -> None:
+    output = _output()
+    output["base_action_logits"] = torch.tensor(
+        [[-0.02, -0.03, 0.01]] * 4
+    )
+    output["action_logits"] = (
+        output["base_action_logits"] + output["action_residual_logits"]
+    )
+    loss, metrics = learned_call_loss_veto_loss(
+        output,
+        torch.tensor([1.0, 0.0, 1.0, 0.0]),
+        torch.full((4, 2), 2.0),
+        torch.zeros(4, 3),
+        torch.full((4,), 2, dtype=torch.long),
+        torch.zeros(4),
+        _config(),
+    )
+    assert torch.isfinite(loss)
+    assert metrics["veto_action_loss"] == pytest.approx(0.0)
