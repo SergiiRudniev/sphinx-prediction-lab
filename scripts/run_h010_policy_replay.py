@@ -37,8 +37,12 @@ from sphinx_trace.replay_h010 import H010ReplayAdapter, SelectiveAction
 from sphinx_trace.simulator import ReplaySimulator, SimulationRules
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SIMULATOR_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_simulator_h010_v1.json"
-DEFAULT_POLICY_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h012_selective_policy_v1.json"
+DEFAULT_SIMULATOR_CONFIG = (
+    ROOT / "configs" / "trace" / "sphinx_trace_simulator_h010_v1.json"
+)
+DEFAULT_POLICY_CONFIG = (
+    ROOT / "configs" / "trace" / "sphinx_trace_s0_h012_selective_policy_v1.json"
+)
 DEFAULT_MODEL_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_model_v1.json"
 DEFAULT_RESIDUAL_CONFIG = (
     ROOT / "configs" / "trace" / "sphinx_trace_s0_h013_market_residual_v1.json"
@@ -56,6 +60,8 @@ IMPLEMENTATION_PATHS = (
     ROOT / "src" / "sphinx_trace" / "model_h011.py",
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
     ROOT / "src" / "sphinx_trace" / "model_h013.py",
+    ROOT / "src" / "sphinx_trace" / "model_h021.py",
+    ROOT / "src" / "sphinx_trace" / "protocol_tail_pack.py",
     ROOT / "src" / "sphinx_corpus" / "io.py",
 )
 
@@ -110,7 +116,8 @@ def _rules(
         adverse_price_ticks=max(
             0,
             math.ceil(
-                float(proxy["adverse_price_ticks"]) * (1.0 if protocol_fees else cost_multiplier)
+                float(proxy["adverse_price_ticks"])
+                * (1.0 if protocol_fees else cost_multiplier)
             ),
         ),
         tick_size=Decimal(str(proxy["tick_size"])),
@@ -119,7 +126,9 @@ def _rules(
             if protocol_fees
             else Decimal(str(float(proxy["fee_bps"]) * cost_multiplier))
         ),
-        fee_rate_multiplier=Decimal(str(cost_multiplier)) if protocol_fees else Decimal("1"),
+        fee_rate_multiplier=Decimal(str(cost_multiplier))
+        if protocol_fees
+        else Decimal("1"),
         opposing_side_required=bool(proxy["opposing_side_required"]),
         retain_processed_liquidity_ids=False,
         retain_prediction_records=False,
@@ -186,7 +195,7 @@ def _decision_record(
     outcomes: tuple[str, str],
 ) -> dict[str, Any]:
     call = inference.call
-    return decision_audit_record(
+    record = decision_audit_record(
         decision_id=call.decision_id,
         timestamp_unix=call.timestamp_unix,
         condition_id=call.condition_id,
@@ -205,6 +214,20 @@ def _decision_record(
         action_logits=inference.action_logits,
         outcome_labels=outcomes,
     )
+    if inference.execution_context is not None:
+        record["h021"] = {
+            "execution_context": list(inference.execution_context),
+            "base_action_logits": list(inference.base_action_logits or ()),
+            "strict_veto_logit": inference.strict_veto_logit,
+            "calibrated_outcome_probabilities": list(
+                inference.calibrated_outcome_probabilities or ()
+            ),
+            "execution_break_even_probabilities": list(
+                inference.execution_break_even_probabilities or ()
+            ),
+            "no_upside_veto": inference.no_upside_veto,
+        }
+    return record
 
 
 def _week_metrics(
@@ -252,7 +275,9 @@ def replay(
         raise ValueError("H010 replay supports validation or calibration only")
     simulator_config = load_json(simulator_config_path)
     fee_schedule_book = (
-        None if fee_schedule_dir is None else FeeScheduleBook.from_artifact(fee_schedule_dir)
+        None
+        if fee_schedule_dir is None
+        else FeeScheduleBook.from_artifact(fee_schedule_dir)
     )
 
     def record_fee_miss(error: UnqualifiedFeeScheduleError) -> None:
@@ -266,7 +291,9 @@ def replay(
                 "condition_id": error.condition_id,
                 "timestamp_unix": error.timestamp_unix,
                 "fee_schedule_manifest_sha256": (
-                    None if fee_schedule_book is None else fee_schedule_book.manifest_sha256
+                    None
+                    if fee_schedule_book is None
+                    else fee_schedule_book.manifest_sha256
                 ),
                 "test_rows_consumed": 0,
                 "test_labels_opened": False,
@@ -288,7 +315,9 @@ def replay(
     decisions, shards = load_policy_decisions(pack_dir, (split,))
     if not decisions:
         raise RuntimeError("H010 replay found no policy decisions")
-    decision_conditions = {ref.condition_id for refs in decisions.values() for ref in refs}
+    decision_conditions = {
+        ref.condition_id for refs in decisions.values() for ref in refs
+    }
     if not decision_conditions <= catalog.contracts.keys():
         raise RuntimeError("H010 policy decisions escape the replay catalog")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -386,7 +415,9 @@ def replay(
         )
     resolutions = catalog.resolutions
 
-    def resolve_until(timestamp: int, inclusive: bool, records: list[dict[str, Any]]) -> None:
+    def resolve_until(
+        timestamp: int, inclusive: bool, records: list[dict[str, Any]]
+    ) -> None:
         nonlocal resolution_position, correct_calls, resolved_calls
         while resolution_position < len(resolutions):
             row = resolutions[resolution_position]
@@ -395,7 +426,9 @@ def replay(
             ):
                 break
             pnl = adapter.resolve(row.condition_id, row.timestamp_unix, row.payouts)
-            total_condition_pnl = adapter.simulator.pop_condition_realized_pnl(row.condition_id)
+            total_condition_pnl = adapter.simulator.pop_condition_realized_pnl(
+                row.condition_id
+            )
             records.append(
                 _resolution_record(
                     row.condition_id,
@@ -420,7 +453,9 @@ def replay(
             for path in stream_paths[:start_ordinal]
         }
         decisions = {
-            evidence: tuple(ref for ref in refs if ref.feature_date not in processed_dates)
+            evidence: tuple(
+                ref for ref in refs if ref.feature_date not in processed_dates
+            )
             for evidence, refs in decisions.items()
             if any(ref.feature_date not in processed_dates for ref in refs)
         }
@@ -444,15 +479,19 @@ def replay(
             except UnqualifiedFeeScheduleError as error:
                 record_fee_miss(error)
                 raise
-            records.extend(_fill_record(fill) for fill in adapter.simulator.fills[fills_before:])
+            records.extend(
+                _fill_record(fill) for fill in adapter.simulator.fills[fills_before:]
+            )
             refs = decisions.pop(str(payload["trade_id"]), ())
             for ref in refs:
                 if (
                     ref.timestamp_unix != timestamp
                     or ref.condition_id != str(payload["condition_id"]).lower()
                 ):
-                    raise RuntimeError("H010 evidence trade no longer matches H012 decision")
-                inference = runtime.infer(ref, adapter)
+                    raise RuntimeError(
+                        "H010 evidence trade no longer matches H012 decision"
+                    )
+                inference = runtime.infer(ref, adapter, reference_prices)
                 contract = catalog.contracts[ref.condition_id]
                 records.append(_decision_record(inference, contract.outcomes))
                 try:
@@ -510,7 +549,9 @@ def replay(
     resolve_until(2**63 - 1, True, final_records)
     if final_records:
         final_date = (
-            datetime.fromtimestamp(final_records[-1]["timestamp_unix"], tz=UTC).date().isoformat()
+            datetime.fromtimestamp(final_records[-1]["timestamp_unix"], tz=UTC)
+            .date()
+            .isoformat()
         )
         write_audit_shard(
             output_dir,
@@ -586,7 +627,9 @@ def replay(
         "weeks": weeks,
         "weekly_profit": {
             "weeks": len(weekly_profits),
-            "mean_usd": sum(weekly_profits) / len(weekly_profits) if weekly_profits else 0.0,
+            "mean_usd": sum(weekly_profits) / len(weekly_profits)
+            if weekly_profits
+            else 0.0,
             "positive_fraction": (
                 sum(value > 0.0 for value in weekly_profits) / len(weekly_profits)
                 if weekly_profits
@@ -616,7 +659,9 @@ def replay(
 
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser()
-    value.add_argument("--simulator-config", type=Path, default=DEFAULT_SIMULATOR_CONFIG)
+    value.add_argument(
+        "--simulator-config", type=Path, default=DEFAULT_SIMULATOR_CONFIG
+    )
     value.add_argument("--policy-config", type=Path, default=DEFAULT_POLICY_CONFIG)
     value.add_argument("--model-config", type=Path, default=DEFAULT_MODEL_CONFIG)
     value.add_argument("--residual-config", type=Path, default=DEFAULT_RESIDUAL_CONFIG)
@@ -645,10 +690,14 @@ def main() -> None:
         args.policy_dir.resolve(),
         args.output_dir.resolve(),
         encoding_cache_dir=(
-            args.encoding_cache_dir.resolve() if args.encoding_cache_dir is not None else None
+            args.encoding_cache_dir.resolve()
+            if args.encoding_cache_dir is not None
+            else None
         ),
         fee_schedule_dir=(
-            args.fee_schedule_dir.resolve() if args.fee_schedule_dir is not None else None
+            args.fee_schedule_dir.resolve()
+            if args.fee_schedule_dir is not None
+            else None
         ),
         split=args.split,
         cost_multiplier=args.cost_multiplier,

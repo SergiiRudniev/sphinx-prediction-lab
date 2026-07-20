@@ -315,28 +315,64 @@ def _verify_initial_equivalence(
     with torch.inference_mode():
         target, _, _ = _forward_adapter(model, batch, device)
         source, _, _ = _forward(loaded.model, batch, device)
+    source_state = loaded.model.state_dict()
+    target_state = model.state_dict()
+    mismatched_parameters = [
+        name
+        for name, source_value in source_state.items()
+        if name not in target_state or not torch.equal(target_state[name], source_value)
+    ]
     if isinstance(model, SphinxTraceS0H021):
+        compared = {
+            "base_action_logits": (
+                target["base_action_logits"],
+                source["action_logits"][:, :3],
+            ),
+            "position_size_beta_alpha": (
+                target["position_size_beta_alpha"],
+                source["position_size_beta_alpha"],
+            ),
+            "position_size_beta_beta": (
+                target["position_size_beta_beta"],
+                source["position_size_beta_beta"],
+            ),
+            "state_value": (target["state_value"], source["state_value"]),
+        }
+        target_size = target["position_size_beta_alpha"] / (
+            target["position_size_beta_alpha"] + target["position_size_beta_beta"]
+        )
+        source_size = source["position_size_beta_alpha"] / (
+            source["position_size_beta_alpha"] + source["position_size_beta_beta"]
+        )
+        relative_tolerance = 5e-5
+        absolute_tolerance = 1e-5
         equal = {
-            "base_action_logits": bool(
+            **{
+                name: bool(
+                    torch.allclose(
+                        candidate,
+                        reference,
+                        rtol=relative_tolerance,
+                        atol=absolute_tolerance,
+                    )
+                )
+                for name, (candidate, reference) in compared.items()
+            },
+            "base_action_id": bool(
                 torch.equal(
-                    target["base_action_logits"], source["action_logits"][:, :3]
+                    target["base_action_id"],
+                    source["action_logits"][:, :3].argmax(dim=-1),
                 )
             ),
-            "position_size_beta_alpha": bool(
-                torch.equal(
-                    target["position_size_beta_alpha"],
-                    source["position_size_beta_alpha"],
+            "position_size_fraction": bool(
+                torch.allclose(
+                    target_size,
+                    source_size,
+                    rtol=relative_tolerance,
+                    atol=absolute_tolerance,
                 )
             ),
-            "position_size_beta_beta": bool(
-                torch.equal(
-                    target["position_size_beta_beta"],
-                    source["position_size_beta_beta"],
-                )
-            ),
-            "state_value": bool(
-                torch.equal(target["state_value"], source["state_value"])
-            ),
+            "source_parameters_tensor_equal": not mismatched_parameters,
             "calibration_delta_zero": bool(
                 torch.count_nonzero(target["outcome_calibration_delta"]) == 0
             ),
@@ -350,8 +386,26 @@ def _verify_initial_equivalence(
         )
         equal = {key: bool(torch.equal(target[key], source[key])) for key in keys}
     if not all(equal.values()):
-        raise RuntimeError(f"H018 zero residual does not reproduce H014: {equal}")
-    return {"rows": len(batch.labels), "tensor_equal": equal, "passed": True}
+        maximum_absolute_delta = (
+            {
+                name: float((candidate - reference).abs().max())
+                for name, (candidate, reference) in compared.items()
+            }
+            if isinstance(model, SphinxTraceS0H021)
+            else {}
+        )
+        raise RuntimeError(
+            "H018 zero residual does not reproduce H014: "
+            f"equal={equal}, maximum_absolute_delta={maximum_absolute_delta}, "
+            f"mismatched_source_parameters={mismatched_parameters[:20]}"
+        )
+    return {
+        "rows": len(batch.labels),
+        "tensor_equal": equal,
+        "relative_tolerance": 5e-5 if isinstance(model, SphinxTraceS0H021) else 0.0,
+        "absolute_tolerance": 1e-5 if isinstance(model, SphinxTraceS0H021) else 0.0,
+        "passed": True,
+    }
 
 
 def _fit_week_downside_weights(

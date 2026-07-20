@@ -12,6 +12,7 @@ from typing import Any
 
 from sphinx_trace.model_h012 import H012_ACTIONS
 from sphinx_trace.polymarket_fees import FeeScheduleBook
+from sphinx_trace.protocol_tail_pack import winning_payout_per_total_cost
 from sphinx_trace.simulator import (
     ONE,
     ZERO,
@@ -34,7 +35,9 @@ class SelectiveAction(StrEnum):
     CLOSE = "CLOSE"
 
 
-if tuple(action.value for action in SelectiveAction) != H012_ACTIONS:  # pragma: no cover
+if (
+    tuple(action.value for action in SelectiveAction) != H012_ACTIONS
+):  # pragma: no cover
     raise RuntimeError("H010 replay actions must match the H012 model contract")
 
 
@@ -55,7 +58,9 @@ class BinaryMarketContract:
         try:
             return self.token_ids.index(token_id)
         except ValueError as error:
-            raise ValueError(f"Token is not part of market {self.condition_id}") from error
+            raise ValueError(
+                f"Token is not part of market {self.condition_id}"
+            ) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,9 +156,13 @@ class H010ReplayAdapter:
         orders: list[SimulatedOrder] = []
         for call in calls:
             if call.evidence_trade_id != trade_id:
-                raise ValueError("Policy call does not match the current evidence trade")
+                raise ValueError(
+                    "Policy call does not match the current evidence trade"
+                )
             if call.timestamp_unix != timestamp or call.condition_id != condition_id:
-                raise ValueError("Policy call time or market does not match its evidence")
+                raise ValueError(
+                    "Policy call time or market does not match its evidence"
+                )
             orders.extend(self.apply_call(call, reference_prices))
         return orders
 
@@ -242,16 +251,66 @@ class H010ReplayAdapter:
         }:
             assert token_id is not None
             self._cancel_pending(call.condition_id, call.timestamp_unix)
-            order = self._buy_to_fraction(call, contract, token_id, reference_prices[token_id])
+            order = self._buy_to_fraction(
+                call, contract, token_id, reference_prices[token_id]
+            )
             return [] if order is None else [order]
         if call.action == SelectiveAction.UPDATE:
             self._cancel_pending(call.condition_id, call.timestamp_unix)
             if token_id is None:
                 return []
-            return self._update_position(call, contract, token_id, reference_prices[token_id])
+            return self._update_position(
+                call, contract, token_id, reference_prices[token_id]
+            )
         if call.action in {SelectiveAction.REDUCE, SelectiveAction.CLOSE}:
             return self._sell_positions(call, contract, reference_prices)
         raise RuntimeError(f"Unsupported H012 action: {call.action}")
+
+    def candidate_execution_context(
+        self,
+        condition_id: str,
+        timestamp_unix: int,
+        evidence_trade_id: str,
+        reference_prices: dict[str, Decimal],
+        *,
+        reference_total_cost_usd: Decimal = Decimal("500"),
+    ) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+        """Quote both causal BUY limits and winning payouts used by H021."""
+
+        contract = self.contracts[condition_id]
+        if reference_total_cost_usd <= ZERO:
+            raise ValueError("H021 payout reference cost must be positive")
+        adverse = (
+            self.simulator.rules.tick_size * self.simulator.rules.adverse_price_ticks
+        )
+        prices = tuple(
+            min(ONE, reference_prices[token_id] + adverse)
+            for token_id in contract.token_ids
+        )
+        if any(price <= ZERO for price in prices):
+            raise ValueError("H021 candidate entry prices must be positive")
+        schedule_book = self.simulator.fee_schedule_book
+        if schedule_book is None:
+            payouts = tuple(
+                ONE / (price * (ONE + self.simulator.rules.fee_rate))
+                for price in prices
+            )
+        else:
+            schedule = schedule_book.schedule_for(
+                evidence_trade_id,
+                condition_id=condition_id,
+                timestamp_unix=timestamp_unix,
+            )
+            payouts = tuple(
+                winning_payout_per_total_cost(
+                    schedule,
+                    entry_price=price,
+                    total_cost_usd=reference_total_cost_usd,
+                    rate_multiplier=self.simulator.rules.fee_rate_multiplier,
+                )
+                for price in prices
+            )
+        return prices[0], prices[1], payouts[0], payouts[1]
 
     def _selected_token(
         self,
@@ -266,7 +325,11 @@ class H010ReplayAdapter:
         if previous is not None and previous.token_id in contract.token_ids:
             return previous.token_id
         positions = self._condition_positions(contract.condition_id)
-        return max(positions, key=lambda row: row.cost_basis_usd).token_id if positions else None
+        return (
+            max(positions, key=lambda row: row.cost_basis_usd).token_id
+            if positions
+            else None
+        )
 
     def _buy_to_fraction(
         self,
@@ -275,7 +338,9 @@ class H010ReplayAdapter:
         token_id: str,
         reference_price: Decimal,
     ) -> SimulatedOrder | None:
-        adverse = self.simulator.rules.tick_size * self.simulator.rules.adverse_price_ticks
+        adverse = (
+            self.simulator.rules.tick_size * self.simulator.rules.adverse_price_ticks
+        )
         limit_price = min(ONE, reference_price + adverse)
         if limit_price <= ZERO:
             return None
@@ -340,7 +405,9 @@ class H010ReplayAdapter:
         for position in self._condition_positions(call.condition_id):
             reference = reference_prices.get(
                 position.token_id,
-                self.simulator.last_marks.get(position.token_id, position.average_price),
+                self.simulator.last_marks.get(
+                    position.token_id, position.average_price
+                ),
             )
             order = self._sell_one(call, contract, position, fraction, reference)
             if order is not None:
@@ -358,7 +425,9 @@ class H010ReplayAdapter:
         shares = position.shares * min(ONE, max(ZERO, fraction))
         if shares <= ZERO:
             return None
-        adverse = self.simulator.rules.tick_size * self.simulator.rules.adverse_price_ticks
+        adverse = (
+            self.simulator.rules.tick_size * self.simulator.rules.adverse_price_ticks
+        )
         limit_price = max(ZERO, reference_price - adverse)
         return self.simulator.place_order(
             decision_id=call.decision_id,
@@ -435,7 +504,9 @@ class H010ReplayAdapter:
                 0.0,
             )
         position = (
-            self.simulator.positions.get(memory.token_id) if memory.token_id is not None else None
+            self.simulator.positions.get(memory.token_id)
+            if memory.token_id is not None
+            else None
         )
         equity = self.simulator.equity_usd()
         mark = (
@@ -444,7 +515,9 @@ class H010ReplayAdapter:
             else ZERO
         )
         fraction = (
-            position.cost_basis_usd / equity if position is not None and equity > ZERO else ZERO
+            position.cost_basis_usd / equity
+            if position is not None and equity > ZERO
+            else ZERO
         )
         elapsed = max(0, timestamp_unix - memory.timestamp_unix)
         action_id = H012_ACTIONS.index(memory.action.value)
@@ -533,7 +606,9 @@ class H010ReplayAdapter:
                 size_fraction=decimal(row_value["size_fraction"]),
                 timestamp_unix=int(row_value["timestamp_unix"]),
                 token_id=(
-                    None if row_value.get("token_id") is None else str(row_value["token_id"])
+                    None
+                    if row_value.get("token_id") is None
+                    else str(row_value["token_id"])
                 ),
             )
         adapter.resolved_conditions = {

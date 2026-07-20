@@ -22,6 +22,7 @@ from sphinx_trace.model_h013 import (
     h013_variant_feature_mask,
     h013_variant_group_mask,
 )
+from sphinx_trace.model_h021 import SphinxTraceS0H021
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +63,9 @@ def load_outcome_checkpoint(
         or int(result.get("test_rows_consumed", -1)) != 0
         or result.get("best_model_sha256") != sha256_file(best_path)
     ):
-        raise RuntimeError("H012 requires a valid source-bound closed-test outcome model")
+        raise RuntimeError(
+            "H012 requires a valid source-bound closed-test outcome model"
+        )
     candidate = str(result["candidate_id"])
     variant = str(result["variant_id"])
     direct = SphinxTraceS0H011(model_config, candidate_id=candidate)
@@ -105,9 +108,18 @@ def load_policy_checkpoint(
         or result.get("best_model_sha256") != sha256_file(best_path)
         or result.get("outcome_result_sha256") != sha256_file(outcome_result_path)
     ):
-        raise RuntimeError("H010 replay requires a valid source-bound closed-test policy")
-    outcome = load_outcome_checkpoint(outcome_dir, model_config, residual_config, device)
-    model = SphinxTraceS0H012(outcome.model, policy_config).to(device)
+        raise RuntimeError(
+            "H010 replay requires a valid source-bound closed-test policy"
+        )
+    outcome = load_outcome_checkpoint(
+        outcome_dir, model_config, residual_config, device
+    )
+    model_class = (
+        SphinxTraceS0H021
+        if "strict_veto_head" in policy_config["architecture"]
+        else SphinxTraceS0H012
+    )
+    model = model_class(outcome.model, policy_config).to(device)
     best = torch.load(best_path, map_location="cpu", weights_only=False)
     if best.get("contract_sha256") != result.get("contract_sha256"):
         raise RuntimeError("H012 best checkpoint contract changed")

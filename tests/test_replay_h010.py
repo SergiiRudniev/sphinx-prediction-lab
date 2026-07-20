@@ -68,7 +68,9 @@ def test_replay_applies_call_after_evidence_and_tracks_portfolio_memory() -> Non
             retain_prediction_records=False,
         )
     )
-    adapter = H010ReplayAdapter(simulator, {"condition": _contract()}, source_sha256="cd" * 32)
+    adapter = H010ReplayAdapter(
+        simulator, {"condition": _contract()}, source_sha256="cd" * 32
+    )
     orders = adapter.process_trade(
         _trade("evidence", 100),
         (_call("call", "evidence", 100, SelectiveAction.CALL_OUTCOME_0, "0.10"),),
@@ -110,7 +112,9 @@ def test_replay_applies_call_after_evidence_and_tracks_portfolio_memory() -> Non
         row_ordinal=3,
     )
     assert len(close_orders) == 1
-    adapter.process_trade(_trade("close-fill", 105, "0.50"), shard_ordinal=0, row_ordinal=4)
+    adapter.process_trade(
+        _trade("close-fill", 105, "0.50"), shard_ordinal=0, row_ordinal=4
+    )
     assert adapter.simulator.positions == {}
     assert adapter.simulator.metrics()["net_profit_usd"] == pytest.approx(1.9512195122)
 
@@ -161,3 +165,31 @@ def test_observe_then_infer_boundary_exposes_post_trade_state() -> None:
     assert portfolio[0:2] == (1.0, 1.0)
     assert memory[1][0] == pytest.approx(0.5)
     assert len(orders) == 1
+
+
+def test_h021_candidate_execution_context_uses_executable_limits() -> None:
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(
+                adverse_price_ticks=1,
+                tick_size=Decimal("0.01"),
+                fee_bps=Decimal("0"),
+            )
+        ),
+        {"condition": _contract()},
+        source_sha256="ab" * 32,
+    )
+
+    context = adapter.candidate_execution_context(
+        "condition",
+        100,
+        "evidence",
+        {"yes-token": Decimal("0.99"), "no-token": Decimal("0.01")},
+    )
+
+    assert context == (
+        Decimal("1.00"),
+        Decimal("0.02"),
+        Decimal("1"),
+        Decimal("5E+1"),
+    )

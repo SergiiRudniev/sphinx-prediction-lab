@@ -1,0 +1,54 @@
+{
+  "id": "sphinx-trace-s0-h021-seed17-training-result",
+  "version": "1.0.0-partial-result",
+  "status": "seed17_variants_complete_exact_replay_required",
+  "research_id": "SPH-T-H021",
+  "completed_at": "2026-07-20T18:37:33Z",
+  "parameters": 65854783,
+  "trainable_parameters": 1271087,
+  "source_parameters_tensor_equal": true,
+  "source_action_and_size_equivalence_passed": true,
+  "variants": {
+    "economic_only": {
+      "best_epoch": -1,
+      "trained_epochs": 5,
+      "best_selection_equal_market_chosen_utility": 1.4553489595817296e-06,
+      "maximum_trained_epoch_selection_utility": 3.40085289898238e-07,
+      "best_selection_calls": 10319,
+      "profitable_base_call_retention_rate": 1.0,
+      "harmful_base_call_veto_rate": 0.793115529473592,
+      "no_upside_veto_rate": 1.0,
+      "result_sha256": "ee9427a9f9e2d0e613738e43c9aeedfbf4deaef0ac400a6211db660ad4b01346",
+      "best_policy_sha256": "e69f21911a354159c24e1dc3236210364b8e0df3186a38aa7e2788c4bdb2c4b5"
+    },
+    "price_curriculum_080": {
+      "best_epoch": -1,
+      "trained_epochs": 5,
+      "best_selection_equal_market_chosen_utility": 1.4553489595817296e-06,
+      "maximum_trained_epoch_selection_utility": 1.21902410234662e-06,
+      "maximum_trained_epoch_calls": 5316,
+      "maximum_trained_epoch_profitable_retention_rate": 0.46600477566922205,
+      "maximum_trained_epoch_harmful_veto_rate": 0.8591573968643251,
+      "best_selection_calls": 10319,
+      "profitable_base_call_retention_rate": 1.0,
+      "harmful_base_call_veto_rate": 0.793115529473592,
+      "no_upside_veto_rate": 1.0,
+      "result_sha256": "09b885b3fea177fe6355bebe21bd109fb018e6ca7596526b0e84a81b21140cb1",
+      "best_policy_sha256": "c3d9ee224f08b66761840ef71d862573e0edd998532ed2d9c5f81dad1ef886db"
+    }
+  },
+  "selected_candidate": {
+    "variant": "economic_only",
+    "seed": 17,
+    "epoch": -1,
+    "meaning": "frozen_H014_plus_protocol_exact_no_upside_invariant_with_zero_learned_gate_and_zero_calibration_residual",
+    "reason": "both_learned_variants_failed_to_outperform_the_registered_epoch_minus_one_candidate_on_held_out_exact_utility"
+  },
+  "decision": "run_fresh_stateful_real_fee_replay_before_additional_seed_or_curriculum_changes",
+  "additional_registered_seeds_started": false,
+  "calibration_rows_consumed": 0,
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "promotion_allowed": false,
+  "evidence_boundary": "H021 seed-17 held-out development utility only. Stateful exact replay, additional seeds, untouched test and paper-forward evidence remain open."
+}
