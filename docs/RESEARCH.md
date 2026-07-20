@@ -1790,7 +1790,7 @@ structurally zero. Calibration and test remain closed.
 
 ## SPH-T-H019: Learned Loss Veto
 
-**Status:** `registered; implementation pending`
+**Status:** `training complete; exact real-fee replay in progress`
 
 **Registered:** 2026-07-20, after H018 seed 17 completed and before any H019
 implementation, training metric or replay result existed.
@@ -1825,5 +1825,75 @@ week and worst week. Weekly and component lower 95% profit bounds must be
 positive and the point estimate must remain profitable under 2.0x authoritative
 fee stress. Only after these development gates may calibration be opened.
 
+**Training result.** The 65,640,474-parameter seed-17 model trained 1,056,778
+residual/value parameters while the H014 backbone and learned size remained
+frozen. Epoch three won held-out selection: equal-market protocol-exact chosen
+utility rose from H014's `7.578e-7` to `7.715e-6`; raw precision was `90.92%`,
+equal-market precision `96.72%`, correct-base-call retention `94.67%`, and
+wrong-base-call veto `10.21%`. It selected 28,543 calls versus H014's 19,371.
+The component lower tail worsened from `-7.235e-5` to `-1.065e-4`, while the
+week tail was unchanged, so exact replay remained mandatory. The selected
+checkpoint digest is `b3c30af9...7bb6`; its corrected result digest is
+`ca5d56c3...73f`.
+
+**Fee-coverage repair during replay.** The first exact 1.0x attempt failed
+closed on a route one second beyond the old H016 condition interval. Inspection
+of the simulator contract showed a general boundary defect: orders are eligible
+after two seconds, remain fillable for 60 more seconds, and may fill exactly at
+their expiry, while schedule intervals are half-open. Therefore decision
+coverage must be `[t, t + 63)`, not `[t, t + 61)`. Binding this horizon directly
+to the simulator config extended 128,596 of 163,707 intervals by two seconds.
+The replacement V5 Schedule Corpus has 153,006 conditions, 162,839 receipt
+proofs, 308 market-trade proofs, eight market-info proofs and zero unresolved
+segments. Its manifest digest is `20ebbd03...779`; calibration and test remain
+closed.
+
+The clean V5 replay crossed the original failure point without another
+qualification miss. A preregistered structural issue was already visible by day
+268: H019 had emitted 82,300 calls, exceeding H014's 76,359 full-year calls.
+Thus its unconstrained three-action residual can create CALLs from states where
+H014 chose SKIP; it is not a strict veto even though its supervised loss was
+trained primarily on H014 call states. The full replay is intentionally being
+completed before H019 is accepted or rejected.
+
 **Evidence boundary.** H019 is a registered development hypothesis, not a
 verified profit result.
+
+## SPH-T-H020: Strict Learned Veto
+
+**Status:** `registered; implementation pending H019 exact replay`
+
+**Registered:** 2026-07-20, after H019 training and the first 268 days of its
+clean V5 exact replay were observed, but before H019's final replay, bootstrap
+or 2.0x result and before any H020 implementation or training metric existed.
+
+**Trigger.** H019's held-out utility improved, but its unconstrained residual
+selected 28,543 held-out calls versus H014's 19,371 and made 82,300 calls in the
+first 268 exact-replay days versus 76,359 for H014's entire year. Anchoring
+non-call states with KL is not an action-support guarantee: the learned residual
+can originate new calls and therefore cannot isolate whether loss vetoing helps.
+
+**Hypothesis.** Use a true two-model hierarchy. Frozen H014 continues to decide
+whether a state is a call candidate, its outcome side and its balance-aware
+size. A separate learned binary gate sees the H014 policy state, base logits and
+margin, portfolio, prediction memory and protocol values, then chooses
+`KEEP_BASE_CALL` or `SKIP` by argmax. A base SKIP has only SKIP support; a base
+CALL can only retain its original side or be skipped. No runtime confidence,
+edge, frequency, size, wallet or portfolio threshold is introduced, and the
+gate cannot perform a hindsight side flip.
+
+**Contract.** Zero gate residual reproduces H014 exactly. Train only the gate
+and a separate protocol-value head on the complete 1,619,228-state H017 corpus,
+using profitable correct H014 calls as KEEP and losing H014 calls as SKIP,
+economic magnitude and fit-only losing-week weights. Three preregistered seeds
+may run for at most 12 resumable BF16 epochs. Selection keeps H014 as the
+epoch-minus-one candidate and requires a fresh V5 stateful replay.
+
+**Acceptance.** H020 must beat H014 on net profit, drawdown, active-week median
+and worst week, retain at least 5,000 calls over 1,000 independent components,
+produce positive weekly and component lower 95% bounds, and remain profitable
+under 2.0x receipt-qualified platform fees. Calibration and test remain closed
+until every development gate passes.
+
+**Evidence boundary.** H020 is preregistered development research, not a profit
+claim.

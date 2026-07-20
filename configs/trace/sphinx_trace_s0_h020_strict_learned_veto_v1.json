@@ -1,0 +1,139 @@
+{
+  "id": "sphinx-trace-s0-h020-strict-learned-veto-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H020",
+  "registered_at": "2026-07-20T17:15:00Z",
+  "objective": "improve_H014_weekly_net_profit_and_drawdown_with_a_model_only_KEEP_or_SKIP_gate_that_cannot_create_or_flip_calls",
+  "trigger": {
+    "H019_policy_result_sha256": "ca5d56c3d3741665d3a0ecb97e718101625647409d96d4e159bf71d0ae34473f",
+    "H019_best_epoch": 3,
+    "H019_selection_calls": 28543,
+    "H014_selection_calls": 19371,
+    "partial_exact_replay_observed_through_day": 268,
+    "partial_exact_replay_calls": 82300,
+    "H014_full_replay_calls": 76359,
+    "failure": "the_unconstrained_H019_residual_created_new_calls_on_frozen_H014_SKIP_states_so_it_was_not_a_strict_loss_veto"
+  },
+  "hypothesis": "a_separate_binary_gate_conditioned_on_the_frozen_H014_policy_state_base_action_margin_portfolio_memory_and_protocol_values_can_learn_KEEP_or_SKIP_for_each_H014_call_without_a_runtime_threshold_while_architectural_action_support_prevents_new_calls_and_hindsight_side_flips",
+  "dependencies": {
+    "initial_policy": {
+      "id": "sphinx-trace-s0-h014-replay-state-policy-seed17",
+      "result_sha256": "2b3a93b38d00b69776834cf82b83313a99239e8ac6605d80024b3ba3947de0d7",
+      "best_model_sha256": "303e0dcabf4ab3b67c2707dde443283734ddf74452c6908eb430c83d4202c8c7",
+      "model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81"
+    },
+    "protocol_tail_pack": {
+      "id": "sphinx-h017-protocol-tail-on-policy-pack-v1",
+      "manifest_sha256": "57ff60da05f6a2bee3f1f68ee5d72a37775dbb10679be7880bcfde7f1161f114",
+      "rows": 1619228,
+      "fit_rows": 1204402,
+      "selection_rows": 414826,
+      "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf"
+    },
+    "fee_schedule": {
+      "id": "sphinx-h016-polymarket-fee-schedule-h019-validation-v5",
+      "manifest_sha256": "20ebbd03aee5a9316ec05addb0e9b9d79c7600a3bf5b4c236bf9ff4e5367f779",
+      "decision_fill_horizon_seconds": 63,
+      "test_rows_consumed": 0
+    },
+    "feature_pack_manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86",
+    "encoding_manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3"
+  },
+  "architecture": {
+    "frozen_H014_market_state_policy_and_size": true,
+    "gate_input": [
+      "H014_policy_state",
+      "H014_base_action_logits",
+      "H014_selected_action_margin",
+      "portfolio_features",
+      "prediction_memory_features",
+      "protocol_action_values"
+    ],
+    "gate_actions": [
+      "KEEP_BASE_CALL",
+      "SKIP"
+    ],
+    "base_SKIP_action_support": [
+      "SKIP"
+    ],
+    "base_CALL_action_support": [
+      "KEEP_SAME_OUTCOME_SIDE",
+      "SKIP"
+    ],
+    "opposite_side_flip_allowed": false,
+    "new_call_from_base_SKIP_allowed": false,
+    "hidden_width": 512,
+    "layers": 2,
+    "dropout": 0.0,
+    "zero_initialized_veto_delta": true,
+    "zero_initialization_reproduces_H014": true,
+    "separate_protocol_action_value_head": true,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null,
+    "fixed_wallet_cap": null,
+    "fixed_portfolio_limit": null
+  },
+  "training": {
+    "loss_mode": "strict_binary_loss_veto_on_H014_call_states",
+    "correct_H014_call_target": "KEEP_BASE_CALL",
+    "wrong_H014_call_target": "SKIP",
+    "economic_utility_weight_power": 0.5,
+    "minimum_economic_weight": 0.1,
+    "fit_only_week_downside_weighting": true,
+    "maximum_fit_downside_sample_multiplier": 3.0,
+    "protocol_action_value_weight": 0.25,
+    "gate_logit_L2_weight": 0.01,
+    "equal_market_total_weight_within_behavior": true,
+    "behavior_policy_total_weights_equal": true,
+    "epochs": 12,
+    "early_stopping_patience": 4,
+    "batch_size": 2048,
+    "learning_rate": 0.00003,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "precision": "bf16_mixed",
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "exact_resume": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "selection": {
+    "primary": "selection_equal_market_mean_protocol_exact_chosen_utility",
+    "secondary": [
+      "selection_wrong_base_call_veto_rate",
+      "selection_correct_base_call_retention_rate",
+      "selection_component_lower_tail_protocol_exact_chosen_utility",
+      "selection_week_lower_tail_protocol_exact_chosen_utility"
+    ],
+    "initial_H014_checkpoint_is_epoch_minus_one_candidate": true,
+    "fresh_exact_real_fee_replay_required": true,
+    "cost_stress_multipliers": [
+      1.0,
+      1.5,
+      2.0
+    ],
+    "calibration_remains_closed_until_development_gates_pass": true
+  },
+  "promotion": {
+    "outperform_H014_net_profit": true,
+    "outperform_H014_maximum_drawdown": true,
+    "outperform_H014_active_week_median": true,
+    "improve_H014_worst_week": true,
+    "weekly_lower_95pct_profit_must_be_positive": true,
+    "component_lower_95pct_profit_must_be_positive": true,
+    "positive_profit_at_two_x_authoritative_fee_stress": true,
+    "minimum_calls": 5000,
+    "minimum_independent_components": 1000,
+    "untouched_test_and_paper_forward_required_after_development": true
+  },
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "H020 is a preregistered closed-test development hypothesis. Exact replay, untouched test, historical orderbook and paper-forward evidence remain required."
+}
