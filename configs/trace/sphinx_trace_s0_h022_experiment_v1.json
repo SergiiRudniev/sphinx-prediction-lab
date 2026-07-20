@@ -1,0 +1,107 @@
+{
+  "id": "sphinx-trace-s0-h022-experiment-v1",
+  "version": "1.0.0-locked-before-fit",
+  "status": "implementation_contract",
+  "research_id": "SPH-T-H022",
+  "locked_at": "2026-07-20T20:35:00Z",
+  "registration": "sphinx-trace-s0-h022-conditional-net-edge-v1",
+  "objective": "cross_fitted_conditional_net_edge_without_a_fixed_entry_price_cutoff",
+  "dependencies": {
+    "protocol_tail_pack": {
+      "id": "sphinx-h017-protocol-tail-on-policy-pack-v1",
+      "manifest_sha256": "57ff60da05f6a2bee3f1f68ee5d72a37775dbb10679be7880bcfde7f1161f114",
+      "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf",
+      "rows": 1619228
+    },
+    "feature_pack_manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86",
+    "encoding_manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3",
+    "initial_policy": {
+      "id": "sphinx-trace-s0-h021-economic-only-seed17",
+      "result_sha256": "ee9427a9f9e2d0e613738e43c9aeedfbf4deaef0ac400a6211db660ad4b01346",
+      "best_model_sha256": "e69f21911a354159c24e1dc3236210364b8e0df3186a38aa7e2788c4bdb2c4b5"
+    },
+    "outcome_model": {
+      "id": "sphinx-trace-s0-h013-50m-wallet-flow-residual-qualified-seed17",
+      "result_sha256": "b6bf2e5e64b00f4ff10b178749e41e84a8b6c52b0cd16c5aff1863732abcd0c5",
+      "best_model_sha256": "2a2eb52b52aac240f60ccdfbdfcdd2469e8481904fa5749c2d6b9d0e577ac35c"
+    },
+    "tree_library": "lightgbm-4.7.x"
+  },
+  "candidate_pack": {
+    "candidate": "frozen_H021_argmax_after_no_upside_invariant",
+    "partitions": ["fit", "selection"],
+    "feature_clip_after_normalization": 12.0,
+    "include_raw_causal_features": true,
+    "include_market_latent": true,
+    "test_rows_consumed": 0,
+    "calibration_rows_consumed": 0
+  },
+  "cross_fitting": {
+    "folds": 3,
+    "group": "whole_component",
+    "seeds": [17, 29, 43],
+    "selection_never_used_to_fit_members_or_stacker": true
+  },
+  "neural_member": {
+    "hidden_width": 512,
+    "layers": 3,
+    "dropout": 0.05,
+    "epochs": 20,
+    "early_stopping_patience": 4,
+    "batch_size": 2048,
+    "learning_rate": 0.0003,
+    "minimum_learning_rate": 0.000003,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "quantiles": [0.1, 0.5, 0.9],
+    "loss_weights": {
+      "outcome_bce": 0.5,
+      "net_return_mean": 2.0,
+      "net_return_quantiles": 1.0,
+      "fill_bce": 0.25,
+      "wrong_keep_utility": 2.0,
+      "profitable_skip_utility": 1.0
+    }
+  },
+  "tree_member": {
+    "objective": "regression_l1",
+    "metric": "l1",
+    "learning_rate": 0.03,
+    "num_leaves": 31,
+    "max_depth": 8,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l1": 0.001,
+    "lambda_l2": 0.1,
+    "maximum_rounds": 1200,
+    "early_stopping_rounds": 80,
+    "num_threads": 0,
+    "device_type": "cpu"
+  },
+  "stacking": {
+    "fit_source": "OOF_fit_predictions_only",
+    "model": "utility_weighted_ridge_with_intercept",
+    "ridge": 0.001,
+    "inputs": [
+      "neural_mean_net_return",
+      "neural_q10",
+      "neural_q50",
+      "neural_q90",
+      "neural_fill_probability",
+      "neural_calibrated_edge",
+      "tree_net_return"
+    ],
+    "decision": "keep_when_predicted_net_utility_exceeds_SKIP_utility",
+    "fixed_entry_price_threshold": null,
+    "fixed_call_frequency": null
+  },
+  "ablations": ["wallet_zero", "wallet_shuffle"],
+  "resume": {
+    "atomic_checkpoint": true,
+    "checkpoint_every_epoch": true,
+    "graceful_pause_file": "PAUSE"
+  },
+  "evidence_boundary": "Locked implementation contract. Selection remains development-only; untouched test, historical orderbook and paper-forward evidence remain closed."
+}

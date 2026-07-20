@@ -29,6 +29,7 @@ dependencies = []
 
 [project.optional-dependencies]
 research = [
+  "lightgbm>=4.7,<5",
   "numpy>=2.1,<2.5",
   "polars>=1.19",
   "pyarrow>=18.1",

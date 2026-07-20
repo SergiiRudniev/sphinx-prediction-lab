@@ -59,7 +59,7 @@ flowchart TB
 
 | Family | Specialization | Primary objective | Current state |
 | --- | --- | --- | --- |
-| **Sphinx Trace** | Wallet-flow prediction-market intelligence | Detect informed activity, estimate fair probabilities and manage positions for maximum net edge | S0 H021 development-qualified; test unopened |
+| **Sphinx Trace** | Wallet-flow prediction-market intelligence | Detect informed activity, estimate fair probabilities and manage positions for maximum net edge | H021 incumbent; H022 replay pending; test unopened |
 
 ![Sphinx Trace S0](assets/sphinx-trace-s0-banner.png)
 
@@ -126,6 +126,7 @@ Sphinx research must preserve:
 | Protocol-exact fees | `SPH-T-H016` receipt-qualified schedule |
 | Sphinx Pulse collector | Implemented; passive collection only |
 | Development incumbent | `SPH-T-H021`; 65,854,783 parameters |
+| Conditional net-edge candidate | `SPH-T-H022` seed 17; 77,005,637 combined neural parameters; replay pending |
 | Exact development replay | `+21.53%` at 1.0x fees; `+20.49%` at 2.0x fees |
 | Untouched test | Unopened |
 | Accepted backtest | None — development evidence only |

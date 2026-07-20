@@ -2032,7 +2032,7 @@ paper-forward profit claim.
 
 ## SPH-T-H022: Conditional Net-Edge Ensemble
 
-**Status:** `registered; not implemented`
+**Status:** `trained selection candidate; exact stateful replay pending`
 
 **Registered:** 2026-07-20 after the complete H021 1.0x replay and its exact
 price/calibration audit, but before the H021 2.0x result and before any H022
@@ -2078,5 +2078,57 @@ component lower 95% bounds; remain point-profitable at 2.0x fees; and retain at
 least 5,000 calls across 1,000 components. Calibration and untouched test stay
 closed until those development gates pass.
 
-**Evidence boundary.** H022 is a registered hypothesis, not a model or profit
-result.
+**Implementation.** The frozen H021 candidate is followed by an 11,150,854-
+parameter neural member and a fit-only LightGBM control. The neural member uses
+attention over seven causal groups: the frozen market latent, clock, market,
+linked event component, wallet flow, universe and price/portfolio/execution
+state. It emits a calibrated outcome probability, mean net return, 10/50/90%
+return quantiles and fill probability. Together with frozen H021 the neural
+path has 77,005,637 parameters. The tree sees 170 causal price, event,
+activity, wallet, portfolio and execution features. Three whole-component OOF
+folds feed a weighted ridge stacker; selection rows never fit a member,
+normalizer, early-stop decision or stacker.
+
+**Target correction.** The first generated candidate pack used H017's fixed
+5% reference-size values. That diagnostic was invalid for comparing against
+H021, whose learned mean position size is about 0.408% of current equity. It
+was rejected before repository publication or replay. Candidate-pack v2 uses
+the exact frozen-H021 size for every row. As a binding invariant it reproduces
+H021 equal-market utility: fit `9.8565286e-6` versus source `9.8565280e-6`,
+and selection `1.4553494e-6` versus source `1.4553490e-6`. The residual is
+floating-point rounding only.
+
+**Candidate-pack v2.** Frozen H021 proposed 90,623 fit calls across 12,504
+components and 10,319 selection calls across 1,983 components. The selection
+block contains 6,696 candidates at price `>=0.80`; their mean actual-size
+realized log utility is negative. No fixed price threshold is used as a label
+or action rule.
+
+**Cross-fitted result.** Seeds 17, 29 and 43 completed. Seed 17 is the only
+breadth-qualified candidate: selection utility rises from H021's
+`1.455349e-6` to `3.329700e-6`, with 7,964 retained calls across 1,732
+independent components. It vetoes 50.13% of harmful candidates while retaining
+85.28% of profitable candidates. Seed 29 retains 33 calls across 14 components;
+seed 43 retains 2,370 across 287. Both fail the preregistered 5,000-call and
+1,000-component gates even though seed 43 has a higher point utility. The
+selector was hardened so an ineligible seed cannot win on the primary metric
+alone.
+
+**Remaining defects.** Seed 17 still retains 5,904 of 6,696 high-price
+candidates, whose aggregate weighted utility remains `-0.0467`; the model has
+reduced but not eliminated the requested defect. Price is nevertheless the
+dominant tree feature, followed by break-even payout, terminal probability and
+market edge, so the failure is in final conditional calibration rather than
+missing price input. Wallet-zero (`3.533792e-6`) and wallet-shuffle
+(`3.351563e-6`) both match or exceed the full ensemble (`3.329700e-6`) on
+selection. Current H022 therefore does not establish incremental wallet edge.
+
+**Decision.** Seed 17 advances only to integrated exact stateful replay. H021
+remains the development incumbent until H022 beats its full 1.0x and 2.0x
+replays and all tail/breadth gates. The high-price calibration defect and weak
+wallet ablation are explicit follow-up triggers; neither justifies an ad-hoc
+`0.80` cutoff.
+
+**Evidence boundary.** H022 has fit-only OOF and whole-component development
+selection evidence. It has no exact stateful replay, untouched-test,
+historical-orderbook or paper-forward profit result yet.

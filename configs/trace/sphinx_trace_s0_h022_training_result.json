@@ -1,0 +1,87 @@
+{
+  "record_type": "h022_conditional_net_edge_training_summary",
+  "schema_version": "1.0.0",
+  "research_id": "SPH-T-H022",
+  "status": "trained_selection_candidate_replay_pending",
+  "completed_at": "2026-07-20T21:08:55.052574Z",
+  "config_sha256": "274e37970d0545ab54b585526ed87af35dfa2c331592a97d305b68f2505aa71b",
+  "candidate_pack": {
+    "id": "sphinx-h022-frozen-h021-candidate-pack-v2",
+    "manifest_sha256": "bc473c4f89132adb00f2e5eb93af638f3b20b3c9ffd098fef054a49689e6a61e",
+    "fit_source_rows": 1204402,
+    "fit_candidate_rows": 90623,
+    "fit_components": 12504,
+    "selection_source_rows": 414826,
+    "selection_candidate_rows": 10319,
+    "selection_components": 1983,
+    "mean_position_size_fraction": 0.004076166078448296,
+    "H021_fit_utility_expected": 9.856527983219157e-06,
+    "H021_fit_utility_reproduced": 9.856528615212357e-06,
+    "H021_selection_utility_expected": 1.4553489595817296e-06,
+    "H021_selection_utility_reproduced": 1.4553494213871177e-06,
+    "test_rows_consumed": 0,
+    "calibration_rows_consumed": 0
+  },
+  "architecture": {
+    "frozen_H021_parameters": 65854783,
+    "H022_neural_member_parameters": 11150854,
+    "combined_neural_parameters": 77005637,
+    "tree_feature_width": 170,
+    "cross_fit_folds": 3,
+    "seeds": [17, 29, 43],
+    "natural_language_features": false,
+    "fixed_entry_price_threshold": null
+  },
+  "selected_seed": 17,
+  "selection": {
+    "H021_equal_market_chosen_utility": 1.4553494213871177e-06,
+    "H022_equal_market_chosen_utility": 3.3297004325095504e-06,
+    "utility_multiple_vs_H021": 2.28790446031576,
+    "calls": 7964,
+    "independent_components": 1732,
+    "harmful_candidate_veto_rate": 0.5012701100762066,
+    "profitable_candidate_retention_rate": 0.8528339826567802,
+    "kept_call_precision": 0.8520843797086891,
+    "high_price_candidates": 6696,
+    "high_price_calls_kept": 5904,
+    "high_price_weighted_chosen_utility": -0.04670515833396669,
+    "wallet_zero_equal_market_chosen_utility": 3.53379213369915e-06,
+    "wallet_shuffle_equal_market_chosen_utility": 3.35156318178283e-06,
+    "wallet_incremental_edge_established": false
+  },
+  "rejected_seeds": [
+    {
+      "seed": 29,
+      "selection_utility": 2.8046921563046624e-06,
+      "calls": 33,
+      "independent_components": 14,
+      "reason": "breadth_gate_failed"
+    },
+    {
+      "seed": 43,
+      "selection_utility": 3.6332671432288424e-06,
+      "calls": 2370,
+      "independent_components": 287,
+      "reason": "breadth_gate_failed"
+    }
+  ],
+  "artifacts": {
+    "training_result_sha256": "cdef5c051b5cbbf73cd2f51ee493eaea5aca4724bddb946fcbbc74f274bdca2b",
+    "seed17_result_sha256": "538e10c46d0fe9656bc3005e92d2018f93ed23c4c399c0ea051fa2ec2a3af558",
+    "seed17_neural_sha256": "d9798e33d4cc107a22ddaa0a0e4ac0ceb8b90316e43a84e07564c1f385422a1c",
+    "seed17_tree_sha256": "dad4ef085e5ce5c099b549e5f3b231e0ed1fdd42810f617d33069d2e14c18e5b",
+    "seed17_stacker_sha256": "61e4a43f39feb1a9b72d2751e4488e25b0b3db6ba65854da50b2894ff7ac7a6d",
+    "seed17_debug_sha256": "34f064d0aaa6abad74c5d0ee3e6d67d87853fcaa10598e66cd38c404abb2d4aa"
+  },
+  "invalidated_artifact": {
+    "id": "sphinx-h022-frozen-h021-candidate-pack-v1",
+    "reason": "used_fixed_0_05_reference_size_instead_of_the_frozen_H021_learned_position_size",
+    "promotion_use_allowed": false
+  },
+  "test_rows_consumed": 0,
+  "calibration_rows_consumed": 0,
+  "test_labels_opened": false,
+  "promotion_allowed": false,
+  "next_required_evidence": "integrated_exact_stateful_H022_replay_at_1x_and_2x_fees",
+  "evidence_boundary": "H017 development fit and whole-component selection only. H022 has not yet completed exact stateful replay, untouched test or paper-forward evaluation."
+}
