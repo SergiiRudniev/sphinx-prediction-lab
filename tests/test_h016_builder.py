@@ -8,6 +8,7 @@ from scripts.build_h016_fee_schedule import (
     MarketInfoCache,
     MarketTradeCache,
     ReceiptCache,
+    _decision_fill_horizon,
     _merge_receipt_payload,
     _source_contract,
     seed_qualified_caches,
@@ -16,23 +17,35 @@ from scripts.build_h016_fee_schedule import (
 from sphinx_corpus.io import atomic_json, sha256_file, write_jsonl_zst
 
 
+def test_decision_fill_horizon_covers_inclusive_expiry(tmp_path: Path) -> None:
+    simulator_config = tmp_path / "simulator.json"
+    atomic_json(
+        simulator_config,
+        {"execution": {"latency_seconds": 2, "maximum_fill_wait_seconds": 60}},
+    )
+
+    assert _decision_fill_horizon(simulator_config) == 63
+
+
 def test_partial_replay_contract_binds_checkpoint_and_every_shard(tmp_path: Path) -> None:
     tape_dir = tmp_path / "tape"
     replay_dir = tmp_path / "partial-replay"
     tape_dir.mkdir()
     (replay_dir / "shards").mkdir(parents=True)
     corpus_config = tmp_path / "corpus.json"
+    simulator_config = tmp_path / "simulator.json"
     atomic_json(tape_dir / "manifest.json", {"tape": 1})
     corpus_config.write_text("{}", encoding="utf-8")
+    simulator_config.write_text("{}", encoding="utf-8")
     (replay_dir / "checkpoint.pt").write_bytes(b"checkpoint")
     shard = replay_dir / "shards" / "day-0001.jsonl.zst"
     shard.write_bytes(b"shard-one")
 
-    first = _source_contract(tape_dir, (replay_dir,), corpus_config)
+    first = _source_contract(tape_dir, (replay_dir,), corpus_config, simulator_config, 63)
     assert first["replay_manifests"][replay_dir.name].startswith("partial:")
 
     shard.write_bytes(b"shard-two")
-    second = _source_contract(tape_dir, (replay_dir,), corpus_config)
+    second = _source_contract(tape_dir, (replay_dir,), corpus_config, simulator_config, 63)
     assert first["replay_manifests"] != second["replay_manifests"]
 
 
@@ -42,11 +55,13 @@ def test_partial_replay_contract_rejects_uncheckpointed_input(tmp_path: Path) ->
     tape_dir.mkdir()
     replay_dir.mkdir()
     corpus_config = tmp_path / "corpus.json"
+    simulator_config = tmp_path / "simulator.json"
     atomic_json(tape_dir / "manifest.json", {"tape": 1})
     corpus_config.write_text("{}", encoding="utf-8")
+    simulator_config.write_text("{}", encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="partial checkpoint"):
-        _source_contract(tape_dir, (replay_dir,), corpus_config)
+        _source_contract(tape_dir, (replay_dir,), corpus_config, simulator_config, 63)
 
 
 def test_receipt_proof_merge_preserves_distinct_refund_logs() -> None:

@@ -50,9 +50,9 @@ from sphinx_trace.polymarket_fees import (
 ROOT = Path(__file__).resolve().parents[1]
 ZERO = Decimal("0")
 DEFAULT_CORPUS_CONFIG = ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json"
+DEFAULT_SIMULATOR_CONFIG = ROOT / "configs" / "trace" / "sphinx_trace_simulator_h010_v1.json"
 FIRST_PLATFORM_FEE_UNIX = int(datetime(2026, 1, 5, tzinfo=UTC).timestamp())
 CLOB_V2_CUTOVER_UNIX = int(datetime(2026, 4, 28, 11, tzinfo=UTC).timestamp())
-REPLAY_FILL_HORIZON_SECONDS = 61
 SCHEDULE_BOUNDARIES = tuple(
     int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
     for value in (
@@ -90,10 +90,26 @@ def _segment_id(condition_id: str, start: int, end: int) -> str:
     )
 
 
+def _decision_fill_horizon(simulator_config_path: Path) -> int:
+    simulator_config = load_json(simulator_config_path)
+    execution = simulator_config.get("execution")
+    if not isinstance(execution, dict):
+        raise RuntimeError("H016 simulator execution contract is missing")
+    latency_seconds = int(execution.get("latency_seconds", -1))
+    maximum_fill_wait_seconds = int(execution.get("maximum_fill_wait_seconds", -1))
+    if latency_seconds < 0 or maximum_fill_wait_seconds < 0:
+        raise RuntimeError("H016 simulator fill horizon is invalid")
+    # The simulator accepts a fill exactly at expires_at_unix, while schedule
+    # intervals are half-open. The final +1 makes that inclusive second covered.
+    return latency_seconds + maximum_fill_wait_seconds + 1
+
+
 def _source_contract(
     tape_dir: Path,
     replay_dirs: tuple[Path, ...],
     corpus_config_path: Path,
+    simulator_config_path: Path,
+    decision_fill_horizon_seconds: int,
 ) -> dict[str, Any]:
     replay_manifests: dict[str, str] = {}
     for directory in sorted(replay_dirs):
@@ -124,11 +140,12 @@ def _source_contract(
         "tape_manifest_sha256": sha256_file(tape_dir / "manifest.json"),
         "replay_manifests": replay_manifests,
         "corpus_config_sha256": sha256_file(corpus_config_path),
+        "simulator_config_sha256": sha256_file(simulator_config_path),
         "schedule_boundaries": list(SCHEDULE_BOUNDARIES),
         "interval_policy": "condition_by_registered_fee_epoch_active_order_hull",
         "candidate_policy": "prefer_single_public_fill_transaction_then_signal",
         "coverage_policy": "all_replay_decisions_plus_observed_orders_and_fills",
-        "decision_fill_horizon_seconds": REPLAY_FILL_HORIZON_SECONDS,
+        "decision_fill_horizon_seconds": decision_fill_horizon_seconds,
         "first_platform_fee_unix": FIRST_PLATFORM_FEE_UNIX,
         "clob_v2_cutover_unix": CLOB_V2_CUTOVER_UNIX,
         "test_rows_consumed": 0,
@@ -138,6 +155,8 @@ def _source_contract(
 
 def _extract_replay_targets(
     replay_dirs: tuple[Path, ...],
+    *,
+    decision_fill_horizon_seconds: int,
 ) -> tuple[
     dict[str, list[tuple[int, int]]],
     dict[str, set[tuple[str, int]]],
@@ -178,7 +197,7 @@ def _extract_replay_targets(
                     timestamp = int(row["timestamp_unix"])
                     evidence_trade_id = str(row["evidence_trade_id"])
                     condition_windows[condition_id].append(
-                        (timestamp, timestamp + REPLAY_FILL_HORIZON_SECONDS)
+                        (timestamp, timestamp + decision_fill_horizon_seconds)
                     )
                     source_refs[evidence_trade_id].add((condition_id, timestamp))
         miss_path = replay_dir / "fee-qualification-miss.json"
@@ -340,11 +359,22 @@ def build_plan(
     tape_dir: Path,
     replay_dirs: tuple[Path, ...],
     corpus_config_path: Path,
+    simulator_config_path: Path,
     *,
     candidates_per_segment: int,
 ) -> dict[str, Any]:
-    contract = _source_contract(tape_dir, replay_dirs, corpus_config_path)
-    ranges, source_refs, replay_counts = _extract_replay_targets(replay_dirs)
+    decision_fill_horizon_seconds = _decision_fill_horizon(simulator_config_path)
+    contract = _source_contract(
+        tape_dir,
+        replay_dirs,
+        corpus_config_path,
+        simulator_config_path,
+        decision_fill_horizon_seconds,
+    )
+    ranges, source_refs, replay_counts = _extract_replay_targets(
+        replay_dirs,
+        decision_fill_horizon_seconds=decision_fill_horizon_seconds,
+    )
     split_ranges = _split_ranges(ranges)
     token_ids = _load_token_ids(tape_dir, set(ranges))
     candidates = _scan_candidates(
@@ -1394,6 +1424,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--replay-dir", type=Path, action="append", required=True)
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--corpus-config", type=Path, default=DEFAULT_CORPUS_CONFIG)
+    value.add_argument("--simulator-config", type=Path, default=DEFAULT_SIMULATOR_CONFIG)
     value.add_argument(
         "--rpc-url", default=os.environ.get("POLYGON_RPC_URL", "https://polygon.drpc.org")
     )
@@ -1431,8 +1462,16 @@ def main() -> None:
     replay_dirs = tuple(path.resolve() for path in args.replay_dir)
     output_dir = args.output_dir.resolve()
     corpus_config_path = args.corpus_config.resolve()
+    simulator_config_path = args.simulator_config.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    contract = _source_contract(tape_dir, replay_dirs, corpus_config_path)
+    decision_fill_horizon_seconds = _decision_fill_horizon(simulator_config_path)
+    contract = _source_contract(
+        tape_dir,
+        replay_dirs,
+        corpus_config_path,
+        simulator_config_path,
+        decision_fill_horizon_seconds,
+    )
     plan_path = output_dir / "plan.json"
     plan = load_json(plan_path)
     if plan:
@@ -1443,6 +1482,7 @@ def main() -> None:
             tape_dir,
             replay_dirs,
             corpus_config_path,
+            simulator_config_path,
             candidates_per_segment=args.candidates_per_segment,
         )
         atomic_json(plan_path, plan)
