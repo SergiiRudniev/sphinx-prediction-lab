@@ -43,4 +43,4 @@ jobs:
         run: mypy src tests scripts
 
       - name: Tests
-        run: pytest
+        run: python -m pytest
