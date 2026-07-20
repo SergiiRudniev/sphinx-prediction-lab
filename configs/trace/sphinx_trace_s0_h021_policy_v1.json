@@ -1,0 +1,57 @@
+{
+  "id": "sphinx-trace-s0-h021-policy-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H021",
+  "registered_at": "2026-07-20T17:49:36Z",
+  "objective": "strict_price_aware_economic_veto_over_frozen_H014_calls",
+  "architecture": {
+    "portfolio_encoder_width": 256,
+    "prediction_memory_encoder_width": 256,
+    "fusion_latents": 4,
+    "fusion_layers": 4,
+    "outcome_calibration_head": {
+      "enabled": true,
+      "hidden_width": 256,
+      "layers": 2,
+      "dropout": 0.0,
+      "zero_initialize_residual": true
+    },
+    "strict_veto_head": {
+      "enabled": true,
+      "hidden_width": 512,
+      "layers": 2,
+      "dropout": 0.0,
+      "zero_initialize_veto_delta": true
+    },
+    "protocol_action_value_head": {
+      "enabled": true,
+      "hidden_width": 512,
+      "layers": 2,
+      "dropout": 0.0
+    },
+    "no_upside_epsilon": 1e-08,
+    "debug_action_logits": true,
+    "debug_base_action_logits": true,
+    "debug_strict_veto_logit": true,
+    "debug_protocol_action_values": true,
+    "debug_calibrated_outcome_probability": true,
+    "debug_execution_break_even": true,
+    "debug_policy_attention": true
+  },
+  "runtime": {
+    "candidate": "frozen_H014_argmax",
+    "action": "argmax_of_KEEP_BASE_CALL_or_SKIP_with_strict_base_action_support",
+    "size": "frozen_H014_learned_beta_fraction_of_available_equity",
+    "execution_context": "causal_reference_price_plus_registered_adverse_tick_and_receipt_bound_protocol_fee",
+    "no_upside_execution_invariant": true,
+    "new_call_from_base_SKIP_allowed": false,
+    "opposite_side_flip_allowed": false,
+    "fixed_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null
+  },
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "Architecture contract only; profit requires source-bound training and exact replay."
+}

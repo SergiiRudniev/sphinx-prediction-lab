@@ -90,6 +90,7 @@ class StateBatch:
     realized_action_values: NDArray[np.float32]
     execution_fractions: NDArray[np.float32]
     realized_pnl_usd: NDArray[np.float64] | None
+    entry_prices: NDArray[np.float32] | None
     winning_payout_multipliers: NDArray[np.float32] | None
     reference_action_values: NDArray[np.float32] | None
 
@@ -197,7 +198,9 @@ def _state_shards(
             or not receipt_path.is_file()
             or raw.get("receipt_sha256") != sha256_file(receipt_path)
         ):
-            raise RuntimeError(f"H015 state shard binding changed: {behavior_id}:{date}")
+            raise RuntimeError(
+                f"H015 state shard binding changed: {behavior_id}:{date}"
+            )
         receipt = _load_object(receipt_path)
         files = receipt.get("files")
         if not isinstance(files, dict):
@@ -220,7 +223,8 @@ def _state_shards(
     if (
         total_rows != int(manifest.get("rows", -1))
         or total_rows != expected_rows
-        or sorted(behavior_rows) != list(range(int(config["corpus"]["behavior_policies"])))
+        or sorted(behavior_rows)
+        != list(range(int(config["corpus"]["behavior_policies"])))
         or any(rows != expected_per_behavior for rows in behavior_rows.values())
     ):
         raise RuntimeError(f"{research_id} state row or behavior coverage changed")
@@ -262,7 +266,9 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         shard.state / "portfolio_features.npy", mmap_mode="r", allow_pickle=False
     )
     memory = np.load(
-        shard.state / "prediction_memory_features.npy", mmap_mode="r", allow_pickle=False
+        shard.state / "prediction_memory_features.npy",
+        mmap_mode="r",
+        allow_pickle=False,
     )
     previous = np.load(
         shard.state / "previous_action_ids.npy", mmap_mode="r", allow_pickle=False
@@ -283,6 +289,7 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
     reference_path = shard.state / "reference_action_values.npy"
     week_path = shard.state / "week_ids.npy"
     realized_pnl_path = shard.state / "realized_pnl_usd.npy"
+    entry_price_path = shard.state / "entry_prices.npy"
     if payout_path.is_file() != reference_path.is_file():
         raise RuntimeError(f"Protocol target arrays are incomplete: {shard.date}")
     payout_multipliers = (
@@ -305,6 +312,11 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         if realized_pnl_path.is_file()
         else None
     )
+    entry_prices = (
+        np.load(entry_price_path, mmap_mode="r", allow_pickle=False)
+        if entry_price_path.is_file()
+        else None
+    )
     source_rows = np.load(
         shard.encoding / "row_indices.npy", mmap_mode="r", allow_pickle=False
     )
@@ -318,9 +330,7 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         shard.encoding / "uncertainty_log_scales.npy", mmap_mode="r", allow_pickle=False
     )
     labels = np.load(shard.pack / "labels.npy", mmap_mode="r", allow_pickle=False)
-    baselines = np.load(
-        shard.pack / "baselines.npy", mmap_mode="r", allow_pickle=False
-    )
+    baselines = np.load(shard.pack / "baselines.npy", mmap_mode="r", allow_pickle=False)
     selected_rows = np.asarray(rows[indices], dtype=np.int64)
     selected_offsets = np.asarray(encoding_offsets[indices], dtype=np.int64)
     if bool((selected_offsets < 0).any()) or bool(
@@ -328,7 +338,9 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
     ):
         raise RuntimeError(f"H015 encoding offsets are invalid: {shard.date}")
     if not np.array_equal(source_rows[selected_offsets], selected_rows):
-        raise RuntimeError(f"H015 state and market encodings no longer align: {shard.date}")
+        raise RuntimeError(
+            f"H015 state and market encodings no longer align: {shard.date}"
+        )
     output = StateBatch(
         market_latents=np.asarray(latents[selected_offsets], dtype=np.float32),
         terminal_logits=np.asarray(terminal[selected_offsets], dtype=np.float32),
@@ -344,9 +356,7 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         market_ids=np.asarray(markets[indices], dtype=np.int64),
         component_ids=np.asarray(components[indices], dtype=np.int64),
         week_ids=(
-            None
-            if week_ids is None
-            else np.asarray(week_ids[indices], dtype=np.int64)
+            None if week_ids is None else np.asarray(week_ids[indices], dtype=np.int64)
         ),
         behavior_policy_codes=np.asarray(behaviors[indices], dtype=np.uint8),
         behavior_action_ids=np.asarray(actions[indices], dtype=np.int64),
@@ -356,6 +366,11 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
             None
             if realized_pnl is None
             else np.asarray(realized_pnl[indices], dtype=np.float64)
+        ),
+        entry_prices=(
+            None
+            if entry_prices is None
+            else np.asarray(entry_prices[indices], dtype=np.float32)
         ),
         winning_payout_multipliers=(
             None
@@ -379,6 +394,16 @@ def _batch(shard: StateShard, indices: NDArray[np.int64]) -> StateBatch:
         or not bool(np.isfinite(output.realized_action_values).all())
         or output.component_ids.shape != (len(indices),)
         or not bool(np.isin(output.behavior_action_ids, (0, 1, 2)).all())
+        or (
+            output.entry_prices is not None
+            and (
+                output.entry_prices.shape != (len(indices), 2)
+                or not bool(np.isfinite(output.entry_prices).all())
+                or bool(
+                    ((output.entry_prices <= 0.0) | (output.entry_prices > 1.0)).any()
+                )
+            )
+        )
         or (
             output.winning_payout_multipliers is not None
             and (
@@ -431,9 +456,7 @@ def _equal_market_weights(
             shard.state / "market_ids.npy", mmap_mode="r", allow_pickle=False
         )
         for partition_code in (0, 1):
-            indices = _indices(
-                shard, partition_code, seed=0, epoch=0, shuffle=False
-            )
+            indices = _indices(shard, partition_code, seed=0, epoch=0, shuffle=False)
             if not len(indices):
                 continue
             counts[partition_code, shard.behavior_code] += np.bincount(
@@ -507,7 +530,9 @@ def _forward(
         torch.from_numpy(batch.terminal_logits).to(device, non_blocking=True),
         torch.from_numpy(batch.uncertainty_log_scales).to(device, non_blocking=True),
         torch.from_numpy(batch.portfolio_features).to(device, non_blocking=True),
-        torch.from_numpy(batch.prediction_memory_features).to(device, non_blocking=True),
+        torch.from_numpy(batch.prediction_memory_features).to(
+            device, non_blocking=True
+        ),
         torch.from_numpy(batch.previous_action_ids).to(device, non_blocking=True),
         physical_action_mask=torch.from_numpy(batch.physical_action_masks).to(
             device, non_blocking=True
@@ -574,7 +599,9 @@ def _combined_loss(
     )
     logged_loss, logged_metrics = logged_execution_action_value_loss(
         output,
-        torch.from_numpy(batch.behavior_action_ids).to(labels.device, non_blocking=True),
+        torch.from_numpy(batch.behavior_action_ids).to(
+            labels.device, non_blocking=True
+        ),
         torch.from_numpy(batch.realized_action_values).to(
             labels.device, non_blocking=True
         ),
@@ -584,9 +611,10 @@ def _combined_loss(
         sample_weights=sample_weights,
         physical_action_mask=physical_action_mask,
     )
-    loss = base_loss + float(
-        utility_config["logged_execution_action_value_weight"]
-    ) * logged_loss
+    loss = (
+        base_loss
+        + float(utility_config["logged_execution_action_value_weight"]) * logged_loss
+    )
     return loss, {**base_metrics, **logged_metrics, "combined_loss": loss.detach()}
 
 
@@ -641,9 +669,7 @@ def _evaluate(
             )
             behavior_counts += np.bincount(chosen_numpy, minlength=3)
             calls = chosen != 2
-            correct = ((chosen == 0) & (labels == 1)) | (
-                (chosen == 1) & (labels == 0)
-            )
+            correct = ((chosen == 0) & (labels == 1)) | ((chosen == 1) & (labels == 0))
             weight_sum = float(weights.sum())
             size = output["position_size_beta_alpha"].float() / (
                 output["position_size_beta_alpha"].float()
@@ -663,9 +689,7 @@ def _evaluate(
                     float(metrics["protocol_exact_tail_utility"]) * weight_sum
                 )
             else:
-                totals["chosen"] += float(
-                    metrics["weighted_chosen_log_utility_sum"]
-                )
+                totals["chosen"] += float(metrics["weighted_chosen_log_utility_sum"])
                 totals["expected"] += (
                     float(metrics["expected_log_utility"]) * weight_sum
                 )
@@ -828,7 +852,9 @@ def train(
         raise RuntimeError(f"{research_id} initial model tensor digest changed")
     model.outcome_backbone.requires_grad_(False)
     market_backbone_sha256 = _module_digest(model.outcome_backbone)
-    trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    trainable = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
     optimizer = torch.optim.AdamW(
         trainable,
         lr=float(utility_config["policy_learning_rate"]),
@@ -848,7 +874,9 @@ def train(
     initial_selection: dict[str, Any] | None = None
     best_selection = -math.inf
     if checkpoint_path.exists():
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        checkpoint = torch.load(
+            checkpoint_path, map_location=device, weights_only=False
+        )
         if checkpoint.get("contract_sha256") != contract_sha256:
             raise RuntimeError("H015 checkpoint belongs to another training contract")
         model.load_state_dict(checkpoint["model"])

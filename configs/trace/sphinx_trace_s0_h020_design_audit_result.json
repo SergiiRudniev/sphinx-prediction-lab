@@ -1,0 +1,36 @@
+{
+  "id": "sphinx-trace-s0-h020-design-audit-result",
+  "version": "1.0.0-result",
+  "status": "complete_rejected_before_training",
+  "research_id": "SPH-T-H020",
+  "completed_at": "2026-07-20T17:49:36Z",
+  "registered_config_sha256": "9ddf8393264900e60ca43756c508e677ebe0c30bd610a27d5b7099a7a166069e",
+  "new_evidence": {
+    "H019_exact_replay_result_sha256": "89e92a1c9a8aa6bc538e3a57d969e331efcfcc12c0155b93de73a8226e026690",
+    "H019_profit_evaluation_sha256": "16f67db51b98b1a625d322eeabee31c2cf53e9b67c589787e5c23f1efe471f8b",
+    "H019_net_profit_usd": 1116.5754042487379,
+    "H019_calls": 93917,
+    "H014_calls": 76359,
+    "price_at_least_0_90_H019_arithmetic_pnl_usd": -1133.29,
+    "price_at_least_0_90_H014_arithmetic_pnl_usd": -780.05,
+    "price_equal_1_00_H019_arithmetic_pnl_usd": -546.57,
+    "price_equal_1_00_H014_arithmetic_pnl_usd": -367.14,
+    "H019_high_price_outcome_probability_auc": 0.7467,
+    "H019_high_price_action_margin_auc": 0.5361
+  },
+  "design_failures": [
+    "correct_outcome_as_KEEP_target_mislabels_zero_profit_buys_at_price_1_00",
+    "gate_input_does_not_bind_actual_candidate_entry_price_and_exact_break_even_explicitly",
+    "raw_correctness_weighting_does_not_encode_the_asymmetric_payoff_where_one_high_price_loss_erases_many_wins",
+    "frozen_outcome_probability_is_rank_informative_but_not_sufficiently_calibrated_for_the_expensive_tail"
+  ],
+  "training": {
+    "started": false,
+    "reason": "new_full_H019_fill_audit_falsified_the_registered_target_before_any_H020_training_or_selection_metric_was_observed"
+  },
+  "decision": "reject_H020_without_training_and_register_H021_price_aware_economic_veto",
+  "calibration_rows_consumed": 0,
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "H020 was rejected by a development design audit. No H020 model was trained and no calibration or test labels were consumed."
+}
