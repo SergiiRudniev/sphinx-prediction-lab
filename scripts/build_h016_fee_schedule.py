@@ -50,12 +50,8 @@ from sphinx_trace.polymarket_fees import (
 ROOT = Path(__file__).resolve().parents[1]
 ZERO = Decimal("0")
 DEFAULT_CORPUS_CONFIG = ROOT / "configs" / "corpus" / "sphinx_corpus_v1.json"
-FIRST_PLATFORM_FEE_UNIX = int(
-    datetime(2026, 1, 5, tzinfo=UTC).timestamp()
-)
-CLOB_V2_CUTOVER_UNIX = int(
-    datetime(2026, 4, 28, 11, tzinfo=UTC).timestamp()
-)
+FIRST_PLATFORM_FEE_UNIX = int(datetime(2026, 1, 5, tzinfo=UTC).timestamp())
+CLOB_V2_CUTOVER_UNIX = int(datetime(2026, 4, 28, 11, tzinfo=UTC).timestamp())
 REPLAY_FILL_HORIZON_SECONDS = 61
 SCHEDULE_BOUNDARIES = tuple(
     int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
@@ -99,14 +95,34 @@ def _source_contract(
     replay_dirs: tuple[Path, ...],
     corpus_config_path: Path,
 ) -> dict[str, Any]:
+    replay_manifests: dict[str, str] = {}
+    for directory in sorted(replay_dirs):
+        manifest_path = directory / "manifest.json"
+        if manifest_path.exists():
+            replay_manifests[directory.name] = sha256_file(manifest_path)
+            continue
+        shard_paths = sorted((directory / "shards").glob("*.jsonl.zst"))
+        checkpoint_path = directory / "checkpoint.pt"
+        if not shard_paths or not checkpoint_path.exists():
+            raise RuntimeError(
+                "H016 replay input has neither a final manifest nor a complete "
+                f"partial checkpoint: {directory}"
+            )
+        partial_contract = {
+            "checkpoint_sha256": sha256_file(checkpoint_path),
+            "shards": {path.name: sha256_file(path) for path in shard_paths},
+            "fee_qualification_miss_sha256": (
+                sha256_file(directory / "fee-qualification-miss.json")
+                if (directory / "fee-qualification-miss.json").is_file()
+                else None
+            ),
+        }
+        replay_manifests[directory.name] = "partial:" + _stable_hash(partial_contract)
     return {
         "schema_version": "1.0.0",
         "record_type": "h016_fee_schedule_build_contract",
         "tape_manifest_sha256": sha256_file(tape_dir / "manifest.json"),
-        "replay_manifests": {
-            directory.name: sha256_file(directory / "manifest.json")
-            for directory in sorted(replay_dirs)
-        },
+        "replay_manifests": replay_manifests,
         "corpus_config_sha256": sha256_file(corpus_config_path),
         "schedule_boundaries": list(SCHEDULE_BOUNDARIES),
         "interval_policy": "condition_by_registered_fee_epoch_active_order_hull",
@@ -129,7 +145,7 @@ def _extract_replay_targets(
 ]:
     condition_windows: dict[str, list[tuple[int, int]]] = defaultdict(list)
     source_refs: dict[str, set[tuple[str, int]]] = defaultdict(set)
-    counts = {"orders": 0, "fills": 0}
+    counts = {"orders": 0, "fills": 0, "fee_qualification_misses": 0}
     seen_decisions: set[str] = set()
     for replay_dir in replay_dirs:
         order_conditions: dict[str, str] = {}
@@ -165,6 +181,19 @@ def _extract_replay_targets(
                         (timestamp, timestamp + REPLAY_FILL_HORIZON_SECONDS)
                     )
                     source_refs[evidence_trade_id].add((condition_id, timestamp))
+        miss_path = replay_dir / "fee-qualification-miss.json"
+        if miss_path.is_file():
+            miss = load_json(miss_path)
+            if miss.get("record_type") != "h016_fee_qualification_miss":
+                raise RuntimeError("H016 fee qualification miss contract changed")
+            condition_id = str(miss.get("condition_id", "")).lower()
+            liquidity_id = str(miss.get("liquidity_id", ""))
+            timestamp = int(miss.get("timestamp_unix", -1))
+            if not condition_id or not liquidity_id or timestamp < 0:
+                raise RuntimeError("H016 fee qualification miss is incomplete")
+            condition_windows[condition_id].append((timestamp, timestamp + 1))
+            source_refs[liquidity_id].add((condition_id, timestamp))
+            counts["fee_qualification_misses"] += 1
     counts["decisions"] = len(seen_decisions)
     if not condition_windows or not source_refs:
         raise RuntimeError("H016 found no replay fee targets")
@@ -188,9 +217,7 @@ def _split_ranges(
         for pieces in by_epoch.values():
             start = min(row[0] for row in pieces)
             end = max(row[1] for row in pieces)
-            rows.append(
-                (start, end, _segment_id(condition_id, start, end))
-            )
+            rows.append((start, end, _segment_id(condition_id, start, end)))
         output[condition_id] = sorted(rows)
     return output
 
@@ -235,9 +262,7 @@ def _scan_candidates(
     *,
     candidates_per_segment: int,
 ) -> dict[str, tuple[dict[str, Any], ...]]:
-    by_transaction: dict[
-        str, dict[str, tuple[int, float, str, dict[str, Any]]]
-    ] = defaultdict(dict)
+    by_transaction: dict[str, dict[str, tuple[int, float, str, dict[str, Any]]]] = defaultdict(dict)
     remaining = set(source_refs)
     for shard in sorted((tape_dir / "stream").glob("date=*.jsonl.zst")):
         for row in iter_jsonl_zst(shard):
@@ -249,9 +274,7 @@ def _scan_candidates(
                 remaining.discard(liquidity_id)
                 for condition_id, expected_timestamp in refs:
                     if row_condition != condition_id or timestamp != expected_timestamp:
-                        raise RuntimeError(
-                            "H016 replay liquidity binding changed in the tape"
-                        )
+                        raise RuntimeError("H016 replay liquidity binding changed in the tape")
             segment_id = _optional_segment_for(ranges, row_condition, timestamp)
             if segment_id is None:
                 continue
@@ -333,11 +356,7 @@ def build_plan(
     segments: list[dict[str, Any]] = []
     for condition_id, rows in sorted(split_ranges.items()):
         for start, end, segment_id in rows:
-            protocol = (
-                FeeProtocol.CLOB_V1
-                if end <= CLOB_V2_CUTOVER_UNIX
-                else FeeProtocol.CLOB_V2
-            )
+            protocol = FeeProtocol.CLOB_V1 if end <= CLOB_V2_CUTOVER_UNIX else FeeProtocol.CLOB_V2
             source_candidates = candidates.get(segment_id, ())
             if not source_candidates:
                 # An order window can cross a registered tariff boundary without
@@ -475,6 +494,182 @@ class MarketTradeCache:
         self.connection.commit()
 
 
+def _verified_manifest_artifact(
+    schedule_dir: Path,
+    manifest: dict[str, Any],
+    *,
+    path_key: str,
+    sha256_key: str,
+) -> Path:
+    relative_path = manifest.get(path_key)
+    expected_sha256 = manifest.get(sha256_key)
+    if not isinstance(relative_path, str) or not isinstance(expected_sha256, str):
+        raise RuntimeError(f"H016 seed manifest is missing {path_key}/{sha256_key}: {schedule_dir}")
+    path = schedule_dir / relative_path
+    if not path.is_file():
+        raise RuntimeError(f"H016 seed artifact is missing: {path}")
+    actual_sha256 = sha256_file(path)
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            f"H016 seed artifact SHA-256 changed: {path} "
+            f"expected={expected_sha256} actual={actual_sha256}"
+        )
+    return path
+
+
+def _merge_receipt_payload(
+    current: dict[str, Any] | None,
+    proof: dict[str, Any],
+) -> dict[str, Any]:
+    transaction_hash = str(proof["transaction_hash"]).lower()
+    payload: dict[str, Any] = {
+        "transactionHash": transaction_hash,
+        "status": proof.get("status"),
+        "blockNumber": proof.get("block_number"),
+        "blockHash": proof.get("block_hash"),
+        "transactionIndex": proof.get("transaction_index"),
+        "logs": [],
+    }
+    if current is not None:
+        if str(current.get("transactionHash", "")).lower() != transaction_hash:
+            raise RuntimeError("H016 cached receipt transaction changed during seeding")
+        for key in ("status", "blockNumber", "blockHash", "transactionIndex"):
+            if current.get(key) != payload[key]:
+                raise RuntimeError(f"H016 receipt proof conflict for {transaction_hash}: {key}")
+    unique_logs: dict[str, dict[str, Any]] = {}
+    for source in (
+        [] if current is None else current.get("logs", []),
+        proof.get("logs", []),
+    ):
+        if not isinstance(source, list):
+            raise TypeError("H016 receipt proof logs must be a list")
+        for log in source:
+            if not isinstance(log, dict):
+                raise TypeError("H016 receipt proof log must be an object")
+            unique_logs[_stable_hash(log)] = log
+    payload["logs"] = list(unique_logs.values())
+    return payload
+
+
+def seed_qualified_caches(
+    schedule_dirs: tuple[Path, ...],
+    cache_dir: Path,
+) -> dict[str, Any]:
+    """Seed exact HTTP/RPC caches from previously qualified H016 proof artifacts."""
+
+    if not schedule_dirs:
+        return {"schedule_dirs": {}, "receipt_proofs": 0, "market_info": 0, "market_trades": 0}
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    receipt_cache = ReceiptCache(cache_dir / "receipt-cache.sqlite3")
+    market_info_cache = MarketInfoCache(cache_dir / "market-info-cache.sqlite3")
+    market_trade_cache = MarketTradeCache(cache_dir / "market-trade-cache.sqlite3")
+    summary: dict[str, Any] = {
+        "schema_version": "1.0.0",
+        "record_type": "h016_fee_cache_seed",
+        "generated_at": now_utc(),
+        "schedule_dirs": {},
+        "receipt_proofs": 0,
+        "market_info": 0,
+        "market_trades": 0,
+    }
+    try:
+        for schedule_dir in schedule_dirs:
+            manifest_path = schedule_dir / "manifest.json"
+            manifest = load_json(manifest_path)
+            if (
+                manifest.get("record_type") != "h016_fee_schedule_manifest"
+                or manifest.get("valid") is not True
+            ):
+                raise RuntimeError(f"H016 seed schedule is not valid: {schedule_dir}")
+            manifest_sha256 = sha256_file(manifest_path)
+            proof_path = _verified_manifest_artifact(
+                schedule_dir,
+                manifest,
+                path_key="receipt_proof_path",
+                sha256_key="receipt_proof_sha256",
+            )
+            market_info_path = _verified_manifest_artifact(
+                schedule_dir,
+                manifest,
+                path_key="market_info_path",
+                sha256_key="market_info_sha256",
+            )
+            market_trade_path = _verified_manifest_artifact(
+                schedule_dir,
+                manifest,
+                path_key="market_trade_path",
+                sha256_key="market_trade_sha256",
+            )
+
+            receipt_rows = 0
+            for proof in iter_jsonl_zst(proof_path):
+                if proof.get("record_type") != "h016_fee_receipt_proof":
+                    raise RuntimeError("H016 seed receipt proof type changed")
+                transaction_hash = str(proof["transaction_hash"]).lower()
+                merged = _merge_receipt_payload(
+                    receipt_cache.get(transaction_hash),
+                    proof,
+                )
+                receipt_cache.connection.execute(
+                    "INSERT OR REPLACE INTO receipts(transaction_hash, payload) VALUES (?, ?)",
+                    (
+                        transaction_hash,
+                        json.dumps(merged, separators=(",", ":")),
+                    ),
+                )
+                receipt_rows += 1
+                if receipt_rows % 1_000 == 0:
+                    receipt_cache.connection.commit()
+            receipt_cache.connection.commit()
+            if receipt_rows != int(manifest["receipt_proof_rows"]):
+                raise RuntimeError("H016 seed receipt proof row count changed")
+
+            market_info_rows = []
+            for proof in iter_jsonl_zst(market_info_path):
+                if proof.get("record_type") != "h016_fee_market_info_proof":
+                    raise RuntimeError("H016 seed market-info proof type changed")
+                condition_id = str(proof["condition_id"]).lower()
+                payload = proof.get("payload")
+                if not isinstance(payload, dict) or _stable_hash(payload) != proof.get(
+                    "payload_sha256"
+                ):
+                    raise RuntimeError("H016 seed market-info payload changed")
+                market_info_rows.append((condition_id, payload))
+            if len(market_info_rows) != int(manifest["market_info_rows"]):
+                raise RuntimeError("H016 seed market-info row count changed")
+            market_info_cache.put_many(market_info_rows)
+
+            market_trades: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+            market_trade_rows = 0
+            for proof in iter_jsonl_zst(market_trade_path):
+                if proof.get("record_type") != "h016_fee_market_trade_proof":
+                    raise RuntimeError("H016 seed market-trade proof type changed")
+                condition_id = str(proof["condition_id"]).lower()
+                row = proof.get("row")
+                if not isinstance(row, dict) or _stable_hash(row) != proof.get("row_sha256"):
+                    raise RuntimeError("H016 seed market-trade row changed")
+                market_trades[condition_id][_stable_hash(row)] = row
+                market_trade_rows += 1
+            if market_trade_rows != int(manifest["market_trade_rows"]):
+                raise RuntimeError("H016 seed market-trade row count changed")
+            for condition_id, rows_by_hash in market_trades.items():
+                current = market_trade_cache.get(condition_id) or []
+                combined = {_stable_hash(row): row for row in current}
+                combined.update(rows_by_hash)
+                market_trade_cache.put_many([(condition_id, list(combined.values()))])
+
+            summary["schedule_dirs"][schedule_dir.name] = manifest_sha256
+            summary["receipt_proofs"] += receipt_rows
+            summary["market_info"] += len(market_info_rows)
+            summary["market_trades"] += market_trade_rows
+    finally:
+        receipt_cache.close()
+        market_info_cache.close()
+        market_trade_cache.close()
+    atomic_json(cache_dir / "seed-cache.json", summary)
+    return summary
+
+
 class RequestRateLimiter:
     def __init__(self, requests_per_second: float) -> None:
         if requests_per_second <= 0:
@@ -594,8 +789,7 @@ def _fetch_missing(
 ) -> bool:
     missing = [value for value in sorted(set(transaction_hashes)) if cache.get(value) is None]
     batches = [
-        missing[offset : offset + batch_size]
-        for offset in range(0, len(missing), batch_size)
+        missing[offset : offset + batch_size] for offset in range(0, len(missing), batch_size)
     ]
     completed = 0
     limiter = RequestRateLimiter(requests_per_second)
@@ -619,10 +813,7 @@ def _fetch_missing(
             cache.put_many(rows)
             previous_completed = completed
             completed += len(rows)
-            if (
-                completed // 250 > previous_completed // 250
-                or completed == len(missing)
-            ):
+            if completed // 250 > previous_completed // 250 or completed == len(missing):
                 print(f"receipts {completed}/{len(missing)}", flush=True)
     return True
 
@@ -636,10 +827,7 @@ def _fetch_receipt_batch(
     for cooldown_attempt in range(6):
         limiter.wait()
         try:
-            return rpc.batch(
-                ("eth_getTransactionReceipt", [value])
-                for value in transaction_hashes
-            )
+            return rpc.batch(("eth_getTransactionReceipt", [value]) for value in transaction_hashes)
         except RPCError as error:
             last_error = error
             if "429" not in str(error):
@@ -1040,9 +1228,7 @@ def qualify(
                             chain_id=config.chain_id,
                         )
                         if evidence.fee_amount > ZERO and evidence.fee_refund_observed:
-                            consensus_samples.append(
-                                (candidate, evidence, receipt, trade_row)
-                            )
+                            consensus_samples.append((candidate, evidence, receipt, trade_row))
                         try:
                             schedule = infer_fee_schedule(candidate, evidence)
                         except RuntimeError:
@@ -1082,10 +1268,7 @@ def qualify(
                     continue
                 try:
                     schedule = infer_fee_schedule_consensus(
-                        [
-                            (candidate, evidence)
-                            for candidate, evidence, _, _ in consensus_samples
-                        ],
+                        [(candidate, evidence) for candidate, evidence, _, _ in consensus_samples],
                         market_info,
                     )
                 except (RuntimeError, ValueError, TypeError) as error:
@@ -1144,9 +1327,7 @@ def qualify(
             "generated_at": now_utc(),
             "unresolved_segments": len(unresolved),
             "unresolved_segment_ids": sorted(unresolved),
-            "unresolved_failures": {
-                key: failures.get(key, []) for key in sorted(unresolved)
-            },
+            "unresolved_failures": {key: failures.get(key, []) for key in sorted(unresolved)},
             "failures": {key: value for key, value in sorted(failures.items())},
         }
         atomic_json(output_dir / "failures.json", failure_payload)
@@ -1213,7 +1394,9 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--replay-dir", type=Path, action="append", required=True)
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--corpus-config", type=Path, default=DEFAULT_CORPUS_CONFIG)
-    value.add_argument("--rpc-url", default=os.environ.get("POLYGON_RPC_URL", "https://polygon.drpc.org"))
+    value.add_argument(
+        "--rpc-url", default=os.environ.get("POLYGON_RPC_URL", "https://polygon.drpc.org")
+    )
     value.add_argument("--batch-size", type=int, default=20)
     value.add_argument("--workers", type=int, default=4)
     value.add_argument("--requests-per-second", type=float, default=12.0)
@@ -1222,6 +1405,12 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--data-api-url", default="https://data-api.polymarket.com")
     value.add_argument("--market-trade-requests-per-second", type=float, default=5.0)
     value.add_argument("--cache-dir", type=Path)
+    value.add_argument(
+        "--seed-schedule-dir",
+        type=Path,
+        action="append",
+        help="Reuse SHA-256-verified receipt/API proofs from a valid H016 schedule.",
+    )
     value.add_argument("--candidates-per-segment", type=int, default=5)
     value.add_argument("--prepare-only", action="store_true")
     return value
@@ -1265,6 +1454,14 @@ def main() -> None:
         )
         print(json.dumps({key: plan[key] for key in summary_keys}, indent=2))
         return
+    resolved_cache_dir = output_dir if args.cache_dir is None else args.cache_dir.resolve()
+    seed_schedule_dirs = tuple(path.resolve() for path in (args.seed_schedule_dir or []))
+    if seed_schedule_dirs:
+        seed_summary = seed_qualified_caches(
+            seed_schedule_dirs,
+            resolved_cache_dir,
+        )
+        print(json.dumps(seed_summary, indent=2, sort_keys=True), flush=True)
     config = CorpusConfig.load(corpus_config_path, tape_dir.parents[1])
     result = qualify(
         plan,
@@ -1278,7 +1475,7 @@ def main() -> None:
         market_info_requests_per_second=args.market_info_requests_per_second,
         data_api_url=str(args.data_api_url),
         market_trade_requests_per_second=args.market_trade_requests_per_second,
-        cache_dir=None if args.cache_dir is None else args.cache_dir.resolve(),
+        cache_dir=resolved_cache_dir,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 

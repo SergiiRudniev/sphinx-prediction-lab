@@ -24,7 +24,10 @@ from sphinx_trace.policy_checkpoint import load_policy_checkpoint
 from sphinx_trace.policy_decisions import PolicyFeatureStore, load_policy_decisions
 from sphinx_trace.policy_encodings import PolicyEncodingStore
 from sphinx_trace.policy_runtime import H012PolicyRuntime, PolicyInference
-from sphinx_trace.polymarket_fees import FeeScheduleBook
+from sphinx_trace.polymarket_fees import (
+    FeeScheduleBook,
+    UnqualifiedFeeScheduleError,
+)
 from sphinx_trace.replay_audit import (
     build_audit_manifest,
     decision_audit_record,
@@ -107,8 +110,7 @@ def _rules(
         adverse_price_ticks=max(
             0,
             math.ceil(
-                float(proxy["adverse_price_ticks"])
-                * (1.0 if protocol_fees else cost_multiplier)
+                float(proxy["adverse_price_ticks"]) * (1.0 if protocol_fees else cost_multiplier)
             ),
         ),
         tick_size=Decimal(str(proxy["tick_size"])),
@@ -252,6 +254,25 @@ def replay(
     fee_schedule_book = (
         None if fee_schedule_dir is None else FeeScheduleBook.from_artifact(fee_schedule_dir)
     )
+
+    def record_fee_miss(error: UnqualifiedFeeScheduleError) -> None:
+        atomic_json(
+            output_dir / "fee-qualification-miss.json",
+            {
+                "schema_version": "1.0.0",
+                "record_type": "h016_fee_qualification_miss",
+                "generated_at": now_utc(),
+                "liquidity_id": error.liquidity_id,
+                "condition_id": error.condition_id,
+                "timestamp_unix": error.timestamp_unix,
+                "fee_schedule_manifest_sha256": (
+                    None if fee_schedule_book is None else fee_schedule_book.manifest_sha256
+                ),
+                "test_rows_consumed": 0,
+                "test_labels_opened": False,
+            },
+        )
+
     policy_config = load_json(policy_config_path)
     model_config = load_json(model_config_path)
     residual_config = load_json(residual_config_path)
@@ -414,11 +435,15 @@ def replay(
             timestamp = int(payload["timestamp_unix"])
             resolve_until(timestamp, False, records)
             fills_before = len(adapter.simulator.fills)
-            reference_prices = adapter.observe_trade(
-                payload,
-                shard_ordinal=shard_ordinal,
-                row_ordinal=row_ordinal,
-            )
+            try:
+                reference_prices = adapter.observe_trade(
+                    payload,
+                    shard_ordinal=shard_ordinal,
+                    row_ordinal=row_ordinal,
+                )
+            except UnqualifiedFeeScheduleError as error:
+                record_fee_miss(error)
+                raise
             records.extend(_fill_record(fill) for fill in adapter.simulator.fills[fills_before:])
             refs = decisions.pop(str(payload["trade_id"]), ())
             for ref in refs:
@@ -430,7 +455,11 @@ def replay(
                 inference = runtime.infer(ref, adapter)
                 contract = catalog.contracts[ref.condition_id]
                 records.append(_decision_record(inference, contract.outcomes))
-                orders = adapter.apply_call(inference.call, reference_prices)
+                try:
+                    orders = adapter.apply_call(inference.call, reference_prices)
+                except UnqualifiedFeeScheduleError as error:
+                    record_fee_miss(error)
+                    raise
                 records.extend(_order_record(order) for order in orders)
                 action = inference.call.action
                 action_counts[action.value] += 1
