@@ -60,9 +60,14 @@ def load_policy_decisions(
     ):
         raise ValueError("H012 decision index supports unique development splits only")
     manifest = _load_object(pack_dir / "manifest.json")
-    if manifest.get("valid") is not True or manifest.get("test_labels_opened") is not False:
+    if (
+        manifest.get("valid") is not True
+        or manifest.get("test_labels_opened") is not False
+    ):
         raise RuntimeError("H012 decision index requires a valid closed-test pack")
-    shards = tuple(path for path in sorted((pack_dir / "shards").glob("date=*")) if path.is_dir())
+    shards = tuple(
+        path for path in sorted((pack_dir / "shards").glob("date=*")) if path.is_dir()
+    )
     if not shards:
         raise RuntimeError("H012 decision index found no feature shards")
     code_to_split = {SPLIT_CODES[split]: split for split in splits}
@@ -206,6 +211,7 @@ def policy_input_digest(
     prediction_memory_features: tuple[float, ...],
     previous_action_id: int,
     physical_action_mask: tuple[bool, ...],
+    execution_context: tuple[float, ...] | None = None,
 ) -> str:
     """Bind a policy action to feature, portfolio, memory and physical state."""
 
@@ -219,6 +225,8 @@ def policy_input_digest(
         "previous_action_id": previous_action_id,
         "physical_action_mask": physical_action_mask,
     }
+    if execution_context is not None:
+        payload["execution_context"] = execution_context
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()

@@ -11,10 +11,15 @@ import torch
 from sphinx_trace.config import load_json
 from sphinx_trace.model_h011 import SphinxTraceS0H011
 from sphinx_trace.model_h012 import SphinxTraceS0H012
+from sphinx_trace.model_h021 import SphinxTraceS0H021
 from sphinx_trace.policy_decisions import LoadedPolicyFeature, PolicyDecisionRef
 from sphinx_trace.policy_encodings import LoadedPolicyEncoding
 from sphinx_trace.policy_runtime import H012PolicyRuntime
-from sphinx_trace.replay_h010 import BinaryMarketContract, H010ReplayAdapter, SelectiveAction
+from sphinx_trace.replay_h010 import (
+    BinaryMarketContract,
+    H010ReplayAdapter,
+    SelectiveAction,
+)
 from sphinx_trace.simulator import ReplaySimulator, SimulationRules
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +43,9 @@ def _model() -> SphinxTraceS0H012:
         {"id": "runtime", "width": 64, "heads": 4, "layers": 1, "ffn_width": 128}
     )
     policy_config = deepcopy(
-        load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h012_selective_policy_v1.json")
+        load_json(
+            ROOT / "configs" / "trace" / "sphinx_trace_s0_h012_selective_policy_v1.json"
+        )
     )
     model = SphinxTraceS0H012(
         SphinxTraceS0H011(model_config, candidate_id="runtime"), policy_config
@@ -46,6 +53,20 @@ def _model() -> SphinxTraceS0H012:
     with torch.no_grad():
         model.action.weight.zero_()
         model.action.bias.copy_(torch.tensor([10.0, 0.0, -1.0, -2.0, -3.0, -4.0, -5.0]))
+    return model
+
+
+def _h021_model() -> SphinxTraceS0H021:
+    base = _model()
+    policy_config = deepcopy(
+        load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h021_policy_v1.json")
+    )
+    policy_config["architecture"]["outcome_calibration_head"]["hidden_width"] = 16
+    policy_config["architecture"]["strict_veto_head"]["hidden_width"] = 16
+    policy_config["architecture"]["protocol_action_value_head"]["hidden_width"] = 16
+    model = SphinxTraceS0H021(base.outcome_backbone, policy_config)
+    missing, unexpected = model.load_state_dict(base.state_dict(), strict=False)
+    assert missing and not unexpected
     return model
 
 
@@ -107,8 +128,17 @@ def test_runtime_uses_cached_market_encoding_without_changing_state_inputs() -> 
         source_sha256="cd" * 32,
     )
     ref = PolicyDecisionRef(
-        "validation", 0, "2026-01-01", 0, "decision", "trade", 100,
-        "condition", "component", 1, 2,
+        "validation",
+        0,
+        "2026-01-01",
+        0,
+        "decision",
+        "trade",
+        100,
+        "condition",
+        "component",
+        1,
+        2,
     )
     runtime = H012PolicyRuntime(
         _model(),
@@ -126,3 +156,50 @@ def test_runtime_uses_cached_market_encoding_without_changing_state_inputs() -> 
         float(torch.sigmoid(torch.tensor(2.0)))
     )
     assert inferred.portfolio_features[:2] == (1.0, 1.0)
+
+
+def test_h021_runtime_binds_execution_context_and_vetoes_no_upside() -> None:
+    contract = BinaryMarketContract(
+        "condition", "component", ("Yes", "No"), ("yes-token", "no-token")
+    )
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(initial_cash_usd=Decimal("100"), fee_bps=Decimal("0"))
+        ),
+        {"condition": contract},
+        source_sha256="cd" * 32,
+    )
+    ref = PolicyDecisionRef(
+        "validation",
+        0,
+        "2026-01-01",
+        0,
+        "decision",
+        "trade",
+        100,
+        "condition",
+        "component",
+        1,
+        2,
+    )
+    runtime = H012PolicyRuntime(
+        _h021_model(),
+        FeatureStore(),  # type: ignore[arg-type]
+        torch.ones(128),
+        torch.ones(6),
+        torch.device("cpu"),
+    )
+
+    inferred = runtime.infer(
+        ref,
+        adapter,
+        {"yes-token": Decimal("0.99"), "no-token": Decimal("0.01")},
+    )
+
+    assert inferred.call.action == SelectiveAction.SKIP
+    assert inferred.execution_context == pytest.approx((1.0, 0.02, 1.0, 50.0, 0.6, 0.4))
+    assert inferred.base_action_logits is not None
+    assert max(range(3), key=inferred.base_action_logits.__getitem__) == 0
+    assert inferred.no_upside_veto is True
+    assert inferred.calibrated_outcome_probabilities is not None
+    assert sum(inferred.calibrated_outcome_probabilities) == pytest.approx(1.0)

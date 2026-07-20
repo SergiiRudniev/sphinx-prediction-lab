@@ -1926,7 +1926,7 @@ claim.
 
 ## SPH-T-H021: Price-Aware Economic Veto
 
-**Status:** `registered; implementation validation in progress`
+**Status:** `seed-17 ablation complete; exact replay in progress`
 
 **Registered:** 2026-07-20 after the H019 1.0x exact fill audit and H020 design
 rejection, before any H021 training or selection metric. The later H019 2.0x
@@ -1958,6 +1958,28 @@ released weights are excluded because their 2026 training/calibration interval
 overlaps Sphinx development validation, and its flat-fee backtest lacks our
 fill/slippage simulation. Full sources, file digests and the allowed leak-free
 baseline plan are recorded in `docs/POLYMARKET_EDGE_BOT_REVIEW.md`.
+
+**Seed-17 training result.** The 65,854,783-parameter H021 model loaded every
+H014 source parameter exactly; actions and position-size fractions passed the
+registered numerical equivalence check. Each variant trained 1,271,087 gate,
+calibration and auxiliary-value parameters for five epochs before early
+stopping. Neither learned gate beat the epoch-minus-one candidate.
+
+The selected candidate is therefore frozen H014 plus only the exact no-upside
+invariant. On 414,826 held-out states it retained all 7,957 economically
+profitable base calls, vetoed all 9,055 no-upside calls and left 10,319 calls.
+Equal-market chosen utility improved from H014's `0.758e-6` to `1.455e-6`.
+`economic_only` reached at most `0.340e-6` after training. The best trained
+`price_curriculum_080` epoch reached `1.219e-6` with 5,316 calls, 46.6%
+profitable-call retention and 85.9% harmful-call veto: the requested price
+emphasis moved decisions in the intended direction but over-vetoed useful
+calls at the preregistered strength.
+
+This does not yet establish profit. Removing calls changes cash availability,
+future position sizes and prediction memory, so a fresh full stateful replay is
+required. The selected runtime now records entry prices, exact payout,
+break-even, calibrated probability, base logits, veto logit and no-upside flag
+for every decision to support detailed debugging.
 
 **Acceptance.** Selection must preserve profitable H014 calls while vetoing
 harmful/no-upside calls. The winning variant must beat H014 on net profit,
