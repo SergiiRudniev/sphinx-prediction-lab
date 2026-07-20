@@ -20,6 +20,7 @@ def _shard(tmp_path: Path, behavior_code: int = 0) -> StateShard:
     np.save(state / "row_indices.npy", np.asarray([3, 7], dtype=np.int64))
     np.save(state / "encoding_offsets.npy", np.asarray([1, 0], dtype=np.int64))
     np.save(state / "market_ids.npy", np.asarray([11, 12], dtype=np.int64))
+    np.save(state / "component_ids.npy", np.asarray([21, 22], dtype=np.int64))
     np.save(
         state / "behavior_policy_codes.npy",
         np.full(2, behavior_code, dtype=np.uint8),
@@ -78,6 +79,7 @@ def test_h015_batch_joins_state_encoding_terminal_and_logged_targets(
     assert batch.labels.tolist() == [1.0, 0.0]
     assert batch.baselines.tolist() == pytest.approx([0.6, 0.2])
     assert batch.market_ids.tolist() == [11, 12]
+    assert batch.component_ids.tolist() == [21, 22]
     assert batch.behavior_action_ids.tolist() == [2, 1]
     assert batch.realized_action_values.tolist() == pytest.approx([0.0, 0.03])
     assert batch.execution_fractions.tolist() == pytest.approx([0.0, 0.5])

@@ -42,6 +42,43 @@ class StateTokenEncoder(nn.Module):
         return cast(Tensor, self.layers(inputs))
 
 
+class PolicyVectorHead(nn.Module):
+    """Optional nonlinear head over the causal policy state."""
+
+    def __init__(
+        self,
+        input_width: int,
+        hidden_width: int,
+        output_width: int,
+        *,
+        layers: int,
+        dropout: float,
+        zero_initialize_output: bool,
+    ) -> None:
+        super().__init__()
+        if layers < 1 or hidden_width < 1 or output_width < 1:
+            raise ValueError("Policy vector head dimensions must be positive")
+        modules: list[nn.Module] = [RMSNorm(input_width)]
+        width = input_width
+        for _ in range(layers):
+            modules.extend(
+                (
+                    nn.Linear(width, hidden_width),
+                    nn.GELU(),
+                    nn.Dropout(dropout),
+                )
+            )
+            width = hidden_width
+        self.features = nn.Sequential(*modules)
+        self.output = nn.Linear(width, output_width)
+        if zero_initialize_output:
+            nn.init.zeros_(self.output.weight)
+            nn.init.zeros_(self.output.bias)
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        return cast(Tensor, self.output(self.features(inputs)))
+
+
 class SphinxTraceS0H012(nn.Module):
     """Fuse H011 market evidence with portfolio and prediction-memory state."""
 
@@ -99,6 +136,30 @@ class SphinxTraceS0H012(nn.Module):
         self.size_alpha = ScalarHead(self.width)
         self.size_beta = ScalarHead(self.width)
         self.value = ScalarHead(self.width)
+        residual = architecture.get("residual_policy_head")
+        if isinstance(residual, dict) and bool(residual.get("enabled")):
+            self.action_residual: PolicyVectorHead | None = PolicyVectorHead(
+                self.width,
+                int(residual["hidden_width"]),
+                H012_ACTION_COUNT,
+                layers=int(residual["layers"]),
+                dropout=float(residual["dropout"]),
+                zero_initialize_output=bool(residual["zero_initialize_action_output"]),
+            )
+        else:
+            self.action_residual = None
+        protocol_value = architecture.get("protocol_action_value_head")
+        if isinstance(protocol_value, dict) and bool(protocol_value.get("enabled")):
+            self.protocol_action_value: PolicyVectorHead | None = PolicyVectorHead(
+                self.width,
+                int(protocol_value["hidden_width"]),
+                3,
+                layers=int(protocol_value["layers"]),
+                dropout=float(protocol_value["dropout"]),
+                zero_initialize_output=True,
+            )
+        else:
+            self.protocol_action_value = None
         nn.init.normal_(self.policy_latents, std=0.02)
         nn.init.normal_(self.token_type, std=0.02)
         nn.init.zeros_(self.action.weight)
@@ -244,12 +305,21 @@ class SphinxTraceS0H012(nn.Module):
             if attention is not None:
                 attentions.append(attention)
         policy_state = self.final_norm(hidden[:, : self.fusion_latents]).mean(dim=1)
-        action_logits = self.action(policy_state)
+        base_action_logits = self.action(policy_state)
+        action_logits = base_action_logits
+        residual_logits: Tensor | None = None
+        if self.action_residual is not None:
+            residual_logits = self.action_residual(policy_state)
+            action_logits = action_logits + residual_logits
         if physical_action_mask is not None:
             action_mask = physical_action_mask.bool()
             action_logits = action_logits.masked_fill(
                 ~action_mask,
                 torch.finfo(action_logits.dtype).min,
+            )
+            base_action_logits = base_action_logits.masked_fill(
+                ~action_mask,
+                torch.finfo(base_action_logits.dtype).min,
             )
 
         output = {
@@ -260,6 +330,11 @@ class SphinxTraceS0H012(nn.Module):
             "terminal_outcome_logit": terminal_outcome_logit,
             "outcome_uncertainty_log_scale": uncertainty_log_scale,
         }
+        if residual_logits is not None:
+            output["base_action_logits"] = base_action_logits
+            output["action_residual_logits"] = residual_logits
+        if self.protocol_action_value is not None:
+            output["protocol_action_values"] = self.protocol_action_value(policy_state)
         if return_debug:
             output["debug_policy_state"] = policy_state
             output["debug_portfolio_token"] = portfolio_token
