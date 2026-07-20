@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
@@ -170,4 +171,4 @@ def test_build_development_tape_filters_exact_causal_windows_and_resumes(
     assert {row["condition_id"] for row in conditions} == {"condition-a", "condition-b"}
     validation = load_tape_conditions(output, "validation")
     assert set(validation.contracts) == {"condition-a"}
-    assert validation.resolutions[0].payouts == (1, 0)
+    assert validation.resolutions[0].payouts == (Decimal(1), Decimal(0))

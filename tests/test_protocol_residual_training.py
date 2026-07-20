@@ -57,7 +57,7 @@ def test_h018_loss_updates_residual_and_separate_value_head() -> None:
         torch.tensor([11, 11, 12, 13]),
         _config(),
     )
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
     assert torch.isfinite(loss)
     assert output["action_residual_logits"].grad is not None
     assert output["protocol_action_values"].grad is not None

@@ -26,7 +26,7 @@ def _decision(decision_id: str, row: int, action: str) -> dict[str, object]:
 
 def test_logged_execution_value_attributes_partial_fill_and_terminal_payout() -> None:
     payouts = {"condition": {"token0": Decimal(1), "token1": Decimal(0)}}
-    records = [
+    records: list[dict[str, object]] = [
         _decision("call", 4, "CALL_OUTCOME_0"),
         {
             "record_type": "h010_order_audit",
@@ -79,7 +79,7 @@ def test_logged_execution_value_attributes_partial_fill_and_terminal_payout() ->
 
 def test_unfilled_call_receives_zero_logged_value_without_becoming_skip_label() -> None:
     payouts = {"condition": {"token0": Decimal(1), "token1": Decimal(0)}}
-    records = [
+    records: list[dict[str, object]] = [
         _decision("call", 1, "CALL_OUTCOME_0"),
         {
             "record_type": "h010_order_audit",
@@ -107,7 +107,7 @@ def test_unfilled_call_receives_zero_logged_value_without_becoming_skip_label() 
 
 def test_v1_outcome_fee_is_attributed_as_terminal_share_quantity() -> None:
     payouts = {"condition": {"token0": Decimal(1), "token1": Decimal(0)}}
-    records = [
+    records: list[dict[str, object]] = [
         _decision("call", 2, "CALL_OUTCOME_0"),
         {
             "record_type": "h010_order_audit",
@@ -147,7 +147,7 @@ def test_v1_outcome_fee_is_attributed_as_terminal_share_quantity() -> None:
 
 def test_logged_execution_index_rejects_sell_attribution() -> None:
     payouts = {"condition": {"token0": Decimal(1), "token1": Decimal(0)}}
-    records = [
+    records: list[dict[str, object]] = [
         _decision("call", 1, "CALL_OUTCOME_0"),
         {
             "record_type": "h010_order_audit",

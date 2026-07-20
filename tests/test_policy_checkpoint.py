@@ -15,7 +15,7 @@ from sphinx_trace.policy_checkpoint import load_outcome_checkpoint, load_policy_
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _configs() -> tuple[dict, dict, dict]:
+def _configs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     model = deepcopy(load_json(ROOT / "configs" / "trace" / "sphinx_trace_s0_h011_model_v1.json"))
     model["architecture"]["candidates"].append(
         {"id": "load", "width": 64, "heads": 4, "layers": 1, "ffn_width": 128}

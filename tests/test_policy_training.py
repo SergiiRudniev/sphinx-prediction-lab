@@ -11,7 +11,9 @@ from sphinx_trace.policy_training import (
 )
 
 
-def _output(logits: torch.Tensor, size_alpha: float = 2.0, size_beta: float = 2.0):
+def _output(
+    logits: torch.Tensor, size_alpha: float = 2.0, size_beta: float = 2.0
+) -> dict[str, torch.Tensor]:
     rows = len(logits)
     return {
         "action_logits": logits,
@@ -86,7 +88,7 @@ def test_selective_utility_backpropagates_into_actions_and_size() -> None:
         _config(),
     )
 
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
 
     assert logits.grad is not None and torch.isfinite(logits.grad).all()
     assert alpha.grad is not None and torch.isfinite(alpha.grad).all()
@@ -104,7 +106,7 @@ def test_counterfactual_action_value_regression_teaches_both_sides_without_frequ
         _action_value_config(),
     )
 
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
 
     assert logits.grad is not None
     assert logits.grad[0, 0] < 0.0
@@ -126,7 +128,7 @@ def test_logged_execution_value_regresses_only_observed_actions_without_imitatio
         torch.tensor([1.0, 0.5, 0.0]),
         sample_weights=torch.tensor([1.0, 2.0, 3.0]),
     )
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
 
     assert logits.grad is not None
     assert logits.grad[0, 0] < 0.0
@@ -171,7 +173,7 @@ def test_counterfactual_value_ignores_physically_masked_sentinel_logits() -> Non
         _action_value_config(),
         physical_action_mask=physical,
     )
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
 
     assert torch.isfinite(loss)
     assert torch.isfinite(metrics["action_value_loss"])

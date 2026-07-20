@@ -11,7 +11,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-1f2328?logo=python&logoColor=white)](https://www.python.org/)
 [![Model](https://img.shields.io/badge/model-Sphinx%20Trace%20S0-b08d57)](docs/ARCHITECTURE.md)
 [![Corpus](https://img.shields.io/badge/data-Sphinx%20Corpus-23a9c9)](docs/CORPUS.md)
-[![Status](https://img.shields.io/badge/status-Trial%20T0%20diagnostic-d6c6a5)](#current-status)
+[![Status](https://img.shields.io/badge/status-H021%20development--qualified-d6c6a5)](#current-status)
 [![CI](https://github.com/SergiiRudniev/sphinx-prediction-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/SergiiRudniev/sphinx-prediction-lab/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-1f2328)](LICENSE)
 
@@ -26,8 +26,9 @@ probabilities, detect potentially informed activity and manage positions through
 entry, reduction, exit or settlement.
 
 > [!IMPORTANT]
-> The repository contains an architecture, data contracts, research protocol and
-> one diagnostic S0 checkpoint. It has no accepted trading result.
+> The repository contains the S0 architecture, causal data contracts, trained
+> development checkpoints and exact replay evidence. It has no untouched-test or
+> accepted live trading result.
 
 > [!WARNING]
 > This is research software, not financial advice. Automated execution must remain
@@ -58,7 +59,7 @@ flowchart TB
 
 | Family | Specialization | Primary objective | Current state |
 | --- | --- | --- | --- |
-| **Sphinx Trace** | Wallet-flow prediction-market intelligence | Detect informed activity, estimate fair probabilities and manage positions for maximum net edge | S0 Trial T0 diagnostic |
+| **Sphinx Trace** | Wallet-flow prediction-market intelligence | Detect informed activity, estimate fair probabilities and manage positions for maximum net edge | S0 H021 development-qualified; test unopened |
 
 ![Sphinx Trace S0](assets/sphinx-trace-s0-banner.png)
 
@@ -66,7 +67,7 @@ flowchart TB
 
 The H008 S0 direction is a stateful full-universe causal architecture:
 
-1. **Semantic market encoder** — market question, rules, outcomes and structure.
+1. **Market-state encoder** — prices, outcomes, activity and structure.
 2. **Streaming wallet memory** — every valid participant without a hard wallet cap.
 3. **Temporal graph encoder** — wallet, funding, market and event relationships.
 4. **Market and event memory** — recurrent state across the complete lifecycle.
@@ -120,14 +121,14 @@ Sphinx research must preserve:
 | Sphinx Corpus taxonomy | Locked |
 | Sphinx Trace S0 contract | Design registered as `SPH-T-H000` |
 | Historical backfill | Full `SPH-T-H001` in development; fast S0 `SPH-T-H002` qualified |
-| Trial T0 target contract | `SPH-T-H005` qualified; test labels unopened |
-| Trial T0 learning preflight | `SPH-T-H006` qualified; resolution signal only; no promotion |
-| Wallet-history ablation | `SPH-T-H007` inconclusive on 96 validation events |
 | Full-universe research mandate | `SPH-T-H008` registered |
-| Full Outcome Chronicle | `SPH-T-H009` registered; resumable build in progress |
+| Development tape | 47,252,399 causal rows; 809,614 validation decisions |
+| Protocol-exact fees | `SPH-T-H016` receipt-qualified schedule |
 | Sphinx Pulse collector | Implemented; passive collection only |
-| Trained checkpoint | Diagnostic S0 checkpoint; 50,213,128 parameters |
-| Accepted backtest | None |
+| Development incumbent | `SPH-T-H021`; 65,854,783 parameters |
+| Exact development replay | `+21.53%` at 1.0x fees; `+20.49%` at 2.0x fees |
+| Untouched test | Unopened |
+| Accepted backtest | None — development evidence only |
 | Accepted forward result | None |
 | Live execution | Disabled |
 
@@ -155,7 +156,7 @@ cd sphinx-prediction-lab
 
 python -m venv .venv
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,pulse,corpus,research]"
 
 python scripts/check_contracts.py
 python -m pytest
@@ -163,7 +164,7 @@ ruff check .
 mypy src tests scripts
 ```
 
-Research dependencies are optional:
+For research-only environments:
 
 ```bash
 python -m pip install -e ".[research,dev]"

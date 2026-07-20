@@ -156,7 +156,9 @@ def test_seed_qualified_caches_verifies_and_rehydrates_proofs(
     market_info_cache = MarketInfoCache(cache_dir / "market-info-cache.sqlite3")
     market_trade_cache = MarketTradeCache(cache_dir / "market-trade-cache.sqlite3")
     try:
-        assert receipt_cache.get(transaction_hash)["blockNumber"] == "0x10"
+        receipt = receipt_cache.get(transaction_hash)
+        assert receipt is not None
+        assert receipt["blockNumber"] == "0x10"
         assert market_info_cache.get(condition_id) == market_info
         assert market_trade_cache.get(condition_id) == [trade]
     finally:

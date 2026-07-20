@@ -142,6 +142,13 @@ class SphinxTraceS0H021(SphinxTraceS0H012):
             raise ValueError("H021 winning payout multipliers must be positive")
         if bool(((probabilities < 0.0) | (probabilities > 1.0)).any()):
             raise ValueError("H021 market probabilities must be in [0, 1]")
+        if physical_action_mask is not None:
+            if physical_action_mask.shape != (batch, H012_ACTION_COUNT):
+                raise ValueError("H021 physical action mask has an invalid shape")
+            if not bool(physical_action_mask[:, :3].bool().any(dim=1).all()):
+                raise ValueError(
+                    "H021 physical action mask must permit a selective action"
+                )
         return self._forward_from_market_encoding_unchecked(
             market_latent,
             terminal_outcome_logit,
@@ -190,11 +197,6 @@ class SphinxTraceS0H021(SphinxTraceS0H012):
             if physical_action_mask is None
             else physical_action_mask.bool()
         )
-        if physical.shape != raw_base_logits.shape or not bool(
-            physical[:, :3].any(dim=1).all()
-        ):
-            raise ValueError("H021 physical action mask must permit a selective action")
-
         minimum = torch.finfo(raw_base_logits.dtype).min
         selective_base_logits = raw_base_logits[:, :3].masked_fill(
             ~physical[:, :3], minimum
