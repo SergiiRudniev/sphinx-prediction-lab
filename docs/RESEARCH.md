@@ -1731,7 +1731,7 @@ profit remain separate requirements.
 
 ## SPH-T-H018: Conservative Protocol Residual
 
-**Status:** `registered; implementation pending`
+**Status:** `complete; negative training result, H014 retained`
 
 **Registered:** 2026-07-20, after H017 completed and before any H018
 implementation, training metric or replay result existed.
@@ -1769,4 +1769,61 @@ profitable, and breadth must exceed 5,000 calls over 1,000 components. Only then
 may calibration be opened; untouched test and paper-forward evidence remain
 mandatory for promotion.
 
+**Training result.** The architecture-level safeguard worked: the new
+65,640,474-parameter model reproduced H014 action logits, size alpha/beta and
+state value exactly at its zero-residual initialization. Only 1,056,778 adapter
+and protocol-value parameters were trainable. Seed 17 then completed five full
+fit epochs before early stopping. Every trained epoch selected `SKIP` on all
+414,826 held-out states. Chosen utility and call breadth were therefore zero,
+while KL from H014 jumped to approximately `0.816`. The initial H014-equivalent
+`epoch = -1` remained selected at `7.578e-7` equal-market chosen utility.
+
+This is a second distinct negative result. Separating value regression prevents
+H017's margin corruption, but direct lower-tail utility has an abstention
+degeneracy: global SKIP has exactly zero mean and downside and dominates an
+imperfect call policy under the registered scaled CVaR objective. More random
+seeds cannot repair that objective, so the remaining registered seeds are not
+run. A fresh replay would only repeat H014 because the selected residual is
+structurally zero. Calibration and test remain closed.
+
 **Evidence boundary.** H018 is a development hypothesis, not a profit claim.
+
+## SPH-T-H019: Learned Loss Veto
+
+**Status:** `registered; implementation pending`
+
+**Registered:** 2026-07-20, after H018 seed 17 completed and before any H019
+implementation, training metric or replay result existed.
+
+**Trigger.** H018 proved that globally optimizing downside across every state
+rewards abstaining everywhere. H014 nevertheless already provides 19,371 calls
+in held-out on-policy states at `87.46%` raw and `95.62%` equal-market precision.
+The next useful question is narrower: can a model recognize the minority of
+H014 calls that should have been skipped without disturbing markets H014 already
+skips?
+
+**Hypothesis.** Keep the frozen H014 policy, learned balance-aware sizing and
+zero-initialized residual architecture. Apply supervised residual loss only
+where H014 itself chooses CALL. A profitable correct call is labelled KEEP on
+the same outcome side; a losing call is labelled SKIP; hindsight flips to the
+opposite side are forbidden. Non-call states receive only KL and residual
+anchors, so the training objective cannot gain by relabelling the entire corpus
+as SKIP. Economic magnitude and fit-only losing-week weights prioritize costly
+mistakes. The runtime still has no threshold, frequency target or position-size
+rule: its learned residual chooses whether H014's call survives.
+
+**Contract.** Reuse the complete 1,619,228-state protocol-exact corpus and its
+whole-component partition. The separate protocol value head remains auxiliary
+and cannot overwrite action margins. Three registered seeds may train for at
+most 12 resumable BF16 epochs. Selection reports correct-call retention and
+wrong-call veto separately, along with exact utility and full component/week
+tails. Calibration and test remain untouched.
+
+**Acceptance.** The best held-out candidate must retain at least 5,000 calls and
+then beat H014 in a fresh stateful 1.0x replay on net profit, drawdown, median
+week and worst week. Weekly and component lower 95% profit bounds must be
+positive and the point estimate must remain profitable under 2.0x authoritative
+fee stress. Only after these development gates may calibration be opened.
+
+**Evidence boundary.** H019 is a registered development hypothesis, not a
+verified profit result.

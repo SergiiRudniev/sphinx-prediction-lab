@@ -1,0 +1,106 @@
+{
+  "id": "sphinx-trace-s0-h019-learned-loss-veto-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H019",
+  "registered_at": "2026-07-20T15:50:00Z",
+  "objective": "increase_weekly_net_profit_and_precision_by_learning_which_H014_calls_to_veto_without_collapsing_non_called_states",
+  "trigger": {
+    "H018_result_sha256": "e605966aecb76ee38cde82464d107300be04762d4f8f4f63b9f851b5ce34e21b",
+    "H018_best_epoch": -1,
+    "H018_all_trained_epoch_calls": 0,
+    "failure": "direct_tail_utility_converged_to_global_SKIP_in_every_observed_epoch"
+  },
+  "hypothesis": "supervise_the_zero_initialized_residual_only_on_states_where_frozen_H014_calls_using_KEEP_for_profitable_correct_calls_and_SKIP_for_losing_calls_while_anchoring_all_other_states_to_H014_will_learn_a_data_dependent_loss_veto_without_a_runtime_threshold_or_frequency_target",
+  "dependencies": {
+    "initial_policy": {
+      "id": "sphinx-trace-s0-h014-replay-state-policy-seed17",
+      "result_sha256": "2b3a93b38d00b69776834cf82b83313a99239e8ac6605d80024b3ba3947de0d7",
+      "best_model_sha256": "303e0dcabf4ab3b67c2707dde443283734ddf74452c6908eb430c83d4202c8c7",
+      "model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81"
+    },
+    "protocol_tail_pack": {
+      "id": "sphinx-h017-protocol-tail-on-policy-pack-v1",
+      "manifest_sha256": "57ff60da05f6a2bee3f1f68ee5d72a37775dbb10679be7880bcfde7f1161f114",
+      "rows": 1619228,
+      "fit_rows": 1204402,
+      "selection_rows": 414826,
+      "partition_sha256": "d3c2c16b9addfcf2a1f4a50beaab2eab48fb3d12e92f820047eb424c5608f3bf"
+    },
+    "fee_schedule_manifest_sha256": "3fe07cad9f3890407d37ad77d6b5cec700143be8576b7eb4e2d1e116122553cc",
+    "feature_pack_manifest_sha256": "78777cd85bfdb304007f1d28ba7300f96c65241817787e6e495616b91e00ff86",
+    "encoding_manifest_sha256": "ab59509794a29eb55c28c0b7caa0e2f53c6c343fe5d3d09129a9e0896496f5a3"
+  },
+  "architecture": {
+    "initialize_exactly_from_H014": true,
+    "freeze_outcome_backbone": true,
+    "freeze_H014_state_policy_and_size": true,
+    "zero_initialized_residual_action_head": true,
+    "separate_protocol_action_value_head": true,
+    "shared_residual_hidden_width": 512,
+    "residual_layers": 2,
+    "non_H014_call_states_receive_only_H014_anchor_loss": true,
+    "wrong_H014_call_target": "SKIP",
+    "correct_H014_call_target": "retain_same_outcome_side",
+    "opposite_side_hindsight_flip_allowed": false,
+    "fixed_confidence_threshold": null,
+    "fixed_edge_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null,
+    "fixed_wallet_cap": null,
+    "fixed_portfolio_limit": null
+  },
+  "training": {
+    "loss_mode": "learned_H014_call_loss_veto",
+    "policy_temperature": 0.05,
+    "veto_action_weight": 1.0,
+    "economic_utility_weight_power": 0.5,
+    "minimum_economic_weight": 0.1,
+    "protocol_action_value_weight": 0.25,
+    "logged_execution_value_weight": 0.1,
+    "H014_policy_KL_weight": 0.1,
+    "residual_logit_L2_weight": 0.01,
+    "fit_only_week_downside_weighting": true,
+    "maximum_fit_downside_sample_multiplier": 3.0,
+    "equal_market_total_weight_within_behavior": true,
+    "behavior_policy_total_weights_equal": true,
+    "epochs": 12,
+    "early_stopping_patience": 4,
+    "batch_size": 2048,
+    "policy_learning_rate": 0.00003,
+    "weight_decay": 0.01,
+    "gradient_clip_norm": 1.0,
+    "precision": "bf16_mixed",
+    "seeds": [17, 29, 43],
+    "exact_resume": true,
+    "checkpoint_maximum_interval_seconds": 600,
+    "graceful_pause_file": "PAUSE"
+  },
+  "selection": {
+    "primary": "selection_equal_market_mean_protocol_exact_chosen_utility",
+    "secondary": [
+      "selection_wrong_base_call_veto_rate",
+      "selection_correct_base_call_retention_rate",
+      "selection_component_lower_tail_protocol_exact_chosen_utility",
+      "selection_week_lower_tail_protocol_exact_chosen_utility"
+    ],
+    "initial_H014_checkpoint_is_epoch_minus_one_candidate": true,
+    "save_each_epoch_for_exact_replay_ranking": true,
+    "fresh_exact_real_fee_replay_required": true,
+    "cost_stress_multipliers": [1.0, 1.5, 2.0],
+    "calibration_remains_closed_until_development_gates_pass": true
+  },
+  "promotion": {
+    "outperform_H014_net_profit": true,
+    "outperform_H014_maximum_drawdown": true,
+    "outperform_H014_active_week_median": true,
+    "improve_H014_worst_week": true,
+    "weekly_lower_95pct_profit_must_be_positive": true,
+    "component_lower_95pct_profit_must_be_positive": true,
+    "positive_profit_at_two_x_authoritative_fee_stress": true,
+    "minimum_calls": 5000,
+    "minimum_independent_components": 1000,
+    "untouched_test_and_paper_forward_required_after_development": true
+  },
+  "evidence_boundary": "H019 is closed-test development training. Exact replay, untouched test, historical orderbook and paper-forward evidence remain required."
+}
