@@ -1,0 +1,69 @@
+{
+  "id": "sphinx-trace-s0-h017-protocol-tail-utility-seed17-result",
+  "version": "1.0.0-result",
+  "status": "complete_rejected_selected_checkpoint_is_H014",
+  "research_id": "SPH-T-H017",
+  "completed_at": "2026-07-18T14:54:53.361788Z",
+  "training": {
+    "parameters": 64583696,
+    "trainable_parameters": 14335498,
+    "fit_rows": 1204402,
+    "selection_rows": 414826,
+    "fit_components": 74370,
+    "selection_components": 31874,
+    "epochs_completed": 4,
+    "best_epoch": -1,
+    "elapsed_seconds": 747.6871025,
+    "result_sha256": "123de0379d59f50fba117bf9c7f9aa1717df13afa3481b6a0c8bf60e1ab06bae",
+    "best_policy_container_sha256": "90220b0135c9ad098bd29e81618f740090445613f0345f711701a337db9fc505",
+    "selected_model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81",
+    "H014_model_tensor_sha256": "a3912a309df25c45b48b04081618e8a5665e46707d48be1c521138e8f04d4b81",
+    "selected_model_is_tensor_identical_to_H014": true
+  },
+  "initial_selection": {
+    "equal_market_mean_protocol_exact_chosen_utility": 7.577962670139986e-7,
+    "equal_market_mean_protocol_exact_expected_utility": -0.00042312179338437674,
+    "equal_market_mean_protocol_exact_tail_utility": -0.0012283188160702814,
+    "calls": 19371,
+    "call_rate": 0.046696687285753546,
+    "call_precision": 0.8745547467864333,
+    "equal_market_call_rate": 0.061900626392312724,
+    "equal_market_call_precision": 0.9562080648239583,
+    "mean_size": 0.003936153524864029
+  },
+  "best_trained_epoch_observed": {
+    "epoch": 3,
+    "equal_market_mean_protocol_exact_chosen_utility": 3.378803769012027e-8,
+    "equal_market_mean_protocol_exact_expected_utility": -0.00009554138682812873,
+    "equal_market_mean_protocol_exact_tail_utility": -0.0003123792583696047,
+    "calls": 37756,
+    "call_rate": 0.09101647437720876,
+    "call_precision": 0.9032471660133489,
+    "mean_size": 0.0010880324408633073,
+    "selected": false
+  },
+  "diagnosis": {
+    "soft_expected_and_row_tail_utility_improved": true,
+    "hard_argmax_chosen_utility_improved": false,
+    "action_logits_were_used_both_as_policy_scores_and_protocol_value_predictions": true,
+    "regression_collapsed_useful_H014_action_margins": true,
+    "entropy_bonus_rewarded_CALL_SKIP_mixing_at_the_same_scale_as_protocol_utility": true,
+    "row_minibatch_tail_was_not_week_or_component_tail": true
+  },
+  "exact_replay": {
+    "fresh_replay_skipped": true,
+    "reason": "the selected checkpoint is tensor-identical to H014 and H016 already proved deterministic byte-identical replay for tensor-identical policies",
+    "authoritative_H014_one_x_net_profit_usd": 1186.5307626689923,
+    "authoritative_H014_two_x_net_profit_usd": 1046.6506370425973
+  },
+  "gates": {
+    "beats_initial_selection_chosen_utility": false,
+    "selected_new_model": false,
+    "promotion_allowed": false,
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "decision": "reject_H017_and_register_H018_conservative_residual_policy_with_separate_protocol_value_head",
+  "evidence_boundary": "Negative development training result. No calibration, test, historical-orderbook or paper-forward evidence was consumed."
+}

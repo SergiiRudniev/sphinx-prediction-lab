@@ -1481,7 +1481,7 @@ replication test are now mandatory in H016. H015 is rejected for promotion.
 
 ## SPH-T-H016: Protocol-Exact Polymarket Fees
 
-**Status:** `in progress; exact schedule and 1.0x baselines qualified; 1.5x/2.0x stress and fee-dependent retraining pending`
+**Status:** `in progress; exact schedule, 1.0x baselines and H014 2.0x stress qualified; remaining stress and fee-dependent policy improvement pending`
 
 **Registered:** 2026-07-18, while the pre-registered H015 fresh replay was still
 running and before its result was observed. The replay is allowed to finish only
@@ -1632,6 +1632,14 @@ equal. The H015 identity-replication control now passes. Component bootstrap
 inputs are also sorted canonically after this comparison exposed a second
 process-order dependency in the evaluator.
 
+The pre-registered H014 2.0x authoritative fee stress also completes. It remains
+profitable at `+$1,046.650637` (`10.4665%`) after `$191.909856` in fee value,
+with `5.8775%` maximum drawdown, `1.1658` profit factor, `76,294` calls and
+`90.3977%` precision. This proves positive point-estimate profit under doubled
+platform rates, but not robustness: the weekly moving-block lower 95% bound is
+`-$2.95` and the independent-component lower bound is `-$0.00437`. H014 is
+therefore still only the development leader.
+
 **Acceptance.** Official fee examples, V1/V2 contract vectors, role handling,
 rounding, creation-time rollout rules and the cutover boundary must pass
 regression tests. Per-fill fee audit must reconcile exactly to cash and token
@@ -1646,7 +1654,7 @@ queue position or forward executable profit.
 
 ## SPH-T-H017: Protocol-Exact Tail Utility
 
-**Status:** `protocol-exact corpus qualified; training pending`
+**Status:** `complete; negative training result, H014 retained`
 
 **Registered:** 2026-07-18, after the complete H016 1.0x real-fee baselines were
 observed and while the pre-registered H014 2.0x fee stress was still running,
@@ -1698,6 +1706,67 @@ component lower 95% bounds must be positive; 2.0x authoritative fee stress must
 remain profitable; and at least 5,000 calls over 1,000 independent components
 must remain. Calibration and test stay closed until all development gates pass.
 
+**Training result.** H017 completed four BF16 epochs over all 1,204,402 fit rows
+and evaluated 414,826 selection rows after each epoch. The initial H014 policy
+had equal-market chosen utility `7.578e-7`. Every trained checkpoint was worse;
+the least-bad trained epoch reached only `3.379e-8`, so early stopping selected
+`epoch = -1`. The selected model tensor digest is exactly H014's
+`a3912a30...d4b8`. A redundant fresh replay is therefore unnecessary: H016
+already proves byte-identical replay for tensor-identical checkpoints and binds
+H014 at `+$1,186.53` under 1.0x and `+$1,046.65` under 2.0x fees.
+
+The negative result is diagnostic rather than a data failure. By epoch three,
+soft expected utility improved from `-4.231e-4` to `-9.554e-5` and minibatch row
+tail utility improved from `-1.228e-3` to `-3.124e-4`, but hard chosen utility
+fell. H017 used the same three action logits both as policy scores and as exact
+value-regression outputs. The regression compressed useful H014 action margins,
+while an entropy reward encouraged CALL/SKIP mixing at the same numerical scale
+as the tiny protocol utility. Its tail was also a row tail inside daily
+minibatches, not an independent-component or weekly tail. H017 is rejected;
+calibration and test remain untouched.
+
 **Evidence boundary.** H017 can improve protocol-fee-qualified development
 replay only. Historical orderbook execution, untouched test and paper-forward
 profit remain separate requirements.
+
+## SPH-T-H018: Conservative Protocol Residual
+
+**Status:** `registered; implementation pending`
+
+**Registered:** 2026-07-20, after H017 completed and before any H018
+implementation, training metric or replay result existed.
+
+**Trigger.** H017 improved its differentiable soft objective while degrading
+every discrete policy checkpoint. The failure is architectural: action scores
+were forced to double as protocol value estimates, entropy opposed decisive
+SKIP/CALL margins, and the optimized tail did not represent weeks or independent
+market components.
+
+**Hypothesis.** Freeze H014's outcome, portfolio-state fusion and learned sizing,
+then add a zero-initialized residual action adapter and a separate protocol
+action-value head over the fixed 512-wide policy state. At initialization the
+runtime is exactly H014. Only the residual adapter may change CALL-0, CALL-1 or
+SKIP, while value regression can no longer overwrite the base action logits.
+Train without an entropy reward, with an explicit KL trust region to H014,
+protocol-exact mean utility, component lower-tail utility and fit-only weekly
+downside weighting. This should preserve the profitable H014 regime while
+learning small corrections concentrated on its losing states.
+
+**Contract.** H018 reuses all 1,619,228 receipt-bound H017 states and the same
+whole-component 70/30 fit/selection partition. No calibration or test row is
+opened. Repeated markets and the two behavior policies retain equal total
+weight. Three pre-registered seeds (`17`, `29`, `43`) may train for at most 16
+resumable BF16 epochs. There is no fixed confidence or edge threshold, call
+frequency, bet size, wallet cap or portfolio cap. H014's learned size remains a
+model output and still observes available balance; freezing it isolates whether
+action corrections create the gain.
+
+**Acceptance.** A candidate must first improve held-out exact chosen utility and
+component/week lower-tail metrics, then beat H014 in a fresh stateful 1.0x replay
+on net profit, drawdown, median week and worst week. Weekly and independent-
+component lower 95% bounds must be positive, 2.0x fee stress must remain
+profitable, and breadth must exceed 5,000 calls over 1,000 components. Only then
+may calibration be opened; untouched test and paper-forward evidence remain
+mandatory for promotion.
+
+**Evidence boundary.** H018 is a development hypothesis, not a profit claim.
