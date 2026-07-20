@@ -948,6 +948,7 @@ def train(
         "market_encoding_policy_result_sha256": initial_result.get(
             "market_encoding_policy_result_sha256"
         ),
+        "market_backbone_frozen": True,
         "parameters": parameter_count(model),
         "trainable_parameters": sum(parameter.numel() for parameter in trainable),
         "trainable_parameter_names": trainable_names,
