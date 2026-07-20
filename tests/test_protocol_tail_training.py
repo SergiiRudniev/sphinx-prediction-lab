@@ -57,7 +57,7 @@ def test_protocol_tail_loss_is_finite_and_backpropagates() -> None:
     assert metrics["protocol_exact_tail_utility"] <= metrics[
         "protocol_exact_expected_utility"
     ]
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
     assert output["action_logits"].grad is not None
     assert bool(torch.isfinite(output["action_logits"].grad).all())
 

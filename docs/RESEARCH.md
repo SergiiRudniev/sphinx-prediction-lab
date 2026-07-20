@@ -1926,7 +1926,7 @@ claim.
 
 ## SPH-T-H021: Price-Aware Economic Veto
 
-**Status:** `seed-17 ablation complete; exact replay in progress`
+**Status:** `complete; development-qualified incumbent, no live promotion`
 
 **Registered:** 2026-07-20 after the H019 1.0x exact fill audit and H020 design
 rejection, before any H021 training or selection metric. The later H019 2.0x
@@ -1975,11 +1975,43 @@ profitable-call retention and 85.9% harmful-call veto: the requested price
 emphasis moved decisions in the intended direction but over-vetoed useful
 calls at the preregistered strength.
 
-This does not yet establish profit. Removing calls changes cash availability,
-future position sizes and prediction memory, so a fresh full stateful replay is
-required. The selected runtime now records entry prices, exact payout,
-break-even, calibrated probability, base logits, veto logit and no-upside flag
-for every decision to support detailed debugging.
+**Exact replay result.** The full stateful 1.0x replay finished at `+$2,153.23`
+(`+21.53%`) with `4.94%` maximum drawdown, `1.327` profit factor, 53,497
+resolved calls, 24,757 fills and `$102.65` in fees. H014 produced `+$1,186.53`
+on the same initial capital and evidence, so H021 improved net profit by
+`$966.70` or `81.47%`. Active-week median rose from `$10.41` to `$16.54`, the
+worst week improved from `-$350.94` to `-$129.63`, and positive active weeks
+rose from `67.5%` to `75%`. The weekly lower 95% bound was `+$13.08`; the
+independent-component lower mean bound was `+$0.0606`. Both were negative for
+H019.
+
+At 2.0x receipt-qualified platform fees, H021 remained at `+$2,049.17`
+(`+20.49%`) with `5.06%` drawdown, `1.311` profit factor and `$205.44` in fees.
+Its worst week was `-$152.53`; the weekly and independent-component lower 95%
+bounds remained positive at `+$12.23` and `+$0.0561`. All registered H021
+development gates passed at both fee levels.
+
+**Decision audit.** Across 809,614 decisions in the 1.0x replay, the frozen H014
+policy proposed 83,247 calls in the state induced by H021. The invariant kept
+53,497 and vetoed 29,750. Every veto was an entry at effectively `1.00`; mean
+calibrated success probability was `0.99573` while exact break-even was `1.00`.
+No fixed `0.80` or other price threshold was used.
+
+Exact completed-fill attribution explains both the gain and the remaining
+problem. Entries below `0.80` contributed `+$2,695.69`; retained entries at or
+above `0.80` contributed `-$542.46`. The largest residual loss was
+`0.80 <= price < 0.90` at `-$280.17` by fill arithmetic. At the filled-decision
+level that range contained 964 decisions, realized `83.82%` wins and a mean
+calibrated probability of `90.67%`: conditional probability was overstated by
+`6.85` percentage points. A fixed `0.80` ban would still be unjustified because
+some higher-price ranges and contexts are profitable; H022 must learn
+conditional net edge instead.
+
+Call precision fell from H014's `90.40%` to `85.18%`. This is expected and is
+not a regression in the primary objective: H021 removed near-certain correct
+calls with no payoff while retaining lower-priced calls that carry more
+outcome risk and more economic upside. The result demonstrates why outcome
+accuracy is not a trading objective.
 
 **Acceptance.** Selection must preserve profitable H014 calls while vetoing
 harmful/no-upside calls. The winning variant must beat H014 on net profit,
@@ -1988,5 +2020,63 @@ drawdown, active-week median and worst week; retain at least 5,000 calls across
 profitable at 2.0x fees. Calibration and untouched test remain closed until all
 development gates pass.
 
-**Evidence boundary.** H021 is preregistered development research. No H021
-profit evidence exists until training and exact replay complete.
+**Decision.** H021 replaces H014 as the development incumbent. Additional H021
+seeds are not run because the selected candidate is the registered
+epoch-minus-one invariant and both learned variants failed selection. The next
+learned correction is preregistered as H022. Calibration, untouched test and
+paper-forward execution remain unopened, so live promotion is forbidden.
+
+**Evidence boundary.** This is receipt-qualified development trade-tape
+evidence. It is not a historical-orderbook guarantee, untouched-test result or
+paper-forward profit claim.
+
+## SPH-T-H022: Conditional Net-Edge Ensemble
+
+**Status:** `registered; not implemented`
+
+**Registered:** 2026-07-20 after the complete H021 1.0x replay and its exact
+price/calibration audit, but before the H021 2.0x result and before any H022
+implementation, training or selection metric existed.
+
+**Trigger.** H021 proved that removing no-upside entries can increase profit
+while lowering raw outcome accuracy. It also localized the remaining loss:
+fills at or above `0.80` lost `$542.46`, and filled decisions in the
+`0.80-0.90` region overstated success probability by `6.85` percentage points.
+The seed-17 price curriculum moved vetoes in the right direction but retained
+only `46.6%` of profitable base calls, so stronger weighting or more random
+seeds do not address the conditional-calibration and retention problem.
+
+**Hypothesis.** Preserve H021 as a strict, zero-change fallback. A new learned
+gate still cannot originate a CALL or flip H014's outcome side. It combines a
+price-conditional probability calibrator, distributional net-return and fill
+heads, and a fit-only cross-fitted tree/neural ensemble. Inputs include
+continuous price geometry, receipt-bound break-even, uncertainty, linked-event
+state, wallet flow, liquidity, portfolio and prediction memory. Soft routing
+may learn different regimes, but there are no price buckets or fixed entry,
+confidence, frequency or bet-size thresholds.
+
+The LightGBM member transfers only the public Polymarket Edge Bot's useful
+architectural control: explicit price/activity/event features and calibrated
+probability. Its released weights and overlapping 2026 labels remain excluded.
+Natural-language features are also excluded from H022 so the experiment stays
+focused on market and participant behavior. Wallet-zero and wallet-shuffle
+ablations are mandatory to establish whether wallet information adds edge over
+the price/event baseline.
+
+**Contract.** Train only from the receipt-bound H017 fit partition and select on
+its whole-component selection partition. H021 exact-replay rows are diagnostic
+trigger evidence and may not become H022 targets. Seeds 17, 29 and 43 are
+resumable with an epoch checkpoint. The production decision is learned
+`KEEP_BASE_CALL` versus `SKIP`; H021's no-upside invariant remains fail-closed.
+Debug output must expose every ensemble member, calibrated probability,
+break-even, return quantiles, fill probability, wallet/event/price attribution
+and final gate logit.
+
+**Acceptance.** H022 must beat H021, not H014, on 1.0x net profit, drawdown,
+active-week median and worst week; preserve positive weekly and independent-
+component lower 95% bounds; remain point-profitable at 2.0x fees; and retain at
+least 5,000 calls across 1,000 components. Calibration and untouched test stay
+closed until those development gates pass.
+
+**Evidence boundary.** H022 is a registered hypothesis, not a model or profit
+result.

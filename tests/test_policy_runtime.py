@@ -203,3 +203,20 @@ def test_h021_runtime_binds_execution_context_and_vetoes_no_upside() -> None:
     assert inferred.no_upside_veto is True
     assert inferred.calibrated_outcome_probabilities is not None
     assert sum(inferred.calibrated_outcome_probabilities) == pytest.approx(1.0)
+
+    cached_runtime = H012PolicyRuntime(
+        _h021_model(),
+        FeatureStore(),  # type: ignore[arg-type]
+        torch.ones(128),
+        torch.ones(6),
+        torch.device("cpu"),
+        encoding_store=EncodingStore(),  # type: ignore[arg-type]
+    )
+    cached = cached_runtime.infer(
+        ref,
+        adapter,
+        {"yes-token": Decimal("0.99"), "no-token": Decimal("0.01")},
+    )
+    assert cached.call.action == SelectiveAction.SKIP
+    assert cached.no_upside_veto is True
+    assert cached.execution_context == inferred.execution_context

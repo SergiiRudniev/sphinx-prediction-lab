@@ -1,0 +1,116 @@
+{
+  "id": "sphinx-trace-s0-h022-conditional-net-edge-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H022",
+  "registered_at": "2026-07-20T19:40:45Z",
+  "parent": "sphinx-trace-s0-h021-policy-v1",
+  "objective": "learn_conditional_net_edge_without_a_fixed_entry_price_cutoff",
+  "trigger_evidence": {
+    "h021_one_x_net_profit_usd": 2153.233196917179,
+    "h021_one_x_maximum_drawdown": 0.049357305994628786,
+    "h021_one_x_weekly_bootstrap_lower_95pct_usd": 13.076602182628445,
+    "h021_one_x_component_bootstrap_lower_mean_profit_usd": 0.060640138969848725,
+    "h021_fill_pnl_below_0_80_usd": 2695.6898174086417,
+    "h021_fill_pnl_at_least_0_80_usd": -542.4566204914628,
+    "h021_price_0_80_to_0_90_probability_overestimate": 0.06854717353072892,
+    "h021_no_upside_decisions_vetoed": 29750,
+    "h021_two_x_result_seen_at_registration": false
+  },
+  "action_support": {
+    "base_candidate": "frozen_H021",
+    "base_skip_can_become_call": false,
+    "base_call_side_can_flip": false,
+    "base_call_can_be_skipped": true,
+    "no_upside_invariant_retained": true
+  },
+  "architecture": {
+    "conditional_probability_calibrator": {
+      "inputs": [
+        "terminal_outcome_logit",
+        "uncertainty",
+        "continuous_entry_price_geometry",
+        "receipt_bound_break_even",
+        "event_component_state",
+        "wallet_flow_state",
+        "liquidity_state"
+      ],
+      "price_buckets": null,
+      "fixed_price_threshold": null
+    },
+    "distributional_net_return_head": {
+      "targets": [
+        "realized_net_log_utility",
+        "downside_quantiles",
+        "fill_probability"
+      ],
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ]
+    },
+    "cross_fitted_ensemble": {
+      "neural_member": "conditional_calibration_plus_distributional_gate",
+      "tree_member": "fit_only_lightgbm_price_event_activity_wallet_control",
+      "stacking": "out_of_fold_fit_only",
+      "external_released_weights_allowed": false,
+      "natural_language_features": false,
+      "wallet_zero_and_shuffle_ablations_required": true
+    },
+    "decision_debug": [
+      "member_scores",
+      "calibrated_probability",
+      "break_even_probability",
+      "net_return_quantiles",
+      "fill_probability",
+      "wallet_group_attribution",
+      "event_group_attribution",
+      "price_context_attribution",
+      "final_keep_skip_logit"
+    ]
+  },
+  "training": {
+    "fit_source": "receipt_bound_H017_fit_partition_only",
+    "selection_source": "whole_component_H017_selection_partition",
+    "h021_exact_replay_rows_as_training_targets": false,
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "resumable": true,
+    "checkpoint_every_epoch": true,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null,
+    "fixed_confidence_threshold": null,
+    "fixed_entry_price_threshold": null
+  },
+  "selection": {
+    "primary": "protocol_exact_equal_market_net_utility",
+    "secondary": [
+      "profitable_base_call_retention",
+      "harmful_base_call_veto",
+      "conditional_calibration",
+      "component_lower_tail",
+      "weekly_lower_tail",
+      "call_breadth"
+    ],
+    "stateful_replay_required": true
+  },
+  "acceptance": {
+    "must_beat_H021_one_x_net_profit": true,
+    "must_beat_H021_one_x_maximum_drawdown": true,
+    "must_beat_H021_active_week_median": true,
+    "must_beat_H021_worst_week": true,
+    "weekly_lower_95pct_profit_positive": true,
+    "component_lower_95pct_profit_positive": true,
+    "two_x_real_fee_point_estimate_profitable": true,
+    "minimum_calls": 5000,
+    "minimum_independent_components": 1000
+  },
+  "calibration_rows_consumed": 0,
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "evidence_boundary": "Registered development hypothesis only. The H021 replay is diagnostic trigger evidence and is excluded from H022 training targets; profit requires new fit-only training and exact stateful replay."
+}

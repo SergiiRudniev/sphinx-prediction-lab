@@ -48,7 +48,7 @@ def test_h019_targets_keep_correct_calls_and_veto_wrong_calls() -> None:
         torch.tensor([0.01, -0.01, 0.0, -0.01]),
         _config(),
     )
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
     assert metrics["base_call_count"] == 3
     assert metrics["correct_base_call_count"] == 1
     assert metrics["wrong_base_call_count"] == 2
