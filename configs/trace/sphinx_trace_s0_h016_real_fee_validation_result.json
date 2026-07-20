@@ -1,7 +1,7 @@
 {
   "id": "sphinx-trace-s0-h016-real-fee-validation-result",
-  "version": "1.0.0-partial-result",
-  "status": "one_x_baselines_complete_stress_and_retraining_pending",
+  "version": "1.1.0-partial-result",
+  "status": "one_x_baselines_and_H014_two_x_stress_complete_remaining_stress_and_retraining_pending",
   "research_id": "SPH-T-H016",
   "completed_at": "2026-07-18T13:47:43Z",
   "fee_schedule": {
@@ -81,6 +81,25 @@
       "profit_evaluation_sha256": "33339f37e8950769cf9ab68afcc647604fe87f8f070cebddda29b8eae28fff13"
     }
   },
+  "cost_stress_replays": {
+    "H014-epoch0-2.0x": {
+      "net_profit_usd": 1046.6506370425973,
+      "return_on_initial_cash": 0.10466506370425973,
+      "maximum_drawdown": 0.05877459,
+      "profit_factor": 1.1657976,
+      "resolved_calls": 76294,
+      "call_precision": 0.9039767,
+      "total_fees_usd": 191.909856,
+      "active_week_minimum_usd": -375.432,
+      "weekly_bootstrap_lower_95pct_usd": -2.9529031431134904,
+      "component_bootstrap_lower_mean_profit_usd": -0.004368698924359125,
+      "result_sha256": "67ea0b8eacbb7698679e9a45d0ab4b604911286a0d5f4d178ee9ab0130e30a9e",
+      "audit_manifest_sha256": "dee50dca42b518a9c89dda77f14bb8a69baf00287ce24032b6085448aaac938c",
+      "profit_evaluation_sha256": "42866f651e7f344e67390091d63ec2c7a3e65a6bbf7e7aa9b31461bd28ae76ba",
+      "point_estimate_profitable": true,
+      "robustness_gates_pass": false
+    }
+  },
   "fee_audit": {
     "all_fills_have_schedule_protocol_role_asset_and_fee_quantities": true,
     "H012_fill_fee_sum_matches_result": true,
@@ -103,7 +122,8 @@
     "H014_weekly_lower_positive": true,
     "H014_component_lower_positive": false,
     "one_point_five_x_stress_complete": false,
-    "two_x_stress_complete": false,
+    "H014_two_x_stress_complete": true,
+    "all_registered_two_x_stress_complete": false,
     "fee_dependent_targets_rebuilt": false,
     "fee_dependent_policy_retrained": false,
     "all_pass": false
