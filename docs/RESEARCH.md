@@ -1790,7 +1790,7 @@ structurally zero. Calibration and test remain closed.
 
 ## SPH-T-H019: Learned Loss Veto
 
-**Status:** `training complete; exact real-fee replay in progress`
+**Status:** `complete; rejected on exact real-fee development replay`
 
 **Registered:** 2026-07-20, after H018 seed 17 completed and before any H019
 implementation, training metric or replay result existed.
@@ -1848,20 +1848,36 @@ proofs, 308 market-trade proofs, eight market-info proofs and zero unresolved
 segments. Its manifest digest is `20ebbd03...779`; calibration and test remain
 closed.
 
-The clean V5 replay crossed the original failure point without another
-qualification miss. A preregistered structural issue was already visible by day
-268: H019 had emitted 82,300 calls, exceeding H014's 76,359 full-year calls.
-Thus its unconstrained three-action residual can create CALLs from states where
-H014 chose SKIP; it is not a strict veto even though its supervised loss was
-trained primarily on H014 call states. The full replay is intentionally being
-completed before H019 is accepted or rejected.
+**Exact replay result.** The clean V5 1.0x replay completed at `+$1,116.58`
+(`+11.17%`) with `5.92%` maximum drawdown, `1.144` profit factor, 93,917
+resolved calls, 65,730 fills and `$147.72` in fees. It was profitable but worse
+than H014's `+$1,186.53`, and both registered bootstrap lower bounds were
+negative: weekly `-$1.43` and independent-component mean `-$0.00342`. At 2.0x
+fees it remained point-profitable at `+$992.65`, but drawdown rose to `6.08%`,
+the worst week fell to `-$395.59`, and the weekly/component lower bounds were
+`-$4.87` and `-$0.00846`. H019 therefore fails promotion.
+
+Every H019 call selected outcome 1. The unconstrained residual expanded call
+breadth rather than acting as a veto, confirming the issue observed during the
+run. Exact decision/order/fill/resolution joining also reproduced replay PnL
+and localized the main damage. At 1.0x, fills below `0.70` contributed
+`+$2,157.36`, while fills at or above `0.90` contributed `-$1,133.29`; fills at
+exactly `1.00` lost `-$546.57` because wins have no remaining upside while a
+loss still loses principal. This is arithmetic attribution of completed fills,
+not a stateful counterfactual replay.
+
+The frozen terminal probability still ranks the expensive tail (`AUC 0.7467`),
+but the action margin barely does (`AUC 0.5361`). For about `85.15%` of filled
+high-price decisions, model probability was not above protocol-exact break-even
+on at least one fill. The pattern is visible to the outcome representation but
+is not converted into an economically valid action.
 
 **Evidence boundary.** H019 is a registered development hypothesis, not a
 verified profit result.
 
 ## SPH-T-H020: Strict Learned Veto
 
-**Status:** `registered; implementation pending H019 exact replay`
+**Status:** `complete; rejected by design audit before training`
 
 **Registered:** 2026-07-20, after H019 training and the first 268 days of its
 clean V5 exact replay were observed, but before H019's final replay, bootstrap
@@ -1895,5 +1911,60 @@ produce positive weekly and component lower 95% bounds, and remain profitable
 under 2.0x receipt-qualified platform fees. Calibration and test remain closed
 until every development gate passes.
 
+**Design-audit result.** H019's completed fill audit falsified H020's target
+before training began. Labelling every correct H014 call as KEEP would teach the
+gate to retain a correct purchase at price `1.00`, even though its best possible
+net result is zero and it retains full downside. H020 also did not expose actual
+candidate entry price or protocol-exact break-even to the gate. Because this is
+a target-definition failure rather than an optimizer failure, no H020 model or
+seed was trained and no calibration/test label was opened. The registered
+hypothesis is preserved; H021 replaces it rather than rewriting it after seeing
+the data.
+
 **Evidence boundary.** H020 is preregistered development research, not a profit
 claim.
+
+## SPH-T-H021: Price-Aware Economic Veto
+
+**Status:** `registered; implementation validation in progress`
+
+**Registered:** 2026-07-20 after the H019 1.0x exact fill audit and H020 design
+rejection, before any H021 training or selection metric. The later H019 2.0x
+result did not alter the registered architecture or objective.
+
+**Hypothesis.** Freeze H014's market/wallet representation, candidate outcome,
+balance-aware size and existing SKIP decisions. A strict neural gate may only
+keep the same proposed outcome or skip it. It receives both candidate entry
+prices, receipt-bound payout per total cost, market probability, calibrated
+model probability, exact break-even, uncertainty, policy state, portfolio and
+prediction memory. A mathematical no-upside invariant forces SKIP only where
+winning payout per total cost is not greater than one; there is no fixed price,
+confidence, edge, frequency or bet-size rule.
+
+**Price-curriculum ablation.** Two variants share the exact same component
+split, model and selection utility. `economic_only` trains on realized net log
+utility. `price_curriculum_080` additionally applies a smooth sigmoid centered
+at `0.80`: successful cheaper calls receive up to `1.5x` loss weight and failed
+more-expensive calls up to `2.0x`. This modifies gradient emphasis only. It does
+not prohibit a call above `0.80`; a sufficiently strong learned edge can still
+survive. Both variants preregister seeds 17, 29 and 43, resumable BF16 training,
+and must be compared through fresh stateful 1.0x/2.0x replay.
+
+**External architecture review.** The public Polymarket Edge Bot artifact uses
+calibrated LightGBM over opening-price geometry, event aggregates, activity and
+question embeddings. Its largest tree-gain features are price and event-relative
+features, supporting H021's explicit price/calibration representation. Its
+released weights are excluded because their 2026 training/calibration interval
+overlaps Sphinx development validation, and its flat-fee backtest lacks our
+fill/slippage simulation. Full sources, file digests and the allowed leak-free
+baseline plan are recorded in `docs/POLYMARKET_EDGE_BOT_REVIEW.md`.
+
+**Acceptance.** Selection must preserve profitable H014 calls while vetoing
+harmful/no-upside calls. The winning variant must beat H014 on net profit,
+drawdown, active-week median and worst week; retain at least 5,000 calls across
+1,000 components; make both bootstrap lower bounds positive; and remain
+profitable at 2.0x fees. Calibration and untouched test remain closed until all
+development gates pass.
+
+**Evidence boundary.** H021 is preregistered development research. No H021
+profit evidence exists until training and exact replay complete.

@@ -18,8 +18,10 @@ from torch import Tensor
 
 from sphinx_corpus.io import atomic_json, now_utc, sha256_file
 from sphinx_trace.config import load_json
+from sphinx_trace.economic_veto_training import economic_call_veto_loss
 from sphinx_trace.model import parameter_count
 from sphinx_trace.model_h012 import SphinxTraceS0H012
+from sphinx_trace.model_h021 import SphinxTraceS0H021
 from sphinx_trace.on_policy_pack import validate_on_policy_shard
 from sphinx_trace.policy_checkpoint import load_policy_checkpoint
 from sphinx_trace.protocol_residual_training import (
@@ -77,7 +79,10 @@ IMPLEMENTATION_PATHS = (
     ROOT / "scripts" / "train_h015_portfolio_advantage.py",
     ROOT / "src" / "sphinx_trace" / "protocol_residual_training.py",
     ROOT / "src" / "sphinx_trace" / "protocol_veto_training.py",
+    ROOT / "src" / "sphinx_trace" / "economic_veto_training.py",
+    ROOT / "src" / "sphinx_trace" / "model_h021.py",
     ROOT / "scripts" / "train_h019_loss_veto_policy.py",
+    ROOT / "scripts" / "train_h021_price_aware_economic_veto_policy.py",
     ROOT / "src" / "sphinx_trace" / "protocol_tail_pack.py",
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
     ROOT / "src" / "sphinx_trace" / "policy_checkpoint.py",
@@ -195,27 +200,92 @@ def _initialize_model(
         device,
     )
     source_digest = _module_digest(loaded.model)
-    model = SphinxTraceS0H012(loaded.model.outcome_backbone, target_policy_config).to(device)
+    target_class = (
+        SphinxTraceS0H021
+        if "strict_veto_head" in target_policy_config["architecture"]
+        else SphinxTraceS0H012
+    )
+    model = target_class(loaded.model.outcome_backbone, target_policy_config).to(device)
     missing, unexpected = model.load_state_dict(loaded.model.state_dict(), strict=False)
-    allowed_prefixes = ("action_residual.", "protocol_action_value.")
-    if unexpected or not missing or any(
-        not name.startswith(allowed_prefixes) for name in missing
+    allowed_prefixes = (
+        ("strict_veto.", "outcome_calibration.", "protocol_action_value.")
+        if isinstance(model, SphinxTraceS0H021)
+        else ("action_residual.", "protocol_action_value.")
+    )
+    if (
+        unexpected
+        or not missing
+        or any(not name.startswith(allowed_prefixes) for name in missing)
     ):
         raise RuntimeError(
             f"H018 initialization mismatch: missing={missing}, unexpected={unexpected}"
         )
     model.requires_grad_(False)
-    if model.action_residual is None or model.protocol_action_value is None:
-        raise RuntimeError("H018 policy configuration did not construct both adapter heads")
-    model.action_residual.requires_grad_(True)
+    if model.protocol_action_value is None:
+        raise RuntimeError(
+            "Protocol policy configuration did not construct a value head"
+        )
+    if isinstance(model, SphinxTraceS0H021):
+        model.strict_veto.requires_grad_(True)
+        model.outcome_calibration.requires_grad_(True)
+        trainable_modules = [
+            "strict_veto",
+            "outcome_calibration",
+            "protocol_action_value",
+        ]
+    else:
+        if model.action_residual is None:
+            raise RuntimeError(
+                "H018 policy configuration did not construct a residual head"
+            )
+        model.action_residual.requires_grad_(True)
+        trainable_modules = ["action_residual", "protocol_action_value"]
     model.protocol_action_value.requires_grad_(True)
     receipt = {
         "source_model_tensor_sha256": source_digest,
         "missing_target_parameters": sorted(missing),
         "unexpected_source_parameters": sorted(unexpected),
-        "trainable_modules": ["action_residual", "protocol_action_value"],
+        "trainable_modules": trainable_modules,
     }
     return model, loaded.result, receipt
+
+
+def _execution_context(batch: StateBatch, device: torch.device) -> Tensor:
+    if batch.entry_prices is None or batch.winning_payout_multipliers is None:
+        raise RuntimeError("H021 batch has no protocol-exact execution context")
+    market = np.stack((batch.baselines, 1.0 - batch.baselines), axis=1).astype(
+        np.float32
+    )
+    values = np.concatenate(
+        (batch.entry_prices, batch.winning_payout_multipliers, market), axis=1
+    )
+    return torch.from_numpy(values).to(device, non_blocking=True)
+
+
+def _forward_adapter(
+    model: SphinxTraceS0H012,
+    batch: StateBatch,
+    device: torch.device,
+) -> tuple[dict[str, Tensor], Tensor, Tensor]:
+    if not isinstance(model, SphinxTraceS0H021):
+        return _forward(model, batch, device)
+    labels = torch.from_numpy(batch.labels).to(device, non_blocking=True)
+    baselines = torch.from_numpy(batch.baselines).to(device, non_blocking=True)
+    output = model.forward_from_market_encoding(
+        torch.from_numpy(batch.market_latents).to(device, non_blocking=True),
+        torch.from_numpy(batch.terminal_logits).to(device, non_blocking=True),
+        torch.from_numpy(batch.uncertainty_log_scales).to(device, non_blocking=True),
+        torch.from_numpy(batch.portfolio_features).to(device, non_blocking=True),
+        torch.from_numpy(batch.prediction_memory_features).to(
+            device, non_blocking=True
+        ),
+        torch.from_numpy(batch.previous_action_ids).to(device, non_blocking=True),
+        execution_context=_execution_context(batch, device),
+        physical_action_mask=torch.from_numpy(batch.physical_action_masks).to(
+            device, non_blocking=True
+        ),
+    )
+    return output, labels, baselines
 
 
 def _verify_initial_equivalence(
@@ -243,15 +313,42 @@ def _verify_initial_equivalence(
     model.eval()
     loaded.model.eval()
     with torch.inference_mode():
-        target, _, _ = _forward(model, batch, device)
+        target, _, _ = _forward_adapter(model, batch, device)
         source, _, _ = _forward(loaded.model, batch, device)
-    keys = (
-        "action_logits",
-        "position_size_beta_alpha",
-        "position_size_beta_beta",
-        "state_value",
-    )
-    equal = {key: bool(torch.equal(target[key], source[key])) for key in keys}
+    if isinstance(model, SphinxTraceS0H021):
+        equal = {
+            "base_action_logits": bool(
+                torch.equal(
+                    target["base_action_logits"], source["action_logits"][:, :3]
+                )
+            ),
+            "position_size_beta_alpha": bool(
+                torch.equal(
+                    target["position_size_beta_alpha"],
+                    source["position_size_beta_alpha"],
+                )
+            ),
+            "position_size_beta_beta": bool(
+                torch.equal(
+                    target["position_size_beta_beta"],
+                    source["position_size_beta_beta"],
+                )
+            ),
+            "state_value": bool(
+                torch.equal(target["state_value"], source["state_value"])
+            ),
+            "calibration_delta_zero": bool(
+                torch.count_nonzero(target["outcome_calibration_delta"]) == 0
+            ),
+        }
+    else:
+        keys = (
+            "action_logits",
+            "position_size_beta_alpha",
+            "position_size_beta_beta",
+            "state_value",
+        )
+        equal = {key: bool(torch.equal(target[key], source[key])) for key in keys}
     if not all(equal.values()):
         raise RuntimeError(f"H018 zero residual does not reproduce H014: {equal}")
     return {"rows": len(batch.labels), "tensor_equal": equal, "passed": True}
@@ -280,10 +377,16 @@ def _fit_week_downside_weights(
     factors: dict[tuple[int, int], float] = {}
     receipt_by_behavior: dict[str, Any] = {}
     for behavior in (0, 1):
-        rows = {week: pnl for (code, week), pnl in weekly_pnl.items() if code == behavior}
-        maximum_downside = max((-value for value in rows.values() if value < 0.0), default=0.0)
+        rows = {
+            week: pnl for (code, week), pnl in weekly_pnl.items() if code == behavior
+        }
+        maximum_downside = max(
+            (-value for value in rows.values() if value < 0.0), default=0.0
+        )
         for week, pnl in rows.items():
-            fraction = (-pnl / maximum_downside) if pnl < 0.0 and maximum_downside else 0.0
+            fraction = (
+                (-pnl / maximum_downside) if pnl < 0.0 and maximum_downside else 0.0
+            )
             factors[(behavior, week)] = 1.0 + (maximum_multiplier - 1.0) * fraction
         receipt_by_behavior[str(behavior)] = {
             "weeks": len(rows),
@@ -303,7 +406,9 @@ def _fit_week_downside_weights(
             shard.state / "market_ids.npy", mmap_mode="r", allow_pickle=False
         )
         weeks = np.load(shard.state / "week_ids.npy", mmap_mode="r", allow_pickle=False)
-        base = market_weights[0, shard.behavior_code, markets[indices]].astype(np.float64)
+        base = market_weights[0, shard.behavior_code, markets[indices]].astype(
+            np.float64
+        )
         risk = np.asarray(
             [factors[(shard.behavior_code, int(week))] for week in weeks[indices]],
             dtype=np.float64,
@@ -315,11 +420,15 @@ def _fit_week_downside_weights(
         receipt_by_behavior[str(behavior)]["normalization"] = float(
             normalization[behavior]
         )
-    return factors, normalization, {
-        "source_partition": "fit_only",
-        "maximum_multiplier": maximum_multiplier,
-        "behaviors": receipt_by_behavior,
-    }
+    return (
+        factors,
+        normalization,
+        {
+            "source_partition": "fit_only",
+            "maximum_multiplier": maximum_multiplier,
+            "behaviors": receipt_by_behavior,
+        },
+    )
 
 
 def _training_weights(
@@ -354,7 +463,10 @@ def _loss(
     weights: Tensor,
     config: dict[str, Any],
 ) -> tuple[Tensor, dict[str, Tensor]]:
-    if batch.winning_payout_multipliers is None or batch.reference_action_values is None:
+    if (
+        batch.winning_payout_multipliers is None
+        or batch.reference_action_values is None
+    ):
         raise RuntimeError("H018 batch has no protocol-exact targets")
     payout = torch.from_numpy(batch.winning_payout_multipliers).to(
         labels.device, non_blocking=True
@@ -371,6 +483,18 @@ def _loss(
     physical = torch.from_numpy(batch.physical_action_masks).to(
         labels.device, non_blocking=True
     )
+    if config.get("loss_mode") == "strict_price_aware_realized_net_log_utility_veto":
+        return economic_call_veto_loss(
+            output,
+            labels,
+            payout,
+            reference,
+            behavior_actions,
+            realized,
+            config,
+            sample_weights=weights,
+            physical_action_mask=physical,
+        )
     if config.get("loss_mode") == "learned_H014_call_loss_veto":
         return learned_call_loss_veto_loss(
             output,
@@ -444,6 +568,12 @@ def _evaluate(
     wrong_base_calls_total = 0
     retained_correct_base_calls_total = 0
     vetoed_wrong_base_calls_total = 0
+    profitable_base_calls_total = 0
+    harmful_base_calls_total = 0
+    no_upside_base_calls_total = 0
+    vetoed_no_upside_base_calls_total = 0
+    retained_profitable_base_calls_total = 0
+    vetoed_harmful_base_calls_total = 0
     action_counts = np.zeros(3, dtype=np.int64)
     value_error = 0.0
     residual_l2 = 0.0
@@ -457,10 +587,8 @@ def _evaluate(
             weights_numpy = _sample_weights(batch, market_weights, partition_code)
             weights = torch.from_numpy(weights_numpy).to(device, non_blocking=True)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                output, labels, _ = _forward(model, batch, device)
-                loss, metrics = _loss(
-                    output, labels, batch, weights, training_config
-                )
+                output, labels, _ = _forward_adapter(model, batch, device)
+                loss, metrics = _loss(output, labels, batch, weights, training_config)
             logits = output["action_logits"][:, :3].float()
             temperature = float(training_config["policy_temperature"])
             policy = torch.softmax(logits / temperature, dim=-1)
@@ -475,13 +603,11 @@ def _evaluate(
                 (1.0 - size + size * label0 * payouts[:, 0]).clamp_min(1e-8)
             )
             utility1 = torch.log(
-                (
-                    1.0
-                    - size
-                    + size * (1.0 - label0) * payouts[:, 1]
-                ).clamp_min(1e-8)
+                (1.0 - size + size * (1.0 - label0) * payouts[:, 1]).clamp_min(1e-8)
             )
-            utilities = torch.stack((utility0, utility1, torch.zeros_like(utility0)), dim=1)
+            utilities = torch.stack(
+                (utility0, utility1, torch.zeros_like(utility0)), dim=1
+            )
             chosen = logits.argmax(dim=-1)
             base_chosen = output["base_action_logits"][:, :3].argmax(dim=-1)
             chosen_utility = utilities.gather(1, chosen[:, None]).squeeze(1)
@@ -496,6 +622,12 @@ def _evaluate(
             )
             correct_base_calls = base_calls & base_correct
             wrong_base_calls = base_calls & ~base_correct
+            base_utility = utilities.gather(1, base_chosen[:, None]).squeeze(1)
+            no_upside = output.get(
+                "no_upside_veto", torch.zeros_like(base_calls, dtype=torch.bool)
+            ).bool()
+            profitable_base_calls = base_calls & (base_utility > 0.0) & ~no_upside
+            harmful_base_calls = base_calls & ~profitable_base_calls
             weight_sum = float(weights.sum())
             chosen_parts.append(chosen_utility.cpu().numpy().astype(np.float64))
             expected_parts.append(expected_utility.cpu().numpy().astype(np.float64))
@@ -520,10 +652,20 @@ def _evaluate(
             vetoed_wrong_base_calls_total += int(
                 (wrong_base_calls & (chosen == 2)).sum()
             )
+            profitable_base_calls_total += int(profitable_base_calls.sum())
+            harmful_base_calls_total += int(harmful_base_calls.sum())
+            no_upside_base_calls_total += int(no_upside.sum())
+            vetoed_no_upside_base_calls_total += int((no_upside & (chosen == 2)).sum())
+            retained_profitable_base_calls_total += int(
+                (profitable_base_calls & (chosen == base_chosen)).sum()
+            )
+            vetoed_harmful_base_calls_total += int(
+                (harmful_base_calls & (chosen == 2)).sum()
+            )
             action_counts += np.bincount(chosen.cpu().numpy(), minlength=3)
             value_error += float(metrics["protocol_action_value_loss"]) * weight_sum
             residual_l2 += float(metrics["residual_logit_L2"]) * weight_sum
-            policy_kl += float(metrics["H014_policy_KL"]) * weight_sum
+            policy_kl += float(metrics.get("H014_policy_KL", 0.0)) * weight_sum
     if not total_rows or total_weight <= 0.0:
         raise RuntimeError(f"H018 evaluation partition {partition_code} is empty")
     chosen_values = np.concatenate(chosen_parts)
@@ -535,8 +677,7 @@ def _evaluate(
     row_count = max(
         1,
         math.ceil(
-            len(chosen_values)
-            * float(training_config["row_lower_tail_quantile"])
+            len(chosen_values) * float(training_config["row_lower_tail_quantile"])
         ),
     )
     row_tail = float(np.partition(chosen_values, row_count - 1)[:row_count].mean())
@@ -593,6 +734,24 @@ def _evaluate(
             if wrong_base_calls_total
             else 0.0
         ),
+        "profitable_base_calls": profitable_base_calls_total,
+        "harmful_base_calls": harmful_base_calls_total,
+        "no_upside_base_calls": no_upside_base_calls_total,
+        "profitable_base_call_retention_rate": (
+            retained_profitable_base_calls_total / profitable_base_calls_total
+            if profitable_base_calls_total
+            else 0.0
+        ),
+        "harmful_base_call_veto_rate": (
+            vetoed_harmful_base_calls_total / harmful_base_calls_total
+            if harmful_base_calls_total
+            else 0.0
+        ),
+        "no_upside_veto_rate": (
+            vetoed_no_upside_base_calls_total / no_upside_base_calls_total
+            if no_upside_base_calls_total
+            else 1.0
+        ),
         "actions": {
             "CALL_OUTCOME_0": int(action_counts[0]),
             "CALL_OUTCOME_1": int(action_counts[1]),
@@ -602,12 +761,65 @@ def _evaluate(
 
 
 def _adapter_state(model: SphinxTraceS0H012) -> dict[str, Any]:
+    if isinstance(model, SphinxTraceS0H021):
+        if model.protocol_action_value is None:
+            raise RuntimeError("H021 adapter heads are missing")
+        return {
+            "strict_veto": model.strict_veto.state_dict(),
+            "outcome_calibration": model.outcome_calibration.state_dict(),
+            "protocol_action_value": model.protocol_action_value.state_dict(),
+        }
     if model.action_residual is None or model.protocol_action_value is None:
         raise RuntimeError("H018 adapter heads are missing")
     return {
         "action_residual": model.action_residual.state_dict(),
         "protocol_action_value": model.protocol_action_value.state_dict(),
     }
+
+
+def _training_variant(
+    config: dict[str, Any],
+    research_id: str,
+    variant_id: str | None,
+) -> tuple[dict[str, Any], list[int]]:
+    training_config = dict(config["training"])
+    if research_id != "SPH-T-H021":
+        if variant_id is not None:
+            raise RuntimeError("Only H021 supports a registered training variant")
+        return training_config, [int(value) for value in training_config["seeds"]]
+    variants = training_config.pop("variants", None)
+    if not isinstance(variants, list) or not variants:
+        raise RuntimeError("H021 has no registered training variants")
+    if not variant_id:
+        raise RuntimeError("H021 requires --variant")
+    selected = next(
+        (
+            value
+            for value in variants
+            if isinstance(value, dict) and value.get("id") == variant_id
+        ),
+        None,
+    )
+    if selected is None:
+        choices = sorted(
+            str(value.get("id")) for value in variants if isinstance(value, dict)
+        )
+        raise RuntimeError(
+            f"Unknown H021 variant {variant_id!r}; expected one of {choices}"
+        )
+    price_curriculum = selected.get("price_curriculum")
+    seeds = selected.get("seeds")
+    if not isinstance(price_curriculum, dict) or not isinstance(seeds, list):
+        raise RuntimeError(f"H021 variant {variant_id!r} is incomplete")
+    training_config["price_curriculum"] = dict(price_curriculum)
+    training_config["variant_id"] = variant_id
+    return training_config, [int(value) for value in seeds]
+
+
+def _trainable_prefixes(model: SphinxTraceS0H012) -> tuple[str, ...]:
+    if isinstance(model, SphinxTraceS0H021):
+        return ("strict_veto.", "outcome_calibration.", "protocol_action_value.")
+    return ("action_residual.", "protocol_action_value.")
 
 
 def train(
@@ -624,16 +836,18 @@ def train(
     output_dir: Path,
     *,
     seed: int,
+    variant_id: str | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     config = load_json(config_path)
     research_id = str(config.get("research_id") or "")
-    if research_id not in {"SPH-T-H018", "SPH-T-H019"}:
-        raise RuntimeError("Protocol adapter trainer requires H018 or H019")
-    training_config = dict(config["training"])
-    registered_seeds = [int(value) for value in training_config["seeds"]]
+    if research_id not in {"SPH-T-H018", "SPH-T-H019", "SPH-T-H021"}:
+        raise RuntimeError("Protocol adapter trainer requires H018, H019, or H021")
+    training_config, registered_seeds = _training_variant(
+        config, research_id, variant_id
+    )
     if seed not in registered_seeds:
-        raise RuntimeError(f"H018 seed {seed} was not pre-registered")
+        raise RuntimeError(f"{research_id} seed {seed} was not pre-registered")
     policy_config = load_json(policy_config_path)
     initial_policy_config = load_json(initial_policy_config_path)
     model_config = load_json(model_config_path)
@@ -678,13 +892,17 @@ def train(
         shards[0],
         device,
     )
-    trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
-    trainable_names = [name for name, value in model.named_parameters() if value.requires_grad]
+    trainable = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
+    trainable_names = [
+        name for name, value in model.named_parameters() if value.requires_grad
+    ]
+    allowed_trainable_prefixes = _trainable_prefixes(model)
     if not trainable or any(
-        not name.startswith(("action_residual.", "protocol_action_value."))
-        for name in trainable_names
+        not name.startswith(allowed_trainable_prefixes) for name in trainable_names
     ):
-        raise RuntimeError("H018 trainable parameter boundary is invalid")
+        raise RuntimeError(f"{research_id} trainable parameter boundary is invalid")
 
     implementation_sha256 = _implementation_digest()
     source_hashes = {
@@ -705,6 +923,7 @@ def train(
         "residual_config_sha256": sha256_file(residual_config_path),
         "implementation_sha256": implementation_sha256,
         "seed": str(seed),
+        "variant_id": variant_id or "none",
         **source_hashes,
     }
     contract_payload = "".join(
@@ -716,9 +935,12 @@ def train(
     best_path = output_dir / "best-policy.pt"
     epochs_dir = output_dir / "epochs"
     epochs_dir.mkdir(parents=True, exist_ok=True)
+    learning_rate = training_config.get("learning_rate")
+    if learning_rate is None:
+        learning_rate = training_config["policy_learning_rate"]
     optimizer = torch.optim.AdamW(
         trainable,
-        lr=float(training_config["policy_learning_rate"]),
+        lr=float(learning_rate),
         weight_decay=float(training_config["weight_decay"]),
     )
     epochs = int(training_config["epochs"])
@@ -733,7 +955,9 @@ def train(
     stale_epochs = 0
     initial_selection: dict[str, Any] | None = None
     if checkpoint_path.exists():
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        checkpoint = torch.load(
+            checkpoint_path, map_location=device, weights_only=False
+        )
         if checkpoint.get("contract_sha256") != contract_sha256:
             raise RuntimeError("H018 checkpoint belongs to another training contract")
         model.load_state_dict(checkpoint["model"])
@@ -774,9 +998,17 @@ def train(
         )
     for epoch in range(start_epoch, epochs):
         model.eval()
-        if model.action_residual is None or model.protocol_action_value is None:
-            raise RuntimeError("H018 adapter heads disappeared before training")
-        model.action_residual.train()
+        if model.protocol_action_value is None:
+            raise RuntimeError(f"{research_id} value head disappeared before training")
+        if isinstance(model, SphinxTraceS0H021):
+            model.strict_veto.train()
+            model.outcome_calibration.train()
+        else:
+            if model.action_residual is None:
+                raise RuntimeError(
+                    f"{research_id} residual head disappeared before training"
+                )
+            model.action_residual.train()
         model.protocol_action_value.train()
         order = list(range(len(shards)))
         random.Random(seed * 1_000_003 + epoch).shuffle(order)
@@ -797,10 +1029,8 @@ def train(
                 weights = torch.from_numpy(weights_numpy).to(device, non_blocking=True)
                 optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    output, labels, _ = _forward(model, batch, device)
-                    loss, _ = _loss(
-                        output, labels, batch, weights, training_config
-                    )
+                    output, labels, _ = _forward_adapter(model, batch, device)
+                    loss, _ = _loss(output, labels, batch, weights, training_config)
                 loss.backward()  # type: ignore[no-untyped-call]
                 torch.nn.utils.clip_grad_norm_(
                     trainable, float(training_config["gradient_clip_norm"])
@@ -883,11 +1113,16 @@ def train(
             output_dir / "progress.json",
             {
                 "record_type": (
-                    "h019_learned_loss_veto_training_progress"
-                    if research_id == "SPH-T-H019"
-                    else "h018_conservative_residual_training_progress"
+                    "h021_price_aware_economic_veto_training_progress"
+                    if research_id == "SPH-T-H021"
+                    else (
+                        "h019_learned_loss_veto_training_progress"
+                        if research_id == "SPH-T-H019"
+                        else "h018_conservative_residual_training_progress"
+                    )
                 ),
                 "contract_sha256": contract_sha256,
+                "variant_id": variant_id,
                 "epoch": epoch + 1,
                 "epochs": epochs,
                 "best_epoch": best_epoch,
@@ -929,11 +1164,16 @@ def train(
     result: dict[str, Any] = {
         "schema_version": "1.0.0",
         "record_type": (
-            "h019_learned_loss_veto_policy_result"
-            if research_id == "SPH-T-H019"
-            else "h018_conservative_residual_policy_result"
+            "h021_price_aware_economic_veto_policy_result"
+            if research_id == "SPH-T-H021"
+            else (
+                "h019_learned_loss_veto_policy_result"
+                if research_id == "SPH-T-H019"
+                else "h018_conservative_residual_policy_result"
+            )
         ),
         "research_id": research_id,
+        "variant_id": variant_id,
         "completed_at": now_utc(),
         "valid": math.isfinite(best_selection),
         "seed": seed,
@@ -995,6 +1235,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--outcome-dir", type=Path, required=True)
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--seed", type=int, default=17)
+    value.add_argument("--variant")
     return value
 
 
@@ -1013,6 +1254,7 @@ def main() -> None:
         args.outcome_dir.resolve(),
         args.output_dir.resolve(),
         seed=args.seed,
+        variant_id=args.variant,
     )
     print(
         json.dumps(

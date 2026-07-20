@@ -177,6 +177,7 @@ python -m pip install -e ".[research,dev]"
 - [Data Sources](docs/DATA_SOURCES.md)
 - [Evaluation Protocol](docs/EVALUATION_PROTOCOL.md)
 - [Research Journal](docs/RESEARCH.md)
+- [Polymarket Edge Bot Review](docs/POLYMARKET_EDGE_BOT_REVIEW.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Sphinx Pulse Operations](deploy/pulse/README.md)
 - [Contributing](CONTRIBUTING.md)
