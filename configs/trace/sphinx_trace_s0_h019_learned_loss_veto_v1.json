@@ -56,6 +56,8 @@
     "veto_action_weight": 1.0,
     "economic_utility_weight_power": 0.5,
     "minimum_economic_weight": 0.1,
+    "row_lower_tail_quantile": 0.1,
+    "component_lower_tail_quantile": 0.1,
     "protocol_action_value_weight": 0.25,
     "logged_execution_value_weight": 0.1,
     "H014_policy_KL_weight": 0.1,

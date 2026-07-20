@@ -26,6 +26,7 @@ from sphinx_trace.protocol_residual_training import (
     conservative_protocol_residual_loss,
 )
 from sphinx_trace.protocol_tail_pack import validate_protocol_tail_shard
+from sphinx_trace.protocol_veto_training import learned_call_loss_veto_loss
 
 try:
     from scripts.train_h015_portfolio_advantage import (
@@ -75,6 +76,8 @@ IMPLEMENTATION_PATHS = (
     Path(__file__).resolve(),
     ROOT / "scripts" / "train_h015_portfolio_advantage.py",
     ROOT / "src" / "sphinx_trace" / "protocol_residual_training.py",
+    ROOT / "src" / "sphinx_trace" / "protocol_veto_training.py",
+    ROOT / "scripts" / "train_h019_loss_veto_policy.py",
     ROOT / "src" / "sphinx_trace" / "protocol_tail_pack.py",
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
     ROOT / "src" / "sphinx_trace" / "policy_checkpoint.py",
@@ -353,27 +356,44 @@ def _loss(
 ) -> tuple[Tensor, dict[str, Tensor]]:
     if batch.winning_payout_multipliers is None or batch.reference_action_values is None:
         raise RuntimeError("H018 batch has no protocol-exact targets")
+    payout = torch.from_numpy(batch.winning_payout_multipliers).to(
+        labels.device, non_blocking=True
+    )
+    reference = torch.from_numpy(batch.reference_action_values).to(
+        labels.device, non_blocking=True
+    )
+    behavior_actions = torch.from_numpy(batch.behavior_action_ids).to(
+        labels.device, non_blocking=True
+    )
+    realized = torch.from_numpy(batch.realized_action_values).to(
+        labels.device, non_blocking=True
+    )
+    physical = torch.from_numpy(batch.physical_action_masks).to(
+        labels.device, non_blocking=True
+    )
+    if config.get("loss_mode") == "learned_H014_call_loss_veto":
+        return learned_call_loss_veto_loss(
+            output,
+            labels,
+            payout,
+            reference,
+            behavior_actions,
+            realized,
+            config,
+            sample_weights=weights,
+            physical_action_mask=physical,
+        )
     return conservative_protocol_residual_loss(
         output,
         labels,
-        torch.from_numpy(batch.winning_payout_multipliers).to(
-            labels.device, non_blocking=True
-        ),
-        torch.from_numpy(batch.reference_action_values).to(
-            labels.device, non_blocking=True
-        ),
-        torch.from_numpy(batch.behavior_action_ids).to(
-            labels.device, non_blocking=True
-        ),
-        torch.from_numpy(batch.realized_action_values).to(
-            labels.device, non_blocking=True
-        ),
+        payout,
+        reference,
+        behavior_actions,
+        realized,
         torch.from_numpy(batch.component_ids).to(labels.device, non_blocking=True),
         config,
         sample_weights=weights,
-        physical_action_mask=torch.from_numpy(batch.physical_action_masks).to(
-            labels.device, non_blocking=True
-        ),
+        physical_action_mask=physical,
     )
 
 
@@ -419,6 +439,11 @@ def _evaluate(
     total_correct = 0
     weighted_calls = 0.0
     weighted_correct = 0.0
+    base_calls_total = 0
+    correct_base_calls_total = 0
+    wrong_base_calls_total = 0
+    retained_correct_base_calls_total = 0
+    vetoed_wrong_base_calls_total = 0
     action_counts = np.zeros(3, dtype=np.int64)
     value_error = 0.0
     residual_l2 = 0.0
@@ -458,12 +483,19 @@ def _evaluate(
             )
             utilities = torch.stack((utility0, utility1, torch.zeros_like(utility0)), dim=1)
             chosen = logits.argmax(dim=-1)
+            base_chosen = output["base_action_logits"][:, :3].argmax(dim=-1)
             chosen_utility = utilities.gather(1, chosen[:, None]).squeeze(1)
             expected_utility = (policy * utilities).sum(dim=-1)
             calls = chosen != 2
             correct = ((chosen == 0) & (label0 == 1.0)) | (
                 (chosen == 1) & (label0 == 0.0)
             )
+            base_calls = base_chosen != 2
+            base_correct = ((base_chosen == 0) & (label0 == 1.0)) | (
+                (base_chosen == 1) & (label0 == 0.0)
+            )
+            correct_base_calls = base_calls & base_correct
+            wrong_base_calls = base_calls & ~base_correct
             weight_sum = float(weights.sum())
             chosen_parts.append(chosen_utility.cpu().numpy().astype(np.float64))
             expected_parts.append(expected_utility.cpu().numpy().astype(np.float64))
@@ -479,6 +511,15 @@ def _evaluate(
             total_correct += int(correct[calls].sum())
             weighted_calls += float(weights[calls].sum())
             weighted_correct += float(weights[calls & correct].sum())
+            base_calls_total += int(base_calls.sum())
+            correct_base_calls_total += int(correct_base_calls.sum())
+            wrong_base_calls_total += int(wrong_base_calls.sum())
+            retained_correct_base_calls_total += int(
+                (correct_base_calls & (chosen == base_chosen)).sum()
+            )
+            vetoed_wrong_base_calls_total += int(
+                (wrong_base_calls & (chosen == 2)).sum()
+            )
             action_counts += np.bincount(chosen.cpu().numpy(), minlength=3)
             value_error += float(metrics["protocol_action_value_loss"]) * weight_sum
             residual_l2 += float(metrics["residual_logit_L2"]) * weight_sum
@@ -539,6 +580,19 @@ def _evaluate(
         "equal_market_call_precision": (
             weighted_correct / weighted_calls if weighted_calls else 0.0
         ),
+        "base_calls": base_calls_total,
+        "correct_base_calls": correct_base_calls_total,
+        "wrong_base_calls": wrong_base_calls_total,
+        "correct_base_call_retention_rate": (
+            retained_correct_base_calls_total / correct_base_calls_total
+            if correct_base_calls_total
+            else 0.0
+        ),
+        "wrong_base_call_veto_rate": (
+            vetoed_wrong_base_calls_total / wrong_base_calls_total
+            if wrong_base_calls_total
+            else 0.0
+        ),
         "actions": {
             "CALL_OUTCOME_0": int(action_counts[0]),
             "CALL_OUTCOME_1": int(action_counts[1]),
@@ -573,8 +627,9 @@ def train(
 ) -> dict[str, Any]:
     started = time.perf_counter()
     config = load_json(config_path)
-    if config.get("research_id") != "SPH-T-H018":
-        raise RuntimeError("H018 trainer requires the registered H018 contract")
+    research_id = str(config.get("research_id") or "")
+    if research_id not in {"SPH-T-H018", "SPH-T-H019"}:
+        raise RuntimeError("Protocol adapter trainer requires H018 or H019")
     training_config = dict(config["training"])
     registered_seeds = [int(value) for value in training_config["seeds"]]
     if seed not in registered_seeds:
@@ -827,7 +882,11 @@ def train(
         atomic_json(
             output_dir / "progress.json",
             {
-                "record_type": "h018_conservative_residual_training_progress",
+                "record_type": (
+                    "h019_learned_loss_veto_training_progress"
+                    if research_id == "SPH-T-H019"
+                    else "h018_conservative_residual_training_progress"
+                ),
                 "contract_sha256": contract_sha256,
                 "epoch": epoch + 1,
                 "epochs": epochs,
@@ -869,8 +928,12 @@ def train(
     )
     result: dict[str, Any] = {
         "schema_version": "1.0.0",
-        "record_type": "h018_conservative_residual_policy_result",
-        "research_id": "SPH-T-H018",
+        "record_type": (
+            "h019_learned_loss_veto_policy_result"
+            if research_id == "SPH-T-H019"
+            else "h018_conservative_residual_policy_result"
+        ),
+        "research_id": research_id,
         "completed_at": now_utc(),
         "valid": math.isfinite(best_selection),
         "seed": seed,
