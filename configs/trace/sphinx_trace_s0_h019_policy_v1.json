@@ -1,0 +1,39 @@
+{
+  "id": "sphinx-trace-s0-h019-policy-v1",
+  "version": "1.0.0-registered",
+  "status": "registered",
+  "research_id": "SPH-T-H019",
+  "registered_at": "2026-07-20T15:50:00Z",
+  "objective": "learn_a_loss_veto_over_the_unchanged_H014_policy_state",
+  "architecture": {
+    "portfolio_encoder_width": 256,
+    "prediction_memory_encoder_width": 256,
+    "fusion_latents": 4,
+    "fusion_layers": 4,
+    "residual_policy_head": {
+      "enabled": true,
+      "hidden_width": 512,
+      "layers": 2,
+      "dropout": 0.0,
+      "zero_initialize_action_output": true
+    },
+    "protocol_action_value_head": {
+      "enabled": true,
+      "hidden_width": 512,
+      "layers": 2,
+      "dropout": 0.0
+    },
+    "debug_action_logits": true,
+    "debug_base_action_logits": true,
+    "debug_protocol_action_values": true,
+    "debug_policy_attention": true
+  },
+  "runtime": {
+    "action": "argmax_of_base_plus_learned_veto_residual",
+    "size": "frozen_H014_learned_beta_fraction_of_available_equity",
+    "fixed_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null
+  },
+  "evidence_boundary": "Architecture contract only; profit requires source-bound training and exact replay."
+}

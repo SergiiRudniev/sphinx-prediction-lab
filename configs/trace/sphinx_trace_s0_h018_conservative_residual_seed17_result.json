@@ -1,0 +1,69 @@
+{
+  "id": "sphinx-trace-s0-h018-conservative-residual-seed17-result",
+  "version": "1.0.0-result",
+  "status": "complete_rejected_selected_initial_H014_equivalent_policy",
+  "research_id": "SPH-T-H018",
+  "completed_at": "2026-07-20T15:44:00Z",
+  "training": {
+    "seed": 17,
+    "parameters": 65640474,
+    "trainable_parameters": 1056778,
+    "fit_rows": 1204402,
+    "selection_rows": 414826,
+    "epochs_completed": 5,
+    "best_epoch": -1,
+    "elapsed_seconds": 492.6732618000242,
+    "result_sha256": "e605966aecb76ee38cde82464d107300be04762d4f8f4f63b9f851b5ce34e21b",
+    "best_model_sha256": "2ca40ef40ef414c6d9c5e6ad86f453ead34c09b0dd2d8acbcb11e81fc3293108",
+    "checkpoint_sha256": "3df8affe70ea8c5abc793efd5064e89b08f0223c8bc6eba96a3711ec245b2188"
+  },
+  "initial_equivalence": {
+    "zero_residual_action_logits_equal_H014": true,
+    "position_size_alpha_equal_H014": true,
+    "position_size_beta_equal_H014": true,
+    "state_value_equal_H014": true,
+    "passed": true
+  },
+  "initial_selection": {
+    "equal_market_mean_protocol_exact_chosen_utility": 7.577964453192615e-7,
+    "equal_market_mean_protocol_exact_expected_utility": -0.00032767213266350837,
+    "component_lower_tail_protocol_exact_chosen_utility": -0.00007234774772154023,
+    "week_lower_tail_protocol_exact_chosen_utility": -0.0006941200529899047,
+    "calls": 19371,
+    "call_rate": 0.046696687285753546,
+    "call_precision": 0.8745547467864333,
+    "equal_market_call_precision": 0.9562080648239583
+  },
+  "trained_epochs": {
+    "count": 5,
+    "all_selection_calls": 0,
+    "all_selection_chosen_utility": 0.0,
+    "selection_H014_policy_KL_range": [0.8164118329054798, 0.8164938691557272],
+    "selection_expected_utility_range": [-1.1582909780775412e-8, -7.489363741450587e-9]
+  },
+  "diagnosis": {
+    "separate_value_head_preserved_base_action_margins": true,
+    "zero_residual_reproduced_H014": true,
+    "direct_mean_and_lower_tail_utility_has_abstention_degeneracy": true,
+    "global_SKIP_is_the_zero_downside_solution": true,
+    "KL_weight_was_insufficient_against_scaled_tail_objective": true,
+    "additional_registered_seeds_not_run_after_structural_failure": true
+  },
+  "exact_replay": {
+    "fresh_replay_skipped": true,
+    "reason": "selected epoch minus one has structurally zero action residual and is runtime-output-equivalent to H014",
+    "authoritative_H014_one_x_net_profit_usd": 1186.5307626689923,
+    "authoritative_H014_two_x_net_profit_usd": 1046.6506370425973
+  },
+  "gates": {
+    "new_checkpoint_selected": false,
+    "nonzero_call_breadth": false,
+    "beats_H014": false,
+    "promotion_allowed": false,
+    "calibration_rows_consumed": 0,
+    "test_rows_consumed": 0,
+    "test_labels_opened": false
+  },
+  "decision": "reject_H018_direct_tail_objective_and_register_H019_learned_loss_veto",
+  "evidence_boundary": "Negative development result. No calibration, test, historical-orderbook or paper-forward evidence was consumed."
+}
