@@ -21,6 +21,7 @@ from sphinx_corpus.io import atomic_json, iter_jsonl_zst, now_utc, sha256_file
 from sphinx_trace.config import load_json
 from sphinx_trace.development_tape import load_tape_conditions
 from sphinx_trace.h022_runtime import H022EnsembleRuntime, h022_debug_payload
+from sphinx_trace.h023_runtime import H023EnsembleRuntime, h023_debug_payload
 from sphinx_trace.policy_checkpoint import load_policy_checkpoint
 from sphinx_trace.policy_decisions import PolicyFeatureStore, load_policy_decisions
 from sphinx_trace.policy_encodings import PolicyEncodingStore
@@ -66,6 +67,9 @@ IMPLEMENTATION_PATHS = (
     ROOT / "src" / "sphinx_trace" / "h022_features.py",
     ROOT / "src" / "sphinx_trace" / "h022_training.py",
     ROOT / "src" / "sphinx_trace" / "h022_runtime.py",
+    ROOT / "src" / "sphinx_trace" / "model_h023.py",
+    ROOT / "src" / "sphinx_trace" / "h023_training.py",
+    ROOT / "src" / "sphinx_trace" / "h023_runtime.py",
     ROOT / "src" / "sphinx_trace" / "protocol_tail_pack.py",
     ROOT / "src" / "sphinx_corpus" / "io.py",
 )
@@ -238,6 +242,9 @@ def _decision_record(
     if inference.h022_debug is not None:
         record["h022"] = h022_debug_payload(inference.h022_debug)
         record["h022_mode"] = "shadow" if inference.h022_shadow else "enforced"
+    if inference.h023_debug is not None:
+        record["h023"] = h023_debug_payload(inference.h023_debug)
+        record["h023_mode"] = "enforced"
     return record
 
 
@@ -282,6 +289,8 @@ def replay(
     h022_artifact_dir: Path | None = None,
     h022_summary_path: Path | None = None,
     h022_shadow: bool = False,
+    h023_artifact_dir: Path | None = None,
+    h023_summary_path: Path | None = None,
     split: str,
     cost_multiplier: float,
 ) -> dict[str, Any]:
@@ -364,11 +373,24 @@ def replay(
         raise ValueError("H022 replay requires both artifact and summary paths")
     if h022_shadow and h022_artifact_dir is None:
         raise ValueError("H022 shadow replay requires an H022 artifact")
+    if (h023_artifact_dir is None) != (h023_summary_path is None):
+        raise ValueError("H023 replay requires both artifact and summary paths")
+    if h023_artifact_dir is not None and (
+        h022_artifact_dir is None or not h022_shadow
+    ):
+        raise ValueError("H023 replay requires H022 in shadow mode")
     h022_runtime = (
         None
         if h022_artifact_dir is None or h022_summary_path is None
         else H022EnsembleRuntime.from_artifact(
             h022_artifact_dir, h022_summary_path, device
+        )
+    )
+    h023_runtime = (
+        None
+        if h023_artifact_dir is None or h023_summary_path is None
+        else H023EnsembleRuntime.from_artifact(
+            h023_artifact_dir, h023_summary_path, device
         )
     )
     runtime = H012PolicyRuntime(
@@ -380,19 +402,21 @@ def replay(
         encoding_store=encoding_store,
         h022_runtime=h022_runtime,
         h022_shadow=h022_shadow,
+        h023_runtime=h023_runtime,
     )
     source_sha256 = sha256_file(tape_manifest_path)
     base_policy_sha256 = sha256_file(policy_dir / "result.json")
+    policy_receipt = (
+        f"base_policy:{base_policy_sha256}\n"
+        f"h022_policy:{None if h022_runtime is None else h022_runtime.policy_sha256}\n"
+        f"h022_mode:{'none' if h022_runtime is None else 'shadow' if h022_shadow else 'enforced'}\n"
+        f"h023_policy:{None if h023_runtime is None else h023_runtime.policy_sha256}\n"
+        f"h023_mode:{'none' if h023_runtime is None else 'enforced'}\n"
+    )
     policy_sha256 = (
         base_policy_sha256
-        if h022_runtime is None
-        else hashlib.sha256(
-            (
-                f"base_policy:{base_policy_sha256}\n"
-                f"h022_policy:{h022_runtime.policy_sha256}\n"
-                f"h022_mode:{'shadow' if h022_shadow else 'enforced'}\n"
-            ).encode()
-        ).hexdigest()
+        if h022_runtime is None and h023_runtime is None
+        else hashlib.sha256(policy_receipt.encode()).hexdigest()
     )
     encoding_manifest_sha256 = (
         encoding_store.manifest_sha256 if encoding_store is not None else None
@@ -405,6 +429,8 @@ def replay(
         f"encoding_cache:{encoding_manifest_sha256 or 'none'}\n"
         f"h022_policy:{None if h022_runtime is None else h022_runtime.policy_sha256}\n"
         f"h022_mode:{'none' if h022_runtime is None else 'shadow' if h022_shadow else 'enforced'}\n"
+        f"h023_policy:{None if h023_runtime is None else h023_runtime.policy_sha256}\n"
+        f"h023_mode:{'none' if h023_runtime is None else 'enforced'}\n"
         f"fee_schedule:{None if fee_schedule_book is None else fee_schedule_book.manifest_sha256}\n"
         f"implementation:{implementation_sha256}\nsplit:{split}\n"
         f"cost_multiplier:{cost_multiplier}\n"
@@ -688,6 +714,10 @@ def replay(
         "h022_mode": (
             None if h022_runtime is None else "shadow" if h022_shadow else "enforced"
         ),
+        "h023_policy_sha256": (
+            None if h023_runtime is None else h023_runtime.policy_sha256
+        ),
+        "h023_mode": None if h023_runtime is None else "enforced",
         "test_rows_consumed": 0,
         "test_labels_opened": False,
         "evidence_boundary": (
@@ -730,6 +760,17 @@ def parser() -> argparse.ArgumentParser:
             / "sphinx_trace_s0_h022_training_result.json"
         ),
     )
+    value.add_argument("--h023-artifact-dir", type=Path)
+    value.add_argument(
+        "--h023-summary",
+        type=Path,
+        default=(
+            ROOT
+            / "configs"
+            / "trace"
+            / "sphinx_trace_s0_h023_training_result.json"
+        ),
+    )
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--split", choices=("validation", "calibration"), required=True)
     value.add_argument("--cost-multiplier", type=float, default=1.0)
@@ -769,6 +810,16 @@ def main() -> None:
             else None
         ),
         h022_shadow=args.h022_shadow,
+        h023_artifact_dir=(
+            args.h023_artifact_dir.resolve()
+            if args.h023_artifact_dir is not None
+            else None
+        ),
+        h023_summary_path=(
+            args.h023_summary.resolve()
+            if args.h023_artifact_dir is not None
+            else None
+        ),
         split=args.split,
         cost_multiplier=args.cost_multiplier,
     )
