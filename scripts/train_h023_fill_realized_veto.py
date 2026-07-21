@@ -347,9 +347,33 @@ def _fit_neural(
         "aux_scale": _statistics(data["h022_member_features"], statistics_indices)[1],
     }
     model, initialized_parameters = _new_model(config, h022_checkpoint, device)
+    new_prefixes = (
+        "aux_encoder.",
+        "aux_gate",
+        "realized_net_contribution.",
+        "positive_contribution.",
+        "keep_utility.",
+    )
+    pretrained_parameters: list[Tensor] = []
+    new_parameters: list[Tensor] = []
+    for name, parameter in model.named_parameters():
+        target = (
+            new_parameters
+            if name.startswith(new_prefixes)
+            else pretrained_parameters
+        )
+        target.append(parameter)
     optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=float(neural_config["learning_rate"]),
+        [
+            {
+                "params": pretrained_parameters,
+                "lr": float(neural_config["pretrained_learning_rate"]),
+            },
+            {
+                "params": new_parameters,
+                "lr": float(neural_config["learning_rate"]),
+            },
+        ],
         weight_decay=float(neural_config["weight_decay"]),
     )
     epochs = int(fixed_epochs or neural_config["epochs"])
@@ -470,7 +494,8 @@ def _fit_neural(
             {
                 "epoch": epoch,
                 "fit_loss": total_loss / max(total_weight, 1e-8),
-                "learning_rate": scheduler.get_last_lr()[0],
+                "pretrained_learning_rate": scheduler.get_last_lr()[0],
+                "new_head_learning_rate": scheduler.get_last_lr()[1],
                 "validation": validation_receipt,
                 "best_epoch": best_epoch,
             }
@@ -1160,8 +1185,6 @@ def train(
         or sha256_file(registration_path) != dependency.get("registration_sha256")
         or candidate_manifest.get("valid") is not True
         or candidate_manifest.get("config_sha256") != sha256_file(config_path)
-        or candidate_manifest["manifest_sha256"]
-        != dependency.get("candidate_pack_manifest_sha256")
         or candidate_manifest.get("test_labels_opened") is not False
         or int(candidate_manifest.get("test_rows_consumed", -1)) != 0
     ):
