@@ -293,3 +293,52 @@ def test_h022_runtime_can_only_veto_an_h021_call() -> None:
     assert inferred.protocol_action_values is not None
     assert float(inferred.call.probability_outcome0) == pytest.approx(0.7)
     assert all(np.isfinite(value) for value in inferred.action_logits)
+    assert inferred.h022_shadow is False
+
+
+def test_h022_shadow_scores_without_mutating_h021_call() -> None:
+    contract = BinaryMarketContract(
+        "condition", "component", ("Yes", "No"), ("yes-token", "no-token")
+    )
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(initial_cash_usd=Decimal("100"), fee_bps=Decimal("0"))
+        ),
+        {"condition": contract},
+        source_sha256="cd" * 32,
+    )
+    ref = PolicyDecisionRef(
+        "calibration",
+        0,
+        "2026-01-01",
+        0,
+        "decision",
+        "trade",
+        100,
+        "condition",
+        "component",
+        1,
+        2,
+    )
+    runtime = H012PolicyRuntime(
+        _h021_model(),
+        FeatureStore(),  # type: ignore[arg-type]
+        torch.ones(128),
+        torch.ones(6),
+        torch.device("cpu"),
+        encoding_store=EncodingStore(),  # type: ignore[arg-type]
+        h022_runtime=H022SkipRuntime(),  # type: ignore[arg-type]
+        h022_shadow=True,
+    )
+
+    inferred = runtime.infer(
+        ref,
+        adapter,
+        {"yes-token": Decimal("0.60"), "no-token": Decimal("0.40")},
+    )
+
+    assert inferred.call.action == SelectiveAction.CALL_OUTCOME_0
+    assert inferred.h022_debug is not None
+    assert inferred.h022_debug.keep_base_call is False
+    assert inferred.h022_shadow is True
+    assert float(inferred.call.probability_outcome0) != pytest.approx(0.7)

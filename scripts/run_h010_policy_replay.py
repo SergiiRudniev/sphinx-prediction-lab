@@ -237,6 +237,7 @@ def _decision_record(
         }
     if inference.h022_debug is not None:
         record["h022"] = h022_debug_payload(inference.h022_debug)
+        record["h022_mode"] = "shadow" if inference.h022_shadow else "enforced"
     return record
 
 
@@ -280,6 +281,7 @@ def replay(
     fee_schedule_dir: Path | None = None,
     h022_artifact_dir: Path | None = None,
     h022_summary_path: Path | None = None,
+    h022_shadow: bool = False,
     split: str,
     cost_multiplier: float,
 ) -> dict[str, Any]:
@@ -360,6 +362,8 @@ def replay(
     )
     if (h022_artifact_dir is None) != (h022_summary_path is None):
         raise ValueError("H022 replay requires both artifact and summary paths")
+    if h022_shadow and h022_artifact_dir is None:
+        raise ValueError("H022 shadow replay requires an H022 artifact")
     h022_runtime = (
         None
         if h022_artifact_dir is None or h022_summary_path is None
@@ -375,6 +379,7 @@ def replay(
         device,
         encoding_store=encoding_store,
         h022_runtime=h022_runtime,
+        h022_shadow=h022_shadow,
     )
     source_sha256 = sha256_file(tape_manifest_path)
     base_policy_sha256 = sha256_file(policy_dir / "result.json")
@@ -385,6 +390,7 @@ def replay(
             (
                 f"base_policy:{base_policy_sha256}\n"
                 f"h022_policy:{h022_runtime.policy_sha256}\n"
+                f"h022_mode:{'shadow' if h022_shadow else 'enforced'}\n"
             ).encode()
         ).hexdigest()
     )
@@ -398,6 +404,7 @@ def replay(
         f"source:{source_sha256}\npolicy:{policy_sha256}\n"
         f"encoding_cache:{encoding_manifest_sha256 or 'none'}\n"
         f"h022_policy:{None if h022_runtime is None else h022_runtime.policy_sha256}\n"
+        f"h022_mode:{'none' if h022_runtime is None else 'shadow' if h022_shadow else 'enforced'}\n"
         f"fee_schedule:{None if fee_schedule_book is None else fee_schedule_book.manifest_sha256}\n"
         f"implementation:{implementation_sha256}\nsplit:{split}\n"
         f"cost_multiplier:{cost_multiplier}\n"
@@ -678,6 +685,9 @@ def replay(
         "h022_policy_sha256": (
             None if h022_runtime is None else h022_runtime.policy_sha256
         ),
+        "h022_mode": (
+            None if h022_runtime is None else "shadow" if h022_shadow else "enforced"
+        ),
         "test_rows_consumed": 0,
         "test_labels_opened": False,
         "evidence_boundary": (
@@ -709,6 +719,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--encoding-cache-dir", type=Path)
     value.add_argument("--fee-schedule-dir", type=Path)
     value.add_argument("--h022-artifact-dir", type=Path)
+    value.add_argument("--h022-shadow", action="store_true")
     value.add_argument(
         "--h022-summary",
         type=Path,
@@ -757,6 +768,7 @@ def main() -> None:
             if args.h022_artifact_dir is not None
             else None
         ),
+        h022_shadow=args.h022_shadow,
         split=args.split,
         cost_multiplier=args.cost_multiplier,
     )

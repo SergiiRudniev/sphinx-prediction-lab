@@ -51,6 +51,7 @@ class PolicyInference:
     no_upside_veto: bool | None
     protocol_action_values: tuple[float, float, float] | None
     h022_debug: H022DecisionDebug | None
+    h022_shadow: bool
 
 
 class _EncodedPolicyCore(nn.Module):
@@ -141,6 +142,8 @@ class H012PolicyRuntime:
         device: torch.device,
         encoding_store: PolicyEncodingStore | None = None,
         h022_runtime: H022EnsembleRuntime | None = None,
+        *,
+        h022_shadow: bool = False,
     ) -> None:
         if feature_mask.shape != (128,) or group_mask.shape != (6,):
             raise ValueError("H012 runtime feature/group masks have invalid shapes")
@@ -153,7 +156,10 @@ class H012PolicyRuntime:
         self.h021 = isinstance(self.model, SphinxTraceS0H021)
         if h022_runtime is not None and (not self.h021 or encoding_store is None):
             raise ValueError("H022 runtime requires H021 and a bound encoding cache")
+        if h022_shadow and h022_runtime is None:
+            raise ValueError("H022 shadow mode requires a bound H022 runtime")
         self.h022_runtime = h022_runtime
+        self.h022_shadow = h022_shadow
         encoded_policy: nn.Module | None = None
         self.encoded_input_width = 0
         if encoding_store is not None:
@@ -413,8 +419,9 @@ class H012PolicyRuntime:
                 execution_context,
                 action_id,
             )
-            probability = h022_debug.neural_calibrated_probability0
-            if not h022_debug.keep_base_call:
+            if not self.h022_shadow:
+                probability = h022_debug.neural_calibrated_probability0
+            if not self.h022_shadow and not h022_debug.keep_base_call:
                 # Audit shards are strict JSONL.  Keep the veto sentinel finite so
                 # downstream receipt readers never encounter non-standard Infinity.
                 minimum = float(np.finfo(np.float32).min)
@@ -474,4 +481,5 @@ class H012PolicyRuntime:
             no_upside_veto=no_upside_veto,
             protocol_action_values=protocol_action_values,
             h022_debug=h022_debug,
+            h022_shadow=self.h022_shadow,
         )
