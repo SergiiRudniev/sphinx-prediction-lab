@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from sphinx_trace.fee_schedule_h016 import (
     FeeSourceCandidate,
     OnchainFeeEvidence,
     infer_fee_schedule,
+    infer_fee_schedule_after_builder_fee,
     infer_fee_schedule_consensus,
     infer_fee_schedule_from_market_info,
     official_zero_schedule,
@@ -50,6 +53,37 @@ def test_infer_historical_v1_crypto_curve_from_refund_adjusted_fee() -> None:
     assert schedule.effective_from == 90
     assert schedule.effective_to == 110
     assert schedule.outcome_rounding_decimals == 5
+
+
+def test_v2_builder_fee_is_separated_from_platform_curve() -> None:
+    evidence = OnchainFeeEvidence(
+        protocol=FeeProtocol.CLOB_V2,
+        transaction_hash="0x" + "b" * 64,
+        block_number=1,
+        log_index=2,
+        order_hash="0x" + "c" * 64,
+        side="BUY",
+        gross_shares=Decimal("250"),
+        price=Decimal("0.12"),
+        fee_asset=FeeAsset.COLLATERAL,
+        fee_amount=Decimal("0.942"),
+        constituent_maker_fills=2,
+        builder_code="0x" + "d" * 64,
+    )
+
+    with pytest.raises(RuntimeError, match="builder component"):
+        infer_fee_schedule(_candidate(), evidence)
+    schedule = infer_fee_schedule_after_builder_fee(
+        _candidate(),
+        evidence,
+        builder_taker_fee_bps=50,
+    )
+
+    assert schedule.rate == Decimal("0.03")
+    assert schedule.source_fee_amount == Decimal("0.79200")
+    assert schedule.source_builder_fee_amount == Decimal("0.15000")
+    assert schedule.source_total_fee_amount == Decimal("0.942")
+    assert schedule.source_builder_fee_bps == 50
 
 
 def test_infer_pre_category_v1_four_decimal_operator_fee() -> None:
