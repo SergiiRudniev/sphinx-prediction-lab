@@ -206,16 +206,10 @@ def _predict_neural(
         "edge": [],
         "attention": [],
     }
-    autocast = (
-        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-        if device.type == "cuda"
-        else torch.autocast(device_type="cpu", enabled=False)
-    )
     for offset in range(0, len(indices), batch_size):
         selected = indices[offset : offset + batch_size]
         inputs = _neural_batch(data, selected, device, statistics)
-        with autocast:
-            output = model(*inputs, return_debug=return_attention)
+        output = model(*inputs, return_debug=return_attention)
         parts["mean"].append(output["net_return_mean"].float().cpu().numpy())
         parts["quantiles"].append(
             output["net_return_quantiles"].float().cpu().numpy()

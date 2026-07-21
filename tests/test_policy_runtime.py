@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from sphinx_trace.config import load_json
+from sphinx_trace.h022_runtime import H022DecisionDebug
 from sphinx_trace.model_h011 import SphinxTraceS0H011
 from sphinx_trace.model_h012 import SphinxTraceS0H012
 from sphinx_trace.model_h021 import SphinxTraceS0H021
@@ -33,6 +34,30 @@ class FeatureStore:
 class EncodingStore:
     def load(self, _ref: PolicyDecisionRef) -> LoadedPolicyEncoding:
         return LoadedPolicyEncoding(np.zeros(64, dtype=np.float32), 2.0, -0.5)
+
+
+class H022SkipRuntime:
+    policy_sha256 = "ef" * 32
+
+    def score(self, *_args: object) -> H022DecisionDebug:
+        return H022DecisionDebug(
+            keep_base_call=False,
+            candidate_action_id=0,
+            neural_mean_net_return=-0.001,
+            neural_return_quantiles=(-0.01, -0.001, 0.01),
+            neural_fill_probability=0.5,
+            neural_calibrated_probability0=0.7,
+            neural_calibrated_candidate_edge=0.05,
+            tree_net_return=-0.002,
+            ensemble_net_return=-0.0015,
+            stacker_intercept=0.0,
+            stacker_contributions=(0.0,) * 7,
+            neural_group_attention=(1.0 / 7.0,) * 7,
+            tree_group_contributions=(0.0,) * 7,
+            tree_price_context_contribution=0.0,
+            tree_wallet_contribution=0.0,
+            tree_event_contribution=0.0,
+        )
 
 
 def _model() -> SphinxTraceS0H012:
@@ -220,3 +245,51 @@ def test_h021_runtime_binds_execution_context_and_vetoes_no_upside() -> None:
     assert cached.call.action == SelectiveAction.SKIP
     assert cached.no_upside_veto is True
     assert cached.execution_context == inferred.execution_context
+
+
+def test_h022_runtime_can_only_veto_an_h021_call() -> None:
+    contract = BinaryMarketContract(
+        "condition", "component", ("Yes", "No"), ("yes-token", "no-token")
+    )
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(initial_cash_usd=Decimal("100"), fee_bps=Decimal("0"))
+        ),
+        {"condition": contract},
+        source_sha256="cd" * 32,
+    )
+    ref = PolicyDecisionRef(
+        "validation",
+        0,
+        "2026-01-01",
+        0,
+        "decision",
+        "trade",
+        100,
+        "condition",
+        "component",
+        1,
+        2,
+    )
+    runtime = H012PolicyRuntime(
+        _h021_model(),
+        FeatureStore(),  # type: ignore[arg-type]
+        torch.ones(128),
+        torch.ones(6),
+        torch.device("cpu"),
+        encoding_store=EncodingStore(),  # type: ignore[arg-type]
+        h022_runtime=H022SkipRuntime(),  # type: ignore[arg-type]
+    )
+
+    inferred = runtime.infer(
+        ref,
+        adapter,
+        {"yes-token": Decimal("0.60"), "no-token": Decimal("0.40")},
+    )
+
+    assert inferred.call.action == SelectiveAction.SKIP
+    assert inferred.h022_debug is not None
+    assert inferred.h022_debug.candidate_action_id == 0
+    assert inferred.protocol_action_values is not None
+    assert float(inferred.call.probability_outcome0) == pytest.approx(0.7)
+    assert all(np.isfinite(value) for value in inferred.action_logits)
