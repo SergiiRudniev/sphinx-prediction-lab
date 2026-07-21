@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from sphinx_trace.h022_runtime import H022DecisionDebug, H022EnsembleRuntime
 from sphinx_trace.model_h012 import H012_ACTIONS, SphinxTraceS0H012
 from sphinx_trace.model_h021 import H021_EXECUTION_CONTEXT_WIDTH, SphinxTraceS0H021
 from sphinx_trace.policy_decisions import (
@@ -47,6 +49,8 @@ class PolicyInference:
     calibrated_outcome_probabilities: tuple[float, float] | None
     execution_break_even_probabilities: tuple[float, float] | None
     no_upside_veto: bool | None
+    protocol_action_values: tuple[float, float, float] | None
+    h022_debug: H022DecisionDebug | None
 
 
 class _EncodedPolicyCore(nn.Module):
@@ -119,6 +123,7 @@ class _EncodedPolicyCore(nn.Module):
                 output["calibrated_outcome_probabilities"],
                 output["execution_break_even_probabilities"],
                 output["no_upside_veto"].unsqueeze(1).float(),
+                output["protocol_action_values"],
             ),
             dim=1,
         )
@@ -135,6 +140,7 @@ class H012PolicyRuntime:
         group_mask: Tensor,
         device: torch.device,
         encoding_store: PolicyEncodingStore | None = None,
+        h022_runtime: H022EnsembleRuntime | None = None,
     ) -> None:
         if feature_mask.shape != (128,) or group_mask.shape != (6,):
             raise ValueError("H012 runtime feature/group masks have invalid shapes")
@@ -145,6 +151,9 @@ class H012PolicyRuntime:
         self.device = device
         self.encoding_store = encoding_store
         self.h021 = isinstance(self.model, SphinxTraceS0H021)
+        if h022_runtime is not None and (not self.h021 or encoding_store is None):
+            raise ValueError("H022 runtime requires H021 and a bound encoding cache")
+        self.h022_runtime = h022_runtime
         encoded_policy: nn.Module | None = None
         self.encoded_input_width = 0
         if encoding_store is not None:
@@ -198,6 +207,11 @@ class H012PolicyRuntime:
         calibrated_probabilities: tuple[float, float] | None = None
         break_even_probabilities: tuple[float, float] | None = None
         no_upside_veto: bool | None = None
+        protocol_action_values: tuple[float, float, float] | None = None
+        h022_debug: H022DecisionDebug | None = None
+        encoded_market_latent: np.ndarray[tuple[int], np.dtype[np.float32]] | None = None
+        encoded_terminal_logit: float | None = None
+        encoded_uncertainty_log_scale: float | None = None
         autocast = (
             torch.autocast(device_type="cuda", dtype=torch.bfloat16)
             if self.device.type == "cuda"
@@ -293,6 +307,20 @@ class H012PolicyRuntime:
                         break_even_values[1],
                     )
                     no_upside_veto = bool(output["no_upside_veto"][0])
+                    protocol_values = tuple(
+                        float(value)
+                        for value in output["protocol_action_values"][0]
+                        .float()
+                        .cpu()
+                        .tolist()
+                    )
+                    if len(protocol_values) != 3:
+                        raise RuntimeError("H021 protocol value width changed")
+                    protocol_action_values = (
+                        protocol_values[0],
+                        protocol_values[1],
+                        protocol_values[2],
+                    )
                     probability = calibrated_probabilities[0]
                 else:
                     probability = float(
@@ -304,6 +332,9 @@ class H012PolicyRuntime:
                         "H012 cached encoding has no compiled policy core"
                     )
                 encoded = self.encoding_store.load(ref)
+                encoded_market_latent = encoded.market_latent
+                encoded_terminal_logit = encoded.terminal_outcome_logit
+                encoded_uncertainty_log_scale = encoded.uncertainty_log_scale
                 packed = np.empty(self.encoded_input_width, dtype=np.float32)
                 market_stop = len(encoded.market_latent)
                 portfolio_stop = market_stop + len(portfolio)
@@ -342,6 +373,14 @@ class H012PolicyRuntime:
                         values[debug_start + 7],
                     )
                     no_upside_veto = bool(values[debug_start + 8])
+                    protocol_values = values[debug_start + 9 : debug_start + 12]
+                    if len(protocol_values) != 3:
+                        raise RuntimeError("H021 cached protocol value width changed")
+                    protocol_action_values = (
+                        protocol_values[0],
+                        protocol_values[1],
+                        protocol_values[2],
+                    )
                     probability = calibrated_probabilities[0]
                 else:
                     terminal = encoded.terminal_outcome_logit
@@ -351,6 +390,39 @@ class H012PolicyRuntime:
                         exponential = math.exp(terminal)
                         probability = exponential / (1.0 + exponential)
         action_id = max(range(len(logits)), key=logits.__getitem__)
+        if self.h022_runtime is not None and action_id in (0, 1):
+            if (
+                encoded_market_latent is None
+                or encoded_terminal_logit is None
+                or encoded_uncertainty_log_scale is None
+                or execution_context is None
+                or base_logits is None
+                or len(base_logits) != 3
+                or protocol_action_values is None
+            ):
+                raise RuntimeError("H022 candidate state is incomplete")
+            h022_debug = self.h022_runtime.score(
+                encoded_market_latent,
+                np.asarray(loaded.normalized, dtype=np.float32),
+                encoded_terminal_logit,
+                encoded_uncertainty_log_scale,
+                portfolio,
+                memory,
+                (base_logits[0], base_logits[1], base_logits[2]),
+                protocol_action_values,
+                execution_context,
+                action_id,
+            )
+            probability = h022_debug.neural_calibrated_probability0
+            if not h022_debug.keep_base_call:
+                # Audit shards are strict JSONL.  Keep the veto sentinel finite so
+                # downstream receipt readers never encounter non-standard Infinity.
+                minimum = float(np.finfo(np.float32).min)
+                mutable_logits = list(logits)
+                mutable_logits[action_id] = minimum
+                mutable_logits[2] = 0.0
+                logits = tuple(mutable_logits)
+                action_id = 2
         size = alpha / max(alpha + beta, 1e-8)
         input_sha256 = policy_input_digest(
             loaded.feature_sha256,
@@ -361,6 +433,16 @@ class H012PolicyRuntime:
             physical,
             execution_context,
         )
+        if h022_debug is not None:
+            if self.h022_runtime is None:
+                raise RuntimeError("H022 debug has no bound runtime")
+            input_sha256 = hashlib.sha256(
+                (
+                    f"base:{input_sha256}\n"
+                    f"h022_policy:{self.h022_runtime.policy_sha256}\n"
+                    f"ensemble_net_return:{h022_debug.ensemble_net_return:.17g}\n"
+                ).encode()
+            ).hexdigest()
         call = PolicyCall(
             decision_id=ref.decision_id,
             timestamp_unix=ref.timestamp_unix,
@@ -390,4 +472,6 @@ class H012PolicyRuntime:
             calibrated_outcome_probabilities=calibrated_probabilities,
             execution_break_even_probabilities=break_even_probabilities,
             no_upside_veto=no_upside_veto,
+            protocol_action_values=protocol_action_values,
+            h022_debug=h022_debug,
         )

@@ -2032,7 +2032,7 @@ paper-forward profit claim.
 
 ## SPH-T-H022: Conditional Net-Edge Ensemble
 
-**Status:** `trained selection candidate; exact stateful replay pending`
+**Status:** `complete; profitable but rejected against H021 incumbent`
 
 **Registered:** 2026-07-20 after the complete H021 1.0x replay and its exact
 price/calibration audit, but before the H021 2.0x result and before any H022
@@ -2123,12 +2123,90 @@ missing price input. Wallet-zero (`3.533792e-6`) and wallet-shuffle
 (`3.351563e-6`) both match or exceed the full ensemble (`3.329700e-6`) on
 selection. Current H022 therefore does not establish incremental wallet edge.
 
-**Decision.** Seed 17 advances only to integrated exact stateful replay. H021
-remains the development incumbent until H022 beats its full 1.0x and 2.0x
-replays and all tail/breadth gates. The high-price calibration defect and weak
-wallet ablation are explicit follow-up triggers; neither justifies an ad-hoc
-`0.80` cutoff.
+**Exact stateful result.** The receipt-bound 1.0x replay processed all 809,614
+decisions and 29,876,390 liquidity events. H022 retained 39,486 calls across
+16,215 conditions, produced `+$1,558.41` (`+15.58%`) with `5.91%` maximum
+drawdown, and paid `$71.44` in platform fees. Its weekly lower 95% bound was
+`+$9.17`; its independent-component lower mean bound was `+$0.0446`. At 2.0x
+fees it remained profitable at `+$1,520.96` (`+15.21%`) with `5.63%` drawdown,
+and both lower bounds remained positive. The exact implementation is therefore
+economically non-trivial and cost-robust, but it fails the registered incumbent
+comparison: H021 earned `+$2,153.23` at 1.0x and `+$2,049.17` at 2.0x.
 
-**Evidence boundary.** H022 has fit-only OOF and whole-component development
-selection evidence. It has no exact stateful replay, untouched-test,
-historical-orderbook or paper-forward profit result yet.
+**Fill-level diagnosis.** H022 entries below `0.80` produced `+$1,990.40`, while
+entries at or above `0.80` still lost `-$431.99`. Relative to H021, it removed
+only about `$110` of expensive-entry losses while sacrificing about `$705` of
+cheap-entry profit. The sharpest error was below `0.50`: H022 kept only 1,766
+of 6,687 evaluated candidates (`26.4%`) and vetoed a group whose mean frozen-
+size reference utility remained positive. Conversely, the exact filled
+`0.80-0.90`, `0.90-0.95`, `0.95-0.98`, and `>=0.98` ranges all remained
+negative. This is not evidence for a fixed `0.80` ban. It is evidence that the
+terminal quote-utility target is misaligned with realized fill cost, fee,
+liquidity and payout PnL.
+
+**Runtime qualification.** Neural inference is FP32 and batch invariant to
+`6.43e-8` between one-row and 2,048-row evaluation. An initial partial 1.0x
+run exposed a non-standard `-Infinity` audit sentinel; that run has no result
+receipt and is excluded. The corrected runtime uses a finite float32 sentinel,
+passes strict JSON replay verification, and produced the qualified `cost1x-r2`
+and `cost2x-r1` receipts.
+
+**Decision.** H022 is rejected for incumbent promotion despite positive point
+profit and bootstrap bounds. H021 remains the maximum-PnL development
+incumbent. SPH-T-H023 is preregistered to train on actual decision-level fills,
+outcome-token fees and realized PnL in an H021 shadow replay. It still has no
+fixed price threshold and must beat H021 at both fee levels.
+
+**Evidence boundary.** H022 now has exact receipt-qualified development replay
+evidence. It has no historical-orderbook guarantee, untouched-test result or
+paper-forward profit evidence, and live promotion remains forbidden.
+
+## SPH-T-H023: Fill-Realized Economic Veto
+
+**Status:** `registered before calibration labels open`
+
+**Registered:** 2026-07-21 after both H022 validation replays and their exact
+fill attribution, but before any calibration replay, H023 label, implementation
+or model metric exists.
+
+**Trigger.** H022 proved that a profitable outcome/quote-utility gate can still
+reduce portfolio PnL. It improved CALL precision from H021's `85.18%` to
+`90.39%`, yet reduced 1.0x profit by `$594.82`. It retained `-$431.99` of
+filled high-price losses and discarded a profitable cheap tail. Outcome
+correctness and terminal utility at a quoted price therefore remain materially
+different from realized execution PnL.
+
+**Hypothesis.** Preserve H021's action side and sizing, run H022 only in shadow,
+and train the next veto from actual requested cost, fill fraction, executed
+price, outcome-token fee, collateral fee, payout and decision-level realized
+PnL. A fill head and conditional return quantiles separate `no fill` from
+`filled and harmful`. False vetoes are weighted by forgone positive dollars;
+false keeps are weighted by realized negative dollars. Price remains a
+continuous input, not a fixed action threshold.
+
+**Data protocol.** The 578,176-decision calibration tape may be opened only
+after this registration is committed. Frozen H021 actions, probabilities,
+sizes and prediction memory define the shadow trajectory; H022 scores are
+audited but cannot mutate it. Decision labels aggregate all subsequent fills
+and terminal payouts. Conditions and linked components cannot cross the
+cross-fit folds. The already-used validation tape is reserved for the final
+development replay. Untouched test labels remain closed.
+
+**Architecture.** H023 initializes from the frozen H022 representation and
+adds fill probability, conditional realized-return mean/quantiles, a
+realized-net-contribution tree, cross-fitted stacker and asymmetric KEEP/SKIP
+calibrator. It cannot originate a CALL, flip the outcome side or replace H021
+sizing. Debug output must include the top 16 tree features with values and
+signed contributions, neural group attention, fill and return distributions,
+training analogs, and final gate reason.
+
+**Acceptance.** H023 must exceed H021's `+$2,153.23` at 1.0x and `+$2,049.17`
+at 2.0x, keep drawdown at or below `4.94%`, retain at least 5,000 calls across
+1,000 components, and keep both bootstrap lower bounds positive. A wallet-edge
+claim additionally requires the full model to beat wallet-zero and joint-
+shuffle ablations. All gates are mandatory; raw accuracy cannot substitute for
+net profit.
+
+**Evidence boundary.** H023 is a preregistered development hypothesis only.
+No calibration rows have been consumed at registration; untouched test,
+historical-orderbook and paper-forward evidence remain absent.

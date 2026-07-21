@@ -20,6 +20,7 @@ import torch
 from sphinx_corpus.io import atomic_json, iter_jsonl_zst, now_utc, sha256_file
 from sphinx_trace.config import load_json
 from sphinx_trace.development_tape import load_tape_conditions
+from sphinx_trace.h022_runtime import H022EnsembleRuntime, h022_debug_payload
 from sphinx_trace.policy_checkpoint import load_policy_checkpoint
 from sphinx_trace.policy_decisions import PolicyFeatureStore, load_policy_decisions
 from sphinx_trace.policy_encodings import PolicyEncodingStore
@@ -61,6 +62,10 @@ IMPLEMENTATION_PATHS = (
     ROOT / "src" / "sphinx_trace" / "model_h012.py",
     ROOT / "src" / "sphinx_trace" / "model_h013.py",
     ROOT / "src" / "sphinx_trace" / "model_h021.py",
+    ROOT / "src" / "sphinx_trace" / "model_h022.py",
+    ROOT / "src" / "sphinx_trace" / "h022_features.py",
+    ROOT / "src" / "sphinx_trace" / "h022_training.py",
+    ROOT / "src" / "sphinx_trace" / "h022_runtime.py",
     ROOT / "src" / "sphinx_trace" / "protocol_tail_pack.py",
     ROOT / "src" / "sphinx_corpus" / "io.py",
 )
@@ -226,7 +231,12 @@ def _decision_record(
                 inference.execution_break_even_probabilities or ()
             ),
             "no_upside_veto": inference.no_upside_veto,
+            "protocol_action_values": list(
+                inference.protocol_action_values or ()
+            ),
         }
+    if inference.h022_debug is not None:
+        record["h022"] = h022_debug_payload(inference.h022_debug)
     return record
 
 
@@ -268,6 +278,8 @@ def replay(
     *,
     encoding_cache_dir: Path | None = None,
     fee_schedule_dir: Path | None = None,
+    h022_artifact_dir: Path | None = None,
+    h022_summary_path: Path | None = None,
     split: str,
     cost_multiplier: float,
 ) -> dict[str, Any]:
@@ -346,6 +358,15 @@ def replay(
         if encoding_cache_dir is not None
         else None
     )
+    if (h022_artifact_dir is None) != (h022_summary_path is None):
+        raise ValueError("H022 replay requires both artifact and summary paths")
+    h022_runtime = (
+        None
+        if h022_artifact_dir is None or h022_summary_path is None
+        else H022EnsembleRuntime.from_artifact(
+            h022_artifact_dir, h022_summary_path, device
+        )
+    )
     runtime = H012PolicyRuntime(
         checkpoint.model,
         feature_store,
@@ -353,9 +374,20 @@ def replay(
         checkpoint.group_mask,
         device,
         encoding_store=encoding_store,
+        h022_runtime=h022_runtime,
     )
     source_sha256 = sha256_file(tape_manifest_path)
-    policy_sha256 = sha256_file(policy_dir / "result.json")
+    base_policy_sha256 = sha256_file(policy_dir / "result.json")
+    policy_sha256 = (
+        base_policy_sha256
+        if h022_runtime is None
+        else hashlib.sha256(
+            (
+                f"base_policy:{base_policy_sha256}\n"
+                f"h022_policy:{h022_runtime.policy_sha256}\n"
+            ).encode()
+        ).hexdigest()
+    )
     encoding_manifest_sha256 = (
         encoding_store.manifest_sha256 if encoding_store is not None else None
     )
@@ -365,6 +397,7 @@ def replay(
         f"policy_config:{sha256_file(policy_config_path)}\n"
         f"source:{source_sha256}\npolicy:{policy_sha256}\n"
         f"encoding_cache:{encoding_manifest_sha256 or 'none'}\n"
+        f"h022_policy:{None if h022_runtime is None else h022_runtime.policy_sha256}\n"
         f"fee_schedule:{None if fee_schedule_book is None else fee_schedule_book.manifest_sha256}\n"
         f"implementation:{implementation_sha256}\nsplit:{split}\n"
         f"cost_multiplier:{cost_multiplier}\n"
@@ -641,6 +674,10 @@ def replay(
         "audit_manifest_sha256": sha256_file(output_dir / "manifest.json"),
         "audit_rows": audit_manifest["rows"],
         "checkpoint_sha256": sha256_file(checkpoint_path),
+        "base_policy_result_sha256": base_policy_sha256,
+        "h022_policy_sha256": (
+            None if h022_runtime is None else h022_runtime.policy_sha256
+        ),
         "test_rows_consumed": 0,
         "test_labels_opened": False,
         "evidence_boundary": (
@@ -671,6 +708,17 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--policy-dir", type=Path, required=True)
     value.add_argument("--encoding-cache-dir", type=Path)
     value.add_argument("--fee-schedule-dir", type=Path)
+    value.add_argument("--h022-artifact-dir", type=Path)
+    value.add_argument(
+        "--h022-summary",
+        type=Path,
+        default=(
+            ROOT
+            / "configs"
+            / "trace"
+            / "sphinx_trace_s0_h022_training_result.json"
+        ),
+    )
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--split", choices=("validation", "calibration"), required=True)
     value.add_argument("--cost-multiplier", type=float, default=1.0)
@@ -697,6 +745,16 @@ def main() -> None:
         fee_schedule_dir=(
             args.fee_schedule_dir.resolve()
             if args.fee_schedule_dir is not None
+            else None
+        ),
+        h022_artifact_dir=(
+            args.h022_artifact_dir.resolve()
+            if args.h022_artifact_dir is not None
+            else None
+        ),
+        h022_summary_path=(
+            args.h022_summary.resolve()
+            if args.h022_artifact_dir is not None
             else None
         ),
         split=args.split,

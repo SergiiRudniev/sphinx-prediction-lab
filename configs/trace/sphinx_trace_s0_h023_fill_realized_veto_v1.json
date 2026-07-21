@@ -1,0 +1,154 @@
+{
+  "id": "sphinx-trace-s0-h023-fill-realized-veto-v1",
+  "version": "1.0.0-registered",
+  "status": "registered_before_calibration_labels_opened",
+  "research_id": "SPH-T-H023",
+  "registered_at": "2026-07-21T11:42:00Z",
+  "objective": "maximize_exact_stateful_net_profit_by_learning_realized_fill_level_net_contribution_without_a_fixed_price_threshold",
+  "trigger": {
+    "H022_exact_result_sha256": "c51e5d6ccb5138dc68a730a9b4352545ed2b04aab26329c820cdb71d99330be4",
+    "H022_one_x_net_profit_usd": 1558.4117705088815,
+    "H021_one_x_net_profit_usd": 2153.233196917179,
+    "H022_profit_delta_vs_H021_usd": -594.8214264082976,
+    "H022_below_0_80_fill_pnl_usd": 1990.3981519377726,
+    "H022_at_least_0_80_fill_pnl_usd": -431.9863814288911,
+    "failure": "H022_trained_on_terminal_quote_utility_over_vetoed_profitable_cheap_tail_calls_and_did_not_remove_negative_realized_high_price_fills"
+  },
+  "frozen_dependencies": {
+    "incumbent": {
+      "research_id": "SPH-T-H021",
+      "variant": "economic_only",
+      "seed": 17,
+      "parameters": 65854783,
+      "result_sha256": "ee9427a9f9e2d0e613738e43c9aeedfbf4deaef0ac400a6211db660ad4b01346"
+    },
+    "conditional_encoder": {
+      "research_id": "SPH-T-H022",
+      "seed": 17,
+      "combined_neural_parameters": 77005637,
+      "training_summary_sha256": "f2c6a41bd55828fe188fc90dc47fffab6693cbff9210814d599270713937fe54"
+    },
+    "development_tape": {
+      "manifest_sha256": "2b81546da6f8821f8c2c3b6e7e4927ea5dd18471821460a90b0e28985d845b1b",
+      "calibration_decisions": 578176,
+      "validation_decisions": 809614
+    },
+    "fee_schedule_manifest_sha256": "20ebbd03aee5a9316ec05addb0e9b9d79c7600a3bf5b4c236bf9ff4e5367f779"
+  },
+  "hypothesis": "A component-cross-fitted model trained on actual fill cost, outcome-token fees, fill fraction and terminal payout will distinguish economically harmful expensive fills from profitable cheap tail calls better than H022's quote-terminal utility target.",
+  "data_protocol": {
+    "preregistration_precedes_calibration_open": true,
+    "training_split": "calibration",
+    "training_source": "exact_H021_stateful_shadow_replay_with_H022_features_but_no_H022_action_or_memory_mutation",
+    "selection_split": "component_grouped_cross_fit_inside_calibration",
+    "final_development_replay_split": "validation",
+    "validation_labels_already_used_for_H021_H022_development_comparison": true,
+    "untouched_test_opened": false,
+    "natural_language_features": false,
+    "historical_orderbook_claim": false
+  },
+  "shadow_replay_contract": {
+    "H021_action_probability_size_and_prediction_memory_unchanged": true,
+    "H022_scores_and_attributions_audited": true,
+    "realized_labels": [
+      "requested_total_cost_usd",
+      "actual_filled_total_cost_usd",
+      "fill_fraction",
+      "outcome_token_fee_shares",
+      "collateral_fee_usd",
+      "terminal_payout_usd",
+      "realized_pnl_usd",
+      "realized_return_on_requested_cost",
+      "realized_return_on_filled_cost"
+    ],
+    "unfilled_order_target": "zero_realized_contribution_plus_separate_fill_target",
+    "multiple_fills_aggregated_by_decision_id": true,
+    "condition_and_component_groups_never_cross_folds": true
+  },
+  "architecture": {
+    "frozen_H021": true,
+    "initialize_from_H022": true,
+    "trainable_members": [
+      "fill_probability_head",
+      "conditional_realized_return_quantile_head",
+      "realized_net_contribution_tree",
+      "component_cross_fitted_stacker",
+      "asymmetric_keep_skip_calibrator"
+    ],
+    "outputs": [
+      "fill_probability",
+      "realized_net_contribution_mean",
+      "realized_net_contribution_q10",
+      "realized_net_contribution_q50",
+      "realized_net_contribution_q90",
+      "probability_realized_contribution_positive",
+      "keep_base_call_logit"
+    ],
+    "fixed_entry_price_threshold": null,
+    "fixed_call_frequency": null,
+    "fixed_bet_size": null,
+    "can_originate_call": false,
+    "can_flip_outcome_side": false,
+    "H021_position_size_preserved": true
+  },
+  "loss": {
+    "primary": "sample_and_requested_cost_weighted_realized_net_contribution",
+    "fill_auxiliary": "binary_cross_entropy",
+    "conditional_return": "pinball_q10_q50_q90_plus_huber_mean",
+    "false_keep_penalty": "absolute_negative_realized_pnl_usd",
+    "false_veto_penalty": "absolute_positive_realized_pnl_usd",
+    "cheap_tail_protection": "positive_realized_dollar_weight_not_outcome_accuracy",
+    "week_downside_weighting": true
+  },
+  "decision_rule": {
+    "action": "KEEP_H021_CALL_or_SKIP",
+    "score": "cross_fitted_calibrated_expected_realized_net_contribution_after_fill_and_fees",
+    "threshold": "fit_only_learned_utility_indifference_point",
+    "price_specific_constant": null,
+    "fail_closed_on_missing_receipt_or_nonfinite_score": true
+  },
+  "ablations": [
+    "wallet_zero",
+    "wallet_joint_shuffle",
+    "price_execution_zero",
+    "event_component_zero",
+    "H022_score_only",
+    "tree_only",
+    "neural_only"
+  ],
+  "debug_contract": {
+    "top_tree_features_with_values_and_signed_contributions": 16,
+    "neural_group_attention": true,
+    "member_scores": true,
+    "return_quantiles": true,
+    "fill_probability": true,
+    "break_even_probability": true,
+    "realized_training_analogs": true,
+    "wallet_event_price_group_contributions": true,
+    "final_gate_reason": true
+  },
+  "acceptance": {
+    "primary": "beat_H021_exact_stateful_one_x_net_profit",
+    "beat_H021_one_x_net_profit_usd": 2153.233196917179,
+    "beat_H021_two_x_net_profit_usd": 2049.1687002318645,
+    "maximum_drawdown_at_most": 0.049357305994628786,
+    "minimum_calls": 5000,
+    "minimum_independent_components": 1000,
+    "weekly_bootstrap_lower_95pct_profit_positive": true,
+    "component_bootstrap_lower_95pct_profit_positive": true,
+    "two_x_point_profit_positive": true,
+    "wallet_edge_claim_requires_full_ablation_win": true,
+    "all_gates_required": true
+  },
+  "resume": {
+    "daily_shadow_replay_checkpoint": true,
+    "atomic_training_checkpoint": true,
+    "checkpoint_every_epoch": true,
+    "pause_file": "PAUSE"
+  },
+  "test_rows_consumed": 0,
+  "test_labels_opened": false,
+  "calibration_rows_consumed_at_registration": 0,
+  "live_promotion_allowed": false,
+  "evidence_boundary": "Preregistered development hypothesis. Calibration may be opened only after this contract is committed. Validation remains development evidence; untouched test and paper-forward execution stay closed."
+}
