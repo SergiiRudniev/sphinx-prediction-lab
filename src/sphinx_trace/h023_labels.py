@@ -74,6 +74,8 @@ class _OrderRef:
 
 def realized_decision_labels(
     rows: Iterable[dict[str, Any]],
+    *,
+    require_action_matches_candidate: bool = True,
 ) -> tuple[dict[str, H023RealizedLabel], dict[str, int]]:
     """Aggregate strict replay audits into fill- and fee-realized labels.
 
@@ -106,7 +108,16 @@ def realized_decision_labels(
             action = str(row.get("action"))
             action_id = int(h022.get("candidate_action_id", -1))
             expected = f"CALL_OUTCOME_{action_id}"
-            if action_id not in (0, 1) or action != expected:
+            h023 = row.get("h023")
+            exact_h023_veto = (
+                not require_action_matches_candidate
+                and action == "SKIP"
+                and isinstance(h023, dict)
+                and h023.get("keep_base_call") is False
+            )
+            if action_id not in (0, 1) or (
+                action != expected and not exact_h023_veto
+            ):
                 raise RuntimeError("H023 shadow decision changed the H021 CALL")
             decision_id = str(row["decision_id"])
             condition_id = str(row["condition_id"]).lower()

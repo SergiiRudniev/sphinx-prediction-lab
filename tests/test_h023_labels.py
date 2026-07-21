@@ -121,3 +121,15 @@ def test_h023_preserves_unfilled_call_as_zero_contribution() -> None:
     assert label.fill_fraction == Decimal("0")
     assert label.realized_pnl_usd == Decimal("0")
     assert label.realized_return_on_filled_cost == Decimal("0")
+
+
+def test_h023_exact_veto_is_an_audited_zero_contribution() -> None:
+    decision = _decision("veto")
+    decision["action"] = "SKIP"
+    decision["h023"] = {"keep_base_call": False}
+
+    labels, _ = realized_decision_labels(
+        [decision], require_action_matches_candidate=False
+    )
+
+    assert labels["veto"].realized_pnl_usd == Decimal("0")
