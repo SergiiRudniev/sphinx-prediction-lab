@@ -11,6 +11,51 @@ from numpy.typing import NDArray
 from torch import Tensor
 
 
+def fit_utility_indifference_threshold(
+    predicted_contribution: NDArray[np.float64],
+    realized_pnl_usd: NDArray[np.float64],
+) -> dict[str, float | int]:
+    """Learn the score boundary that maximizes OOF realized dollars.
+
+    Ties retain more calls, preserving useful frequency without imposing a fixed
+    count or a price rule. Runtime subtracts this learned boundary and still uses
+    the natural zero-utility KEEP decision.
+    """
+
+    if (
+        predicted_contribution.ndim != 1
+        or realized_pnl_usd.shape != predicted_contribution.shape
+        or not len(predicted_contribution)
+        or not bool(np.isfinite(predicted_contribution).all())
+        or not bool(np.isfinite(realized_pnl_usd).all())
+    ):
+        raise ValueError("H023 indifference calibration inputs are invalid")
+    order = np.argsort(predicted_contribution, kind="stable")[::-1]
+    ordered_scores = predicted_contribution[order]
+    cumulative = np.concatenate(
+        (np.zeros(1, dtype=np.float64), np.cumsum(realized_pnl_usd[order]))
+    )
+    maximum = float(cumulative.max())
+    tied = np.flatnonzero(np.isclose(cumulative, maximum, rtol=0.0, atol=1e-12))
+    calls = int(tied[-1])
+    if calls == 0:
+        threshold = float(np.nextafter(ordered_scores[0], np.inf))
+    elif calls == len(ordered_scores):
+        threshold = float(np.nextafter(ordered_scores[-1], -np.inf))
+    else:
+        threshold = float((ordered_scores[calls - 1] + ordered_scores[calls]) / 2.0)
+    keep = predicted_contribution > threshold
+    # Equal scores cannot always reproduce an arbitrary position inside a tie.
+    # Report the executable zero-threshold result, not the ideal sorted prefix.
+    return {
+        "threshold": threshold,
+        "calls": int(keep.sum()),
+        "realized_net_profit_usd": float(realized_pnl_usd[keep].sum()),
+        "ideal_sorted_prefix_calls": calls,
+        "ideal_sorted_prefix_net_profit_usd": maximum,
+    }
+
+
 def h023_neural_loss(
     output: dict[str, Tensor],
     target_contribution: Tensor,

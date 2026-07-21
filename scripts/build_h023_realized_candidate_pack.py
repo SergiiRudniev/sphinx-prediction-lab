@@ -16,7 +16,11 @@ from numpy.typing import NDArray
 
 from sphinx_corpus.io import atomic_json, iter_jsonl_zst, now_utc, sha256_file
 from sphinx_trace.config import load_json
-from sphinx_trace.h022_features import assemble_tree_features, component_folds
+from sphinx_trace.h022_features import (
+    H022_TREE_FEATURE_WIDTH,
+    assemble_tree_features,
+    component_folds,
+)
 from sphinx_trace.h023_labels import H023RealizedLabel, realized_decision_labels
 from sphinx_trace.policy_decisions import (
     PolicyDecisionRef,
@@ -238,7 +242,7 @@ def build(
     )
     labels = [labels_by_id[decision_id] for decision_id in ordered]
     rows = len(labels)
-    tree_features = np.empty((rows, 170), dtype=np.float32)
+    tree_features = np.empty((rows, H022_TREE_FEATURE_WIDTH), dtype=np.float32)
     market_latents = np.empty((rows, encoding_store.width), dtype=np.float16)
     h022_features = np.empty((rows, len(H022_MEMBER_FEATURE_NAMES)), dtype=np.float32)
     candidate_action_ids = np.empty(rows, dtype=np.uint8)

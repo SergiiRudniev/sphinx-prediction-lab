@@ -26,7 +26,11 @@ from sphinx_trace.h022_features import (
     wallet_ablation,
 )
 from sphinx_trace.h022_training import fit_weighted_ridge, predict_weighted_ridge
-from sphinx_trace.h023_training import h023_neural_loss, realized_policy_metrics
+from sphinx_trace.h023_training import (
+    fit_utility_indifference_threshold,
+    h023_neural_loss,
+    realized_policy_metrics,
+)
 from sphinx_trace.model import parameter_count
 from sphinx_trace.model_h023 import (
     H023_AUX_FEATURE_WIDTH,
@@ -832,6 +836,16 @@ def _train_seed(
     )
     stacker["predictor_names"] = list(PREDICTOR_NAMES)
     stacker["decision"] = "KEEP_when_expected_realized_net_contribution_gt_zero"
+    raw_oof_ensemble = predict_weighted_ridge(oof_predictors, stacker)
+    indifference = fit_utility_indifference_threshold(raw_oof_ensemble, pnl)
+    stacker["raw_intercept"] = float(stacker["intercept"])
+    stacker["learned_utility_indifference_threshold"] = float(
+        indifference["threshold"]
+    )
+    stacker["intercept"] = float(stacker["intercept"]) - float(
+        indifference["threshold"]
+    )
+    stacker["indifference_calibration"] = indifference
     oof_ensemble = predict_weighted_ridge(oof_predictors, stacker)
     final_epochs = max(1, round(float(np.median(neural_epochs))))
     final_rounds = max(1, round(float(np.median(tree_rounds))))

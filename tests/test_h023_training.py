@@ -8,7 +8,11 @@ from scripts.train_h023_fill_realized_veto import (
     _sample_weights,
 )
 
-from sphinx_trace.h023_training import h023_neural_loss, realized_policy_metrics
+from sphinx_trace.h023_training import (
+    fit_utility_indifference_threshold,
+    h023_neural_loss,
+    realized_policy_metrics,
+)
 
 
 def _config() -> dict[str, object]:
@@ -112,3 +116,14 @@ def test_h023_training_helpers_preserve_model_driven_price_decision() -> None:
     price_zero = _ablation_features(features, "price_execution_zero", seed=17)
     assert np.all(price_zero[:, :128] == 1.0)
     assert np.all(price_zero[:, 128:] == 0.0)
+
+
+def test_h023_learns_pnl_maximizing_indifference_without_price_rule() -> None:
+    receipt = fit_utility_indifference_threshold(
+        np.asarray([0.4, 0.3, 0.2, 0.1], dtype=np.float64),
+        np.asarray([5.0, 4.0, -20.0, 3.0], dtype=np.float64),
+    )
+
+    assert receipt["calls"] == 2
+    assert receipt["realized_net_profit_usd"] == 9.0
+    assert 0.2 < float(receipt["threshold"]) < 0.3
