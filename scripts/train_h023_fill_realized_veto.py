@@ -1123,6 +1123,27 @@ def _train_selected_final(
     stacker = load_json(source_stacker)
     stacker_path = final_dir / "stacker.json"
     atomic_json(stacker_path, stacker)
+    analog_path = final_dir / "realized-training-analogs.npz"
+    np.savez_compressed(
+        analog_path,
+        tree_features=np.asarray(
+            all_calibration["tree_features"], dtype=np.float16
+        ),
+        h022_member_features=np.asarray(
+            all_calibration["h022_member_features"], dtype=np.float16
+        ),
+        target_realized_pnl_usd=np.asarray(
+            all_calibration["target_realized_pnl_usd"], dtype=np.float64
+        ),
+        target_fill_fraction=np.asarray(
+            all_calibration["target_fill_fraction"], dtype=np.float32
+        ),
+        entry_prices=np.asarray(all_calibration["entry_prices"], dtype=np.float32),
+        component_ids=np.asarray(
+            all_calibration["component_ids"], dtype=np.int64
+        ),
+        decision_ids=np.asarray(all_calibration["decision_ids"]),
+    )
     result = {
         "record_type": "h023_selected_full_calibration_runtime",
         "schema_version": "1.0.0",
@@ -1142,6 +1163,7 @@ def _train_selected_final(
         "neural_sha256": sha256_file(final_dir / "neural" / "best-neural.pt"),
         "tree_sha256": sha256_file(tree_path),
         "stacker_sha256": sha256_file(stacker_path),
+        "realized_training_analogs_sha256": sha256_file(analog_path),
         "source_seed_result_sha256": sha256_file(
             output_dir / f"seed={seed}" / "result.json"
         ),
@@ -1257,6 +1279,9 @@ def train(
         "selected_final_neural_sha256": selected_final["neural_sha256"],
         "selected_final_tree_sha256": selected_final["tree_sha256"],
         "selected_final_stacker_sha256": selected_final["stacker_sha256"],
+        "selected_final_realized_training_analogs_sha256": selected_final[
+            "realized_training_analogs_sha256"
+        ],
         "seed_results": [
             {
                 "seed": int(value["seed"]),

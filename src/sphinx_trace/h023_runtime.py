@@ -145,6 +145,7 @@ class H023EnsembleRuntime:
         neural_path = artifact_dir / "neural" / "best-neural.pt"
         tree_path = artifact_dir / "tree.txt"
         stacker_path = artifact_dir / "stacker.json"
+        analog_path = artifact_dir / "realized-training-analogs.npz"
         if (
             summary.get("research_id") != "SPH-T-H023"
             or summary.get("valid") is not True
@@ -158,6 +159,8 @@ class H023EnsembleRuntime:
             or sha256_file(tree_path) != summary.get("selected_final_tree_sha256")
             or sha256_file(stacker_path)
             != summary.get("selected_final_stacker_sha256")
+            or sha256_file(analog_path)
+            != summary.get("selected_final_realized_training_analogs_sha256")
         ):
             raise RuntimeError("H023 selected runtime artifact receipt changed")
         result = _load_object(result_path)
@@ -190,6 +193,7 @@ class H023EnsembleRuntime:
             "neural_sha256": sha256_file(neural_path),
             "tree_sha256": sha256_file(tree_path),
             "stacker_sha256": sha256_file(stacker_path),
+            "realized_training_analogs_sha256": sha256_file(analog_path),
         }
         policy_sha256 = hashlib.sha256(
             json.dumps(policy_payload, sort_keys=True).encode()
