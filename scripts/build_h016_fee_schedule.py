@@ -39,6 +39,7 @@ from sphinx_trace.fee_schedule_h016 import (
     infer_fee_schedule,
     infer_fee_schedule_consensus,
     infer_fee_schedule_from_market_info,
+    matching_builder_fee_schedules,
     official_zero_schedule,
 )
 from sphinx_trace.polymarket_fees import (
@@ -524,6 +525,42 @@ class MarketTradeCache:
         self.connection.commit()
 
 
+class BuilderFeeCache:
+    def __init__(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.connection = sqlite3.connect(path)
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS builder_fees "
+            "(builder_code TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+        )
+        self.connection.commit()
+
+    def close(self) -> None:
+        self.connection.close()
+
+    def get(self, builder_code: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT payload FROM builder_fees WHERE builder_code = ?",
+            (builder_code,),
+        ).fetchone()
+        if row is None:
+            return None
+        value: object = json.loads(str(row[0]))
+        if not isinstance(value, dict):
+            raise TypeError("H016 cached builder fee must be an object")
+        return value
+
+    def put_many(self, rows: list[tuple[str, dict[str, Any]]]) -> None:
+        self.connection.executemany(
+            "INSERT OR REPLACE INTO builder_fees (builder_code, payload) VALUES (?, ?)",
+            [
+                (builder_code, json.dumps(payload, sort_keys=True, separators=(",", ":")))
+                for builder_code, payload in rows
+            ],
+        )
+        self.connection.commit()
+
+
 def _verified_manifest_artifact(
     schedule_dir: Path,
     manifest: dict[str, Any],
@@ -588,11 +625,18 @@ def seed_qualified_caches(
     """Seed exact HTTP/RPC caches from previously qualified H016 proof artifacts."""
 
     if not schedule_dirs:
-        return {"schedule_dirs": {}, "receipt_proofs": 0, "market_info": 0, "market_trades": 0}
+        return {
+            "schedule_dirs": {},
+            "receipt_proofs": 0,
+            "market_info": 0,
+            "market_trades": 0,
+            "builder_fees": 0,
+        }
     cache_dir.mkdir(parents=True, exist_ok=True)
     receipt_cache = ReceiptCache(cache_dir / "receipt-cache.sqlite3")
     market_info_cache = MarketInfoCache(cache_dir / "market-info-cache.sqlite3")
     market_trade_cache = MarketTradeCache(cache_dir / "market-trade-cache.sqlite3")
+    builder_fee_cache = BuilderFeeCache(cache_dir / "builder-fee-cache.sqlite3")
     summary: dict[str, Any] = {
         "schema_version": "1.0.0",
         "record_type": "h016_fee_cache_seed",
@@ -601,6 +645,7 @@ def seed_qualified_caches(
         "receipt_proofs": 0,
         "market_info": 0,
         "market_trades": 0,
+        "builder_fees": 0,
     }
     try:
         for schedule_dir in schedule_dirs:
@@ -629,6 +674,16 @@ def seed_qualified_caches(
                 manifest,
                 path_key="market_trade_path",
                 sha256_key="market_trade_sha256",
+            )
+            builder_fee_path = (
+                _verified_manifest_artifact(
+                    schedule_dir,
+                    manifest,
+                    path_key="builder_fee_path",
+                    sha256_key="builder_fee_sha256",
+                )
+                if manifest.get("builder_fee_path") is not None
+                else None
             )
 
             receipt_rows = 0
@@ -688,14 +743,32 @@ def seed_qualified_caches(
                 combined.update(rows_by_hash)
                 market_trade_cache.put_many([(condition_id, list(combined.values()))])
 
+            builder_fee_rows: list[tuple[str, dict[str, Any]]] = []
+            if builder_fee_path is not None:
+                for proof in iter_jsonl_zst(builder_fee_path):
+                    if proof.get("record_type") != "h016_builder_fee_tiebreak_proof":
+                        raise RuntimeError("H016 seed builder-fee proof type changed")
+                    builder_code = str(proof["builder_code"]).lower()
+                    payload = proof.get("payload")
+                    if not isinstance(payload, dict) or _stable_hash(payload) != proof.get(
+                        "payload_sha256"
+                    ):
+                        raise RuntimeError("H016 seed builder-fee payload changed")
+                    builder_fee_rows.append((builder_code, payload))
+                if len(builder_fee_rows) != int(manifest["builder_fee_rows"]):
+                    raise RuntimeError("H016 seed builder-fee row count changed")
+                builder_fee_cache.put_many(builder_fee_rows)
+
             summary["schedule_dirs"][schedule_dir.name] = manifest_sha256
             summary["receipt_proofs"] += receipt_rows
             summary["market_info"] += len(market_info_rows)
             summary["market_trades"] += market_trade_rows
+            summary["builder_fees"] += len(builder_fee_rows)
     finally:
         receipt_cache.close()
         market_info_cache.close()
         market_trade_cache.close()
+        builder_fee_cache.close()
     atomic_json(cache_dir / "seed-cache.json", summary)
     return summary
 
@@ -758,6 +831,50 @@ def _fetch_missing_market_info(
             completed += len(rows)
             if completed // 100 > previous_completed // 100 or completed == len(missing):
                 print(f"market info {completed}/{len(missing)}", flush=True)
+    return True
+
+
+def _fetch_missing_builder_fees(
+    client: httpx.Client,
+    cache: BuilderFeeCache,
+    builder_codes: list[str],
+    *,
+    workers: int,
+    requests_per_second: float,
+    output_dir: Path,
+) -> bool:
+    missing = [value for value in sorted(set(builder_codes)) if cache.get(value) is None]
+    limiter = RequestRateLimiter(requests_per_second)
+
+    def fetch(builder_code: str) -> tuple[str, dict[str, Any]]:
+        last_error: Exception | None = None
+        for attempt in range(8):
+            limiter.wait()
+            try:
+                response = client.get(f"/fees/builder-fees/{builder_code}")
+                response.raise_for_status()
+                payload: object = response.json()
+                if not isinstance(payload, dict):
+                    raise TypeError("CLOB builder fee response must be an object")
+                taker_bps = int(payload.get("builder_taker_fee_rate_bps", -1))
+                if not 0 <= taker_bps <= 100:
+                    raise ValueError("CLOB builder taker fee is outside 0-100 bps")
+                return builder_code, payload
+            except (httpx.HTTPError, TypeError, ValueError) as error:
+                last_error = error
+                time.sleep(min(30.0, 0.5 * (2**attempt)))
+        raise RuntimeError(f"H016 CLOB builder fee fetch failed: {last_error}")
+
+    completed = 0
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="h016-builder") as executor:
+        for wave_start in range(0, len(missing), workers * 4):
+            if (output_dir / "PAUSE").exists():
+                return False
+            wave = missing[wave_start : wave_start + workers * 4]
+            rows = list(executor.map(fetch, wave))
+            cache.put_many(rows)
+            completed += len(rows)
+            print(f"builder fees {completed}/{len(missing)}", flush=True)
     return True
 
 
@@ -1008,6 +1125,17 @@ def _market_info_proof(condition_id: str, payload: dict[str, Any]) -> dict[str, 
     }
 
 
+def _builder_fee_proof(builder_code: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0.0",
+        "record_type": "h016_builder_fee_tiebreak_proof",
+        "builder_code": builder_code,
+        "source_url": f"https://clob.polymarket.com/fees/builder-fees/{builder_code}",
+        "payload_sha256": _stable_hash(payload),
+        "payload": payload,
+    }
+
+
 def _market_trade_proof(
     schedule: FeeScheduleEvidence,
     row: dict[str, Any],
@@ -1025,6 +1153,161 @@ def _market_trade_proof(
         "row_sha256": _stable_hash(row),
         "row": row,
     }
+
+
+def _qualify_builder_fee_segments(
+    unresolved: dict[str, TargetSegment],
+    *,
+    receipt_cache: ReceiptCache,
+    builder_fee_cache: BuilderFeeCache,
+    config: CorpusConfig,
+    clob_url: str,
+    workers: int,
+    requests_per_second: float,
+    output_dir: Path,
+) -> tuple[
+    dict[str, FeeScheduleEvidence],
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, list[str]],
+    bool,
+]:
+    """Decompose additive V2 builder fees without charging them to our bot."""
+
+    samples_by_builder: dict[
+        str,
+        list[
+            tuple[
+                str,
+                FeeSourceCandidate,
+                OnchainFeeEvidence,
+                dict[int, FeeScheduleEvidence],
+                dict[str, Any],
+            ]
+        ],
+    ] = defaultdict(list)
+    failures: dict[str, list[str]] = defaultdict(list)
+    for segment_id, segment in unresolved.items():
+        for row in segment.candidates:
+            candidate = _source_candidate(segment, row)
+            receipt = receipt_cache.get(candidate.transaction_hash)
+            if receipt is None:
+                continue
+            try:
+                evidence = decode_onchain_fee_evidence(
+                    receipt,
+                    candidate,
+                    config.contracts,
+                    chain_id=config.chain_id,
+                )
+                if evidence.protocol != FeeProtocol.CLOB_V2 or evidence.builder_code in (
+                    None,
+                    "0x" + "0" * 64,
+                ):
+                    continue
+                matches = matching_builder_fee_schedules(candidate, evidence)
+                if not matches:
+                    raise RuntimeError("no official platform/builder fee decomposition")
+            except (RuntimeError, ValueError) as error:
+                failures[segment_id].append(
+                    "builder-decomposition+"
+                    f"{candidate.transaction_hash}: {type(error).__name__}: {error}"
+                )
+                continue
+            samples_by_builder[str(evidence.builder_code)].append(
+                (segment_id, candidate, evidence, matches, receipt)
+            )
+            # One causal receipt per segment is sufficient; other candidates are
+            # alternate evidence for the same narrow condition-time interval.
+            break
+
+    builder_codes = sorted(samples_by_builder)
+    if not builder_codes:
+        return {}, {}, {}, failures, True
+    with httpx.Client(
+        base_url=clob_url.rstrip("/"),
+        timeout=30.0,
+        headers={"User-Agent": "sphinx-prediction-lab-h016/1.0"},
+    ) as client:
+        completed = _fetch_missing_builder_fees(
+            client,
+            builder_fee_cache,
+            builder_codes,
+            workers=workers,
+            requests_per_second=requests_per_second,
+            output_dir=output_dir,
+        )
+    if not completed:
+        return {}, {}, {}, failures, False
+
+    schedules: dict[str, FeeScheduleEvidence] = {}
+    proofs: dict[str, dict[str, Any]] = {}
+    builder_proofs: dict[str, dict[str, Any]] = {}
+
+    def resolve_cohort(
+        builder_code: str,
+        rows: list[
+            tuple[
+                str,
+                FeeSourceCandidate,
+                OnchainFeeEvidence,
+                dict[int, FeeScheduleEvidence],
+                dict[str, Any],
+            ]
+        ],
+        possible_bps: set[int],
+    ) -> None:
+        payload = builder_fee_cache.get(builder_code)
+        if payload is None:
+            raise RuntimeError("H016 builder fee disappeared from cache")
+        current_bps = int(payload.get("builder_taker_fee_rate_bps", -1))
+        if len(possible_bps) == 1:
+            selected_bps = next(iter(possible_bps))
+            source = "polygon_transaction_receipt_builder_fee_cohort_decomposed_active_taker_fee"
+        elif current_bps in possible_bps:
+            selected_bps = current_bps
+            source = (
+                "clob_current_builder_rate_tiebreak_polygon_transaction_receipt_"
+                "builder_fee_decomposed_active_taker_fee"
+            )
+        else:
+            for segment_id, *_ in rows:
+                failures[segment_id].append(
+                    "builder-decomposition: historical builder bps remain ambiguous: "
+                    f"{sorted(possible_bps)} current={current_bps}"
+                )
+            return
+        builder_proofs[builder_code] = _builder_fee_proof(builder_code, payload)
+        for segment_id, _, _, matches, receipt in rows:
+            schedule = replace(matches[selected_bps], source=source)
+            schedules[segment_id] = schedule
+            proofs[schedule.schedule_id] = _receipt_proof(receipt, schedule, config)
+
+    for builder_code, raw_rows in samples_by_builder.items():
+        rows = sorted(raw_rows, key=lambda row: (row[1].timestamp_unix, row[0]))
+        cohort: list[
+            tuple[
+                str,
+                FeeSourceCandidate,
+                OnchainFeeEvidence,
+                dict[int, FeeScheduleEvidence],
+                dict[str, Any],
+            ]
+        ] = []
+        possible_bps: set[int] = set()
+        for sample in rows:
+            row_bps = set(sample[3])
+            overlap = possible_bps & row_bps if cohort else row_bps
+            if cohort and not overlap:
+                resolve_cohort(builder_code, cohort, possible_bps)
+                cohort = [sample]
+                possible_bps = row_bps
+            else:
+                cohort.append(sample)
+                possible_bps = overlap
+        if cohort:
+            resolve_cohort(builder_code, cohort, possible_bps)
+    return schedules, proofs, builder_proofs, failures, True
 
 
 def qualify(
@@ -1048,6 +1331,7 @@ def qualify(
     supplemental_receipt_proofs: list[dict[str, Any]] = []
     market_info_proofs: dict[str, dict[str, Any]] = {}
     market_trade_proofs: dict[str, dict[str, Any]] = {}
+    builder_fee_proofs: dict[str, dict[str, Any]] = {}
     unresolved: dict[str, TargetSegment] = {}
     for segment in segments:
         if segment.effective_to_unix <= FIRST_PLATFORM_FEE_UNIX:
@@ -1064,6 +1348,7 @@ def qualify(
     cache = ReceiptCache(resolved_cache_dir / "receipt-cache.sqlite3")
     market_info_cache = MarketInfoCache(resolved_cache_dir / "market-info-cache.sqlite3")
     market_trade_cache = MarketTradeCache(resolved_cache_dir / "market-trade-cache.sqlite3")
+    builder_fee_cache = BuilderFeeCache(resolved_cache_dir / "builder-fee-cache.sqlite3")
     failures: dict[str, list[str]] = defaultdict(list)
     try:
         with PolygonRPC(rpc_url, retries=2) as rpc:
@@ -1121,6 +1406,41 @@ def qualify(
                 )
                 if not unresolved:
                     break
+        if unresolved:
+            (
+                builder_schedules,
+                builder_receipt_proofs,
+                resolved_builder_proofs,
+                builder_failures,
+                completed,
+            ) = _qualify_builder_fee_segments(
+                unresolved,
+                receipt_cache=cache,
+                builder_fee_cache=builder_fee_cache,
+                config=config,
+                clob_url=clob_url,
+                workers=workers,
+                requests_per_second=market_info_requests_per_second,
+                output_dir=output_dir,
+            )
+            for segment_id, values in builder_failures.items():
+                failures[segment_id].extend(values)
+            if not completed:
+                return {
+                    "status": "paused",
+                    "qualified_segments": len(schedules),
+                    "unresolved_segments": len(unresolved),
+                }
+            schedules.update(builder_schedules)
+            proofs.update(builder_receipt_proofs)
+            builder_fee_proofs.update(resolved_builder_proofs)
+            for segment_id in builder_schedules:
+                del unresolved[segment_id]
+            print(
+                f"builder decomposition: qualified={len(schedules)}/{len(segments)} "
+                f"unresolved={len(unresolved)}",
+                flush=True,
+            )
         if unresolved:
             with httpx.Client(
                 base_url=clob_url.rstrip("/"),
@@ -1350,6 +1670,7 @@ def qualify(
         cache.close()
         market_info_cache.close()
         market_trade_cache.close()
+        builder_fee_cache.close()
     if unresolved:
         failure_payload = {
             "schema_version": "1.0.0",
@@ -1368,6 +1689,7 @@ def qualify(
     proof_path = output_dir / "source-receipts.jsonl.zst"
     market_info_path = output_dir / "source-market-info.jsonl.zst"
     market_trade_path = output_dir / "source-market-trades.jsonl.zst"
+    builder_fee_path = output_dir / "source-builder-fees.jsonl.zst"
     rows, _ = write_jsonl_zst(data_path, (fee_schedule_payload(row) for row in ordered))
     receipt_proof_payloads = [*proofs.values(), *supplemental_receipt_proofs]
     receipt_proof_payloads.sort(
@@ -1381,6 +1703,10 @@ def qualify(
     market_trade_rows, _ = write_jsonl_zst(
         market_trade_path,
         (market_trade_proofs[key] for key in sorted(market_trade_proofs)),
+    )
+    builder_fee_rows, _ = write_jsonl_zst(
+        builder_fee_path,
+        (builder_fee_proofs[key] for key in sorted(builder_fee_proofs)),
     )
     source_counts: dict[str, int] = defaultdict(int)
     for schedule in ordered:
@@ -1402,6 +1728,9 @@ def qualify(
         "market_trade_path": market_trade_path.name,
         "market_trade_sha256": sha256_file(market_trade_path),
         "market_trade_rows": market_trade_rows,
+        "builder_fee_path": builder_fee_path.name,
+        "builder_fee_sha256": sha256_file(builder_fee_path),
+        "builder_fee_rows": builder_fee_rows,
         "plan_sha256": sha256_file(output_dir / "plan.json"),
         "contract_sha256": plan["contract_sha256"],
         "target_conditions": plan["target_conditions"],

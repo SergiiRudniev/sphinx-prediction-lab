@@ -10,6 +10,7 @@ import torch
 
 from sphinx_trace.config import load_json
 from sphinx_trace.h022_runtime import H022DecisionDebug
+from sphinx_trace.h023_runtime import H023DecisionDebug
 from sphinx_trace.model_h011 import SphinxTraceS0H011
 from sphinx_trace.model_h012 import SphinxTraceS0H012
 from sphinx_trace.model_h021 import SphinxTraceS0H021
@@ -57,6 +58,33 @@ class H022SkipRuntime:
             tree_price_context_contribution=0.0,
             tree_wallet_contribution=0.0,
             tree_event_contribution=0.0,
+        )
+
+
+class H023SkipRuntime:
+    policy_sha256 = "12" * 32
+
+    def score(self, *_args: object) -> H023DecisionDebug:
+        return H023DecisionDebug(
+            keep_base_call=False,
+            gate_reason="nonpositive_expected_realized_net_contribution",
+            candidate_action_id=0,
+            entry_price=0.61,
+            break_even_probability=0.61,
+            neural_realized_contribution=-0.001,
+            neural_conditional_return_mean=-0.01,
+            neural_conditional_return_quantiles=(-0.1, -0.01, 0.05),
+            neural_fill_probability=0.5,
+            neural_positive_probability=0.25,
+            neural_keep_logit=-1.0,
+            tree_realized_contribution=-0.002,
+            ensemble_realized_contribution=-0.0015,
+            stacker_intercept=0.0,
+            stacker_contributions=(0.0,) * 12,
+            neural_group_attention=(1.0 / 7.0,) * 7,
+            tree_group_contributions=(0.0,) * 7,
+            top_tree_features=(),
+            h022_ensemble_net_return=-0.0015,
         )
 
 
@@ -292,4 +320,105 @@ def test_h022_runtime_can_only_veto_an_h021_call() -> None:
     assert inferred.h022_debug.candidate_action_id == 0
     assert inferred.protocol_action_values is not None
     assert float(inferred.call.probability_outcome0) == pytest.approx(0.7)
+    assert all(np.isfinite(value) for value in inferred.action_logits)
+    assert inferred.h022_shadow is False
+
+
+def test_h022_shadow_scores_without_mutating_h021_call() -> None:
+    contract = BinaryMarketContract(
+        "condition", "component", ("Yes", "No"), ("yes-token", "no-token")
+    )
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(initial_cash_usd=Decimal("100"), fee_bps=Decimal("0"))
+        ),
+        {"condition": contract},
+        source_sha256="cd" * 32,
+    )
+    ref = PolicyDecisionRef(
+        "calibration",
+        0,
+        "2026-01-01",
+        0,
+        "decision",
+        "trade",
+        100,
+        "condition",
+        "component",
+        1,
+        2,
+    )
+    runtime = H012PolicyRuntime(
+        _h021_model(),
+        FeatureStore(),  # type: ignore[arg-type]
+        torch.ones(128),
+        torch.ones(6),
+        torch.device("cpu"),
+        encoding_store=EncodingStore(),  # type: ignore[arg-type]
+        h022_runtime=H022SkipRuntime(),  # type: ignore[arg-type]
+        h022_shadow=True,
+    )
+
+    inferred = runtime.infer(
+        ref,
+        adapter,
+        {"yes-token": Decimal("0.60"), "no-token": Decimal("0.40")},
+    )
+
+    assert inferred.call.action == SelectiveAction.CALL_OUTCOME_0
+    assert inferred.h022_debug is not None
+    assert inferred.h022_debug.keep_base_call is False
+    assert inferred.h022_shadow is True
+    assert float(inferred.call.probability_outcome0) != pytest.approx(0.7)
+
+
+def test_h023_veto_replaces_h021_call_after_h022_shadow_scoring() -> None:
+    contract = BinaryMarketContract(
+        "condition", "component", ("Yes", "No"), ("yes-token", "no-token")
+    )
+    adapter = H010ReplayAdapter(
+        ReplaySimulator(
+            SimulationRules(initial_cash_usd=Decimal("100"), fee_bps=Decimal("0"))
+        ),
+        {"condition": contract},
+        source_sha256="cd" * 32,
+    )
+    ref = PolicyDecisionRef(
+        "validation",
+        0,
+        "2026-01-01",
+        0,
+        "decision",
+        "trade",
+        100,
+        "condition",
+        "component",
+        1,
+        2,
+    )
+    runtime = H012PolicyRuntime(
+        _h021_model(),
+        FeatureStore(),  # type: ignore[arg-type]
+        torch.ones(128),
+        torch.ones(6),
+        torch.device("cpu"),
+        encoding_store=EncodingStore(),  # type: ignore[arg-type]
+        h022_runtime=H022SkipRuntime(),  # type: ignore[arg-type]
+        h022_shadow=True,
+        h023_runtime=H023SkipRuntime(),  # type: ignore[arg-type]
+    )
+
+    inferred = runtime.infer(
+        ref,
+        adapter,
+        {"yes-token": Decimal("0.60"), "no-token": Decimal("0.40")},
+    )
+
+    assert inferred.call.action == SelectiveAction.SKIP
+    assert inferred.h022_debug is not None
+    assert inferred.h022_debug.keep_base_call is False
+    assert inferred.h023_debug is not None
+    assert inferred.h023_debug.keep_base_call is False
+    assert inferred.h023_debug.gate_reason.startswith("nonpositive")
+    assert float(inferred.call.probability_outcome0) != pytest.approx(0.7)
     assert all(np.isfinite(value) for value in inferred.action_logits)

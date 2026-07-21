@@ -77,6 +77,10 @@ class FeeScheduleEvidence:
     source_gross_shares: Decimal | None = None
     source_fee_asset: FeeAsset = FeeAsset.NONE
     source_fee_amount: Decimal = ZERO
+    source_total_fee_amount: Decimal = ZERO
+    source_builder_code: str | None = None
+    source_builder_fee_bps: int = 0
+    source_builder_fee_amount: Decimal = ZERO
 
     def __post_init__(self) -> None:
         if not self.schedule_id or not self.condition_id:
@@ -101,6 +105,15 @@ class FeeScheduleEvidence:
             raise ValueError("Fee evidence source shares must be positive")
         if self.source_fee_amount < ZERO:
             raise ValueError("Fee evidence amount cannot be negative")
+        if self.source_total_fee_amount < ZERO or self.source_builder_fee_amount < ZERO:
+            raise ValueError("Fee evidence total and builder amounts cannot be negative")
+        if not 0 <= self.source_builder_fee_bps <= 100:
+            raise ValueError("Builder taker fee must be inside the official 0-100 bps range")
+        if self.source_builder_code is not None and (
+            not self.source_builder_code.startswith("0x")
+            or len(self.source_builder_code) != 66
+        ):
+            raise ValueError("Builder code must be a bytes32 hex value")
         if self.effective_from >= self.effective_to:
             raise ValueError("Fee schedule effective interval must be non-empty")
 
@@ -553,6 +566,48 @@ class FeeScheduleBook:
             or market_trade_schedules != expected_market_trade_schedules
         ):
             raise RuntimeError("H016 fee market-trade proof coverage changed")
+        expected_builder_codes = {
+            schedule.source_builder_code
+            for schedule in schedules
+            if schedule.source_builder_code is not None
+        }
+        builder_fee_path_value = payload.get("builder_fee_path")
+        if expected_builder_codes or builder_fee_path_value is not None:
+            builder_fee_path = directory / str(builder_fee_path_value or "")
+            if (
+                not builder_fee_path.is_file()
+                or payload.get("builder_fee_sha256") != sha256_file(builder_fee_path)
+            ):
+                raise RuntimeError("H016 builder fee proof contract changed")
+            builder_codes: set[str] = set()
+            builder_fee_rows = 0
+            for proof in iter_jsonl_zst(builder_fee_path):
+                builder_fee_rows += 1
+                builder_code = str(proof.get("builder_code") or "").lower()
+                builder_payload = proof.get("payload")
+                builder_payload_sha256 = (
+                    hashlib.sha256(
+                        json.dumps(
+                            builder_payload,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ).encode()
+                    ).hexdigest()
+                    if isinstance(builder_payload, dict)
+                    else ""
+                )
+                if (
+                    proof.get("record_type") != "h016_builder_fee_tiebreak_proof"
+                    or builder_code in builder_codes
+                    or proof.get("payload_sha256") != builder_payload_sha256
+                ):
+                    raise RuntimeError("H016 builder fee proof row changed")
+                builder_codes.add(builder_code)
+            if (
+                builder_fee_rows != int(payload.get("builder_fee_rows", -1))
+                or builder_codes != expected_builder_codes
+            ):
+                raise RuntimeError("H016 builder fee proof coverage changed")
         return cls(schedules, manifest_sha256=sha256_file(manifest_path))
 
 
@@ -564,7 +619,14 @@ def _schedule_from_payload(payload: dict[str, Any]) -> FeeScheduleEvidence:
     row["formula"] = FeeFormula(row["formula"])
     row["rounding"] = FeeRounding(row["rounding"])
     row["source_fee_asset"] = FeeAsset(row.get("source_fee_asset", FeeAsset.NONE))
-    for key in ("rate", "source_price", "source_gross_shares", "source_fee_amount"):
+    for key in (
+        "rate",
+        "source_price",
+        "source_gross_shares",
+        "source_fee_amount",
+        "source_total_fee_amount",
+        "source_builder_fee_amount",
+    ):
         if row.get(key) is not None:
             row[key] = decimal(row[key])
     return FeeScheduleEvidence(**row)

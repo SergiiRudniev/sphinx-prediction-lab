@@ -14,6 +14,7 @@ import torch
 from torch import Tensor, nn
 
 from sphinx_trace.h022_runtime import H022DecisionDebug, H022EnsembleRuntime
+from sphinx_trace.h023_runtime import H023DecisionDebug, H023EnsembleRuntime
 from sphinx_trace.model_h012 import H012_ACTIONS, SphinxTraceS0H012
 from sphinx_trace.model_h021 import H021_EXECUTION_CONTEXT_WIDTH, SphinxTraceS0H021
 from sphinx_trace.policy_decisions import (
@@ -51,6 +52,8 @@ class PolicyInference:
     no_upside_veto: bool | None
     protocol_action_values: tuple[float, float, float] | None
     h022_debug: H022DecisionDebug | None
+    h022_shadow: bool
+    h023_debug: H023DecisionDebug | None
 
 
 class _EncodedPolicyCore(nn.Module):
@@ -141,6 +144,9 @@ class H012PolicyRuntime:
         device: torch.device,
         encoding_store: PolicyEncodingStore | None = None,
         h022_runtime: H022EnsembleRuntime | None = None,
+        h023_runtime: H023EnsembleRuntime | None = None,
+        *,
+        h022_shadow: bool = False,
     ) -> None:
         if feature_mask.shape != (128,) or group_mask.shape != (6,):
             raise ValueError("H012 runtime feature/group masks have invalid shapes")
@@ -153,7 +159,15 @@ class H012PolicyRuntime:
         self.h021 = isinstance(self.model, SphinxTraceS0H021)
         if h022_runtime is not None and (not self.h021 or encoding_store is None):
             raise ValueError("H022 runtime requires H021 and a bound encoding cache")
+        if h022_shadow and h022_runtime is None:
+            raise ValueError("H022 shadow mode requires a bound H022 runtime")
+        if h023_runtime is not None and (
+            h022_runtime is None or not h022_shadow or not self.h021
+        ):
+            raise ValueError("H023 runtime requires H021 with H022 in shadow mode")
         self.h022_runtime = h022_runtime
+        self.h022_shadow = h022_shadow
+        self.h023_runtime = h023_runtime
         encoded_policy: nn.Module | None = None
         self.encoded_input_width = 0
         if encoding_store is not None:
@@ -209,6 +223,7 @@ class H012PolicyRuntime:
         no_upside_veto: bool | None = None
         protocol_action_values: tuple[float, float, float] | None = None
         h022_debug: H022DecisionDebug | None = None
+        h023_debug: H023DecisionDebug | None = None
         encoded_market_latent: np.ndarray[tuple[int], np.dtype[np.float32]] | None = None
         encoded_terminal_logit: float | None = None
         encoded_uncertainty_log_scale: float | None = None
@@ -390,6 +405,7 @@ class H012PolicyRuntime:
                         exponential = math.exp(terminal)
                         probability = exponential / (1.0 + exponential)
         action_id = max(range(len(logits)), key=logits.__getitem__)
+        size = alpha / max(alpha + beta, 1e-8)
         if self.h022_runtime is not None and action_id in (0, 1):
             if (
                 encoded_market_latent is None
@@ -413,8 +429,9 @@ class H012PolicyRuntime:
                 execution_context,
                 action_id,
             )
-            probability = h022_debug.neural_calibrated_probability0
-            if not h022_debug.keep_base_call:
+            if not self.h022_shadow:
+                probability = h022_debug.neural_calibrated_probability0
+            if not self.h022_shadow and not h022_debug.keep_base_call:
                 # Audit shards are strict JSONL.  Keep the veto sentinel finite so
                 # downstream receipt readers never encounter non-standard Infinity.
                 minimum = float(np.finfo(np.float32).min)
@@ -423,7 +440,39 @@ class H012PolicyRuntime:
                 mutable_logits[2] = 0.0
                 logits = tuple(mutable_logits)
                 action_id = 2
-        size = alpha / max(alpha + beta, 1e-8)
+        if self.h023_runtime is not None and action_id in (0, 1):
+            if (
+                h022_debug is None
+                or encoded_market_latent is None
+                or encoded_terminal_logit is None
+                or encoded_uncertainty_log_scale is None
+                or execution_context is None
+                or base_logits is None
+                or len(base_logits) != 3
+                or protocol_action_values is None
+            ):
+                raise RuntimeError("H023 candidate state is incomplete")
+            h023_debug = self.h023_runtime.score(
+                encoded_market_latent,
+                np.asarray(loaded.normalized, dtype=np.float32),
+                encoded_terminal_logit,
+                encoded_uncertainty_log_scale,
+                portfolio,
+                memory,
+                (base_logits[0], base_logits[1], base_logits[2]),
+                protocol_action_values,
+                execution_context,
+                action_id,
+                size,
+                h022_debug,
+            )
+            if not h023_debug.keep_base_call:
+                minimum = float(np.finfo(np.float32).min)
+                mutable_logits = list(logits)
+                mutable_logits[action_id] = minimum
+                mutable_logits[2] = 0.0
+                logits = tuple(mutable_logits)
+                action_id = 2
         input_sha256 = policy_input_digest(
             loaded.feature_sha256,
             loaded.market_probability_outcome0,
@@ -441,6 +490,17 @@ class H012PolicyRuntime:
                     f"base:{input_sha256}\n"
                     f"h022_policy:{self.h022_runtime.policy_sha256}\n"
                     f"ensemble_net_return:{h022_debug.ensemble_net_return:.17g}\n"
+                ).encode()
+            ).hexdigest()
+        if h023_debug is not None:
+            if self.h023_runtime is None:
+                raise RuntimeError("H023 debug has no bound runtime")
+            input_sha256 = hashlib.sha256(
+                (
+                    f"base:{input_sha256}\n"
+                    f"h023_policy:{self.h023_runtime.policy_sha256}\n"
+                    "ensemble_realized_contribution:"
+                    f"{h023_debug.ensemble_realized_contribution:.17g}\n"
                 ).encode()
             ).hexdigest()
         call = PolicyCall(
@@ -474,4 +534,6 @@ class H012PolicyRuntime:
             no_upside_veto=no_upside_veto,
             protocol_action_values=protocol_action_values,
             h022_debug=h022_debug,
+            h022_shadow=self.h022_shadow,
+            h023_debug=h023_debug,
         )

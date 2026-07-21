@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, replace
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sphinx_corpus.config import ExchangeContract
@@ -22,6 +22,10 @@ from sphinx_trace.polymarket_fees import (
 
 ZERO = Decimal("0")
 TOKEN_SCALE = Decimal("1000000")
+BUILDER_FEE_BPS_DENOMINATOR = Decimal("10000")
+BUILDER_FEE_QUANTUM = Decimal("0.00001")
+MAX_BUILDER_TAKER_FEE_BPS = 100
+ZERO_BUILDER_CODE = "0x" + "0" * 64
 V1_FIVE_DECIMAL_OPERATOR_FEE_UNIX = 1_774_828_800
 V1_USD_CURVE_SOURCE_OF_TRUTH_UNIX = 1_774_915_200
 FEE_REFUNDED_TOPIC = event_topic(
@@ -64,6 +68,8 @@ class OnchainFeeEvidence:
     fee_amount: Decimal
     constituent_maker_fills: int
     fee_refund_observed: bool = False
+    builder_code: str | None = None
+    metadata: str | None = None
 
 
 def _stable_hash(payload: dict[str, Any]) -> str:
@@ -171,6 +177,8 @@ def decode_onchain_fee_evidence(
         fee_amount=Decimal(actual_fee_raw) / TOKEN_SCALE,
         constituent_maker_fills=max(1, constituent_fills - 1),
         fee_refund_observed=fee_refund_observed,
+        builder_code=(None if protocol == FeeProtocol.CLOB_V1 else str(row["builder"])),
+        metadata=(None if protocol == FeeProtocol.CLOB_V1 else str(row["metadata"])),
     )
 
 
@@ -236,6 +244,7 @@ def _candidate_schedule(
         source_gross_shares=evidence.gross_shares,
         source_fee_asset=evidence.fee_asset,
         source_fee_amount=evidence.fee_amount,
+        source_total_fee_amount=evidence.fee_amount,
     )
 
 
@@ -244,6 +253,9 @@ def infer_fee_schedule(
     evidence: OnchainFeeEvidence,
 ) -> FeeScheduleEvidence:
     """Infer only a known official curve whose rounded amount matches the receipt."""
+
+    if evidence.builder_code not in (None, ZERO_BUILDER_CODE):
+        raise RuntimeError("V2 receipt fee includes a builder component")
 
     if (
         evidence.protocol == FeeProtocol.CLOB_V1
@@ -291,6 +303,7 @@ def infer_fee_schedule(
             source_gross_shares=evidence.gross_shares,
             source_fee_asset=FeeAsset.NONE,
             source_fee_amount=ZERO,
+            source_total_fee_amount=ZERO,
         )
 
     matches = _matching_fee_schedules(
@@ -304,6 +317,72 @@ def infer_fee_schedule(
             f"{candidate.transaction_hash} amount={evidence.fee_amount}"
         )
     return _select_fee_schedule(matches, candidate)
+
+
+def infer_fee_schedule_after_builder_fee(
+    candidate: FeeSourceCandidate,
+    evidence: OnchainFeeEvidence,
+    *,
+    builder_taker_fee_bps: int,
+) -> FeeScheduleEvidence:
+    """Separate an official flat V2 builder fee from the platform fee curve.
+
+    CLOB V2 emits the additive platform and builder fees as one amount.  The
+    builder code is signed into the order, builder taker fees are restricted to
+    integer basis points in [0, 100], and the fee is a flat percentage of trade
+    notional.  Removing that independently specified component lets the
+    receipt qualify the platform schedule used by a zero-builder-fee bot.
+    """
+
+    if evidence.protocol != FeeProtocol.CLOB_V2:
+        raise RuntimeError("Builder fee decomposition is only valid for CLOB V2")
+    if evidence.builder_code in (None, ZERO_BUILDER_CODE):
+        raise RuntimeError("Builder fee decomposition requires a non-zero builder code")
+    if not 0 <= builder_taker_fee_bps <= MAX_BUILDER_TAKER_FEE_BPS:
+        raise ValueError("Builder taker fee is outside the official 0-100 bps range")
+    notional = evidence.gross_shares * evidence.price
+    builder_fee = (
+        notional
+        * Decimal(builder_taker_fee_bps)
+        / BUILDER_FEE_BPS_DENOMINATOR
+    ).quantize(BUILDER_FEE_QUANTUM, rounding=ROUND_HALF_UP)
+    platform_fee = evidence.fee_amount - builder_fee
+    if platform_fee < ZERO:
+        raise RuntimeError("Builder fee exceeds the on-chain total fee")
+    platform_evidence = replace(
+        evidence,
+        fee_amount=platform_fee,
+        builder_code=None,
+        metadata=None,
+    )
+    schedule = infer_fee_schedule(candidate, platform_evidence)
+    return replace(
+        schedule,
+        source="polygon_transaction_receipt_builder_fee_decomposed_active_taker_fee",
+        source_total_fee_amount=evidence.fee_amount,
+        source_builder_code=evidence.builder_code,
+        source_builder_fee_bps=builder_taker_fee_bps,
+        source_builder_fee_amount=builder_fee,
+    )
+
+
+def matching_builder_fee_schedules(
+    candidate: FeeSourceCandidate,
+    evidence: OnchainFeeEvidence,
+) -> dict[int, FeeScheduleEvidence]:
+    """Return every official integer-bps decomposition supported by a receipt."""
+
+    output: dict[int, FeeScheduleEvidence] = {}
+    for builder_taker_fee_bps in range(MAX_BUILDER_TAKER_FEE_BPS + 1):
+        try:
+            output[builder_taker_fee_bps] = infer_fee_schedule_after_builder_fee(
+                candidate,
+                evidence,
+                builder_taker_fee_bps=builder_taker_fee_bps,
+            )
+        except (RuntimeError, ValueError):
+            continue
+    return output
 
 
 def _matching_fee_schedules(
@@ -368,6 +447,12 @@ def infer_fee_schedule_consensus(
     market_info: dict[str, Any],
 ) -> FeeScheduleEvidence:
     """Resolve rounded V1 fills only when independent receipts share one tariff."""
+
+    if any(
+        evidence.builder_code not in (None, ZERO_BUILDER_CODE)
+        for _, evidence in samples
+    ):
+        raise RuntimeError("Fee consensus cannot mix a V2 builder component")
 
     transaction_hashes = {candidate.transaction_hash for candidate, _ in samples}
     if len(transaction_hashes) < 2:
@@ -569,6 +654,9 @@ def infer_fee_schedule_from_market_info(
     market_info: dict[str, Any],
 ) -> FeeScheduleEvidence:
     """Resolve a receipt-rounded ambiguity with the official per-market fee details."""
+
+    if evidence.builder_code not in (None, ZERO_BUILDER_CODE):
+        raise RuntimeError("V2 receipt fee includes a builder component")
 
     if (
         evidence.protocol == FeeProtocol.CLOB_V1
