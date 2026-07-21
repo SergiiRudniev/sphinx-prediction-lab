@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from scripts.train_h023_fill_realized_veto import (
+    _ablation_features,
+    _predictor_matrix,
+    _sample_weights,
+)
 
 from sphinx_trace.h023_training import h023_neural_loss, realized_policy_metrics
 
@@ -74,3 +79,36 @@ def test_h023_metrics_measure_dollar_pnl_not_outcome_accuracy() -> None:
     assert metrics["incremental_net_profit_vs_keep_all_usd"] == 3.0
     assert metrics["harmful_candidate_veto_rate"] == 1.0
     assert metrics["high_price_calls_kept"] == 0
+
+
+def test_h023_training_helpers_preserve_model_driven_price_decision() -> None:
+    data = {
+        "requested_total_cost_usd": np.asarray([1.0, 100.0, 25.0]),
+        "week_ids": np.asarray([1, 1, 2]),
+        "target_realized_pnl_usd": np.asarray([2.0, -3.0, 1.0]),
+    }
+    config = {
+        "weighting": {
+            "maximum_cost_weight": 10.0,
+            "negative_week_multiplier": 1.5,
+        }
+    }
+    weights = _sample_weights(data, config)
+    assert np.isclose(weights.mean(), 1.0)
+    assert weights[1] > weights[0]
+
+    neural = {
+        "contribution": np.zeros(3, dtype=np.float32),
+        "return_mean": np.zeros(3, dtype=np.float32),
+        "return_quantiles": np.zeros((3, 3), dtype=np.float32),
+        "fill": np.zeros(3, dtype=np.float32),
+        "positive": np.zeros(3, dtype=np.float32),
+        "keep_logit": np.zeros(3, dtype=np.float32),
+    }
+    auxiliary = np.zeros((3, 11), dtype=np.float32)
+    assert _predictor_matrix(neural, np.zeros(3), auxiliary).shape == (3, 12)
+
+    features = np.ones((3, 170), dtype=np.float32)
+    price_zero = _ablation_features(features, "price_execution_zero", seed=17)
+    assert np.all(price_zero[:, :128] == 1.0)
+    assert np.all(price_zero[:, 128:] == 0.0)
