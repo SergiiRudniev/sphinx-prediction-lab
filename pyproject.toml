@@ -39,7 +39,7 @@ research = [
 pulse = [
   "httpx>=0.28,<1",
   "PyYAML>=6,<7",
-  "websockets>=15,<16",
+  "websockets>=15,<17",
   "zstandard>=0.23,<1",
 ]
 corpus = [
